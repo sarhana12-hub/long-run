@@ -26,6 +26,7 @@
   --z-strength:#75628A; --z-strength-bg:#ECE6F2;
   --z-rest:#8B958D; --z-rest-bg:#EBEFE8;
   --z-race:#9C7A0A; --z-race-bg:#F6EBC9;
+  --z-hill:#A8501C; --z-hill-bg:#F5E2D2;
   --shadow: 0 1px 2px rgba(18,26,22,.06), 0 8px 24px -12px rgba(18,26,22,.18);
   --radius: 16px;
   --font-display:'Bricolage Grotesque','Arial Black',sans-serif;
@@ -44,6 +45,7 @@
     --z-strength:#C2A9D8; --z-strength-bg:#2E2638;
     --z-rest:#8B968D; --z-rest-bg:#20261F;
     --z-race:#E9C860; --z-race-bg:#3A2F0F;
+    --z-hill:#E8935C; --z-hill-bg:#3A2416;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
   }
 }
@@ -216,8 +218,15 @@ const TYPE_META = {
   long:{label:'Long Run', bg:'--z-long-bg', fg:'--z-long'},
   tempo:{label:'Tempo', bg:'--z-tempo-bg', fg:'--z-tempo'},
   intervals:{label:'Intervals', bg:'--z-intervals-bg', fg:'--z-intervals'},
+  hills:{label:'Hill Repeats', bg:'--z-hill-bg', fg:'--z-hill'},
+  fartlek:{label:'Fartlek', bg:'--z-hill-bg', fg:'--z-hill'},
+  overunder:{label:'Over/Unders', bg:'--z-tempo-bg', fg:'--z-tempo'},
   race:{label:'Race Day', bg:'--z-race-bg', fg:'--z-race'},
 };
+const QUALITY_TYPES = ['long','tempo','intervals','hills','fartlek','overunder'];
+const BUILD_ROTATION = ['tempo','hills','fartlek'];
+const PEAK_ROTATION_SHORT = ['intervals','hills','fartlek','tempo'];
+const PEAK_ROTATION_LONG = ['tempo','overunder','intervals'];
 
 /* ============================= tiny utils ============================= */
 function pad2(n){ return String(n).padStart(2,'0'); }
@@ -261,6 +270,14 @@ function paceStr(secPerKm, unit){
   const secPerUnit = unit==='mi' ? secPerKm*KM_PER_MI : secPerKm;
   return `${secToClock(secPerUnit)}/${unit}`;
 }
+function speedStr(secPerKm, unit){
+  const secPerUnit = unit==='mi' ? secPerKm*KM_PER_MI : secPerKm;
+  const perHour = 3600/secPerUnit;
+  return `${perHour.toFixed(1)} ${unit==='mi'?'mph':'km/h'}`;
+}
+function paceOrSpeedStr(secPerKm, unit, fmt){
+  return fmt==='speed' ? speedStr(secPerKm, unit) : paceStr(secPerKm, unit);
+}
 function kmToUnit(km, unit){ return unit==='mi' ? km/KM_PER_MI : km; }
 function unitToKm(v, unit){ return unit==='mi' ? v*KM_PER_MI : v; }
 function fmtDist(km, unit, digits){ digits = digits==null?1:digits; return `${kmToUnit(km,unit).toFixed(digits)} ${unit}`; }
@@ -272,51 +289,70 @@ function runsPerWeekFor(currentKm){
   return 5;
 }
 
-function computePaces(setup){
-  let predicted5k;
+function basePredicted5kSec(setup){
   if(setup.recentDistanceKm && setup.recentTimeSec){
-    predicted5k = riegel(setup.recentTimeSec, setup.recentDistanceKm, 5);
-  } else {
-    const tierPace = interp([[10,7.5*60],[30,6.6*60],[50,5.9*60],[80,5.3*60]], setup.currentWeeklyKm||20);
-    predicted5k = tierPace*5;
+    return riegel(setup.recentTimeSec, setup.recentDistanceKm, 5);
   }
-  const p5kPerKm = predicted5k/5;
-  const paces = {
+  const tierPace = interp([[10,7.5*60],[30,6.6*60],[50,5.9*60],[80,5.3*60]], setup.currentWeeklyKm||20);
+  return tierPace*5;
+}
+function paceZonesFromPredicted5k(predicted5kSec){
+  const p5kPerKm = predicted5kSec/5;
+  return {
     easyPerKm: p5kPerKm*1.30,
     longPerKm: p5kPerKm*1.33,
     marathonPerKm: p5kPerKm*1.15,
     tempoPerKm: p5kPerKm*1.07,
     intervalPerKm: p5kPerKm*0.97,
   };
-  if(setup.goalTimeSec && setup.raceDistanceKm){
-    paces.racePerKm = setup.goalTimeSec/setup.raceDistanceKm;
-  } else if(setup.raceDistanceKm){
-    paces.racePerKm = riegel(predicted5k, 5, setup.raceDistanceKm)/setup.raceDistanceKm;
-  } else {
-    paces.racePerKm = p5kPerKm;
-  }
-  paces.predicted5kSec = predicted5k;
-  return paces;
 }
 
-function describeWorkout(day, paces, unit, raceDistanceKm){
-  const p = (v)=>paceStr(v, unit);
+/* Workout description is split from pace: descBase/paceKey are stored on the day,
+   the pace string itself is rendered live so unit/mph-toggle and the week's
+   progressively-faster paces always stay in sync without regenerating the plan. */
+function buildWorkoutMeta(day, raceDistanceKm){
   switch(day.type){
     case 'long':{
-      const mpTag = (raceDistanceKm>15 && day.km >= (raceDistanceKm*0.5)) ? ` — last quarter @ ${p(paces.marathonPerKm)}` : '';
-      return `${fmtDist(day.km,unit)} steady @ ${p(paces.longPerKm)}${mpTag}`;
+      const meta = {descBase:'Steady, aerobic effort', paceKey:'longPerKm'};
+      if(raceDistanceKm>15 && day.km >= raceDistanceKm*0.5){ meta.paceKey2='marathonPerKm'; meta.desc2='last quarter'; }
+      return meta;
     }
-    case 'easy': return `${fmtDist(day.km,unit)} conversational @ ${p(paces.easyPerKm)}`;
-    case 'tempo': return `${fmtDist(day.km,unit)} continuous @ ${p(paces.tempoPerKm)} (comfortably hard)`;
+    case 'easy': return {descBase:'Conversational, easy effort', paceKey:'easyPerKm'};
+    case 'tempo': return {descBase:'Continuous, comfortably hard', paceKey:'tempoPerKm'};
     case 'intervals':{
       const repM = raceDistanceKm<=10 ? 800 : 1000;
-      const reps = Math.max(4, Math.round((day.km*1000)/ (repM*1.4)));
-      return `${reps} × ${repM}m @ ${p(paces.intervalPerKm)}, jog ${Math.round(repM*0.5)}m recovery`;
+      const reps = Math.max(4, Math.round((day.km*1000)/(repM*1.4)));
+      return {descBase:`${reps} × ${repM}m intervals, jog ${Math.round(repM*0.5)}m recovery`, paceKey:'intervalPerKm'};
     }
-    case 'race': return `Goal pace ${p(paces.racePerKm)} — ${fmtDist(day.km,unit)}`;
-    case 'rest': return day.strength ? 'Rest day — mobility & light stretching' : 'Full rest — recovery day';
-    default: return '';
+    case 'hills':{
+      const reps = clamp(Math.round(day.km/0.3), 6, 12);
+      return {descBase:`${reps} hill reps — 60–90s hard uphill effort, jog back down to recover`, paceKey:null};
+    }
+    case 'fartlek':{
+      const surges = clamp(Math.round(day.km/1.5), 4, 8);
+      return {descBase:`Fartlek — ${surges} × 2 min surge / 2 min easy jog, rest of the run`, paceKey:'easyPerKm'};
+    }
+    case 'overunder':{
+      const cycles = clamp(Math.round(day.km/1.2), 4, 7);
+      return {descBase:`Over/unders — ${cycles} × (2 min above / 1 min below) around tempo pace`, paceKey:'tempoPerKm', paceKey2:null};
+    }
+    case 'race': return {descBase:'Goal pace effort', paceKey:'racePerKm'};
+    case 'rest': return day.strength ? {descBase:'Rest day — mobility & light stretching', paceKey:null} : {descBase:'Full rest — recovery day', paceKey:null};
+    default: return {descBase:'', paceKey:null};
   }
+}
+
+function renderWorkoutText(day, weekPaces, unit, fmt){
+  if(!day.descBase) return '';
+  let text = day.descBase;
+  if(day.paceKey && weekPaces && weekPaces[day.paceKey]!=null) text += ` @ ${paceOrSpeedStr(weekPaces[day.paceKey], unit, fmt)}`;
+  if(day.paceKey2 && weekPaces && weekPaces[day.paceKey2]!=null) text += ` (${day.desc2} @ ${paceOrSpeedStr(weekPaces[day.paceKey2], unit, fmt)})`;
+  return text;
+}
+function dayDisplayText(day, weekPaces, unit, fmt){
+  if(day.notesOverride!=null) return day.notesOverride;
+  if(day.descBase==null && day.notes!=null) return day.notes; // plans saved before this update
+  return renderWorkoutText(day, weekPaces, unit, fmt);
 }
 
 function generatePlan(setup){
@@ -363,7 +399,20 @@ function generatePlan(setup){
     return 'peak';
   }
 
-  const paces = computePaces(setup);
+  // Pace progression: training paces ramp from current fitness (start) toward a
+  // fitter projection (end) across base/build/peak, then hold flat through taper —
+  // tapering makes you fresher, not fitter, so peak-week paces carry through.
+  const startPredicted5k = basePredicted5kSec(setup);
+  let endPredicted5k;
+  if(setup.goalTimeSec && raceKm){
+    endPredicted5k = Math.min(riegel(setup.goalTimeSec, raceKm, 5), startPredicted5k);
+  } else {
+    const improvementFrac = clamp(buildWeeksCount*0.006, 0, 0.08);
+    endPredicted5k = startPredicted5k*(1-improvementFrac);
+  }
+  const racePerKm = (setup.goalTimeSec && raceKm) ? setup.goalTimeSec/raceKm : riegel(endPredicted5k,5,raceKm)/raceKm;
+  const rampWeeks = Math.max(buildWeeksCount-1, 1);
+
   const longDow = setup.longDow ?? 0;
   const speedDow = setup.speedDow ?? 3;
   const strengthDows = setup.strengthDows ?? [1,4];
@@ -378,10 +427,15 @@ function generatePlan(setup){
     const isRaceWeek = (w===totalWeeks-1);
     const longKm = isRaceWeek ? Math.min(peakLongKm*0.3, weeklyKm*0.3) : Math.min(weeklyKm*longFraction, peakLongKm);
 
+    const frac = w>=buildWeeksCount ? 1 : clamp(w/rampWeeks, 0, 1);
+    const weekPredicted5k = startPredicted5k + (endPredicted5k-startPredicted5k)*frac;
+    const weekPaces = paceZonesFromPredicted5k(weekPredicted5k);
+    weekPaces.racePerKm = racePerKm;
+
     const days = [];
     for(let d=0; d<7; d++){
       const date = addDays(weekStart, d);
-      days.push({id:uid(), date:fmtDate(date), dow:date.getDay(), type:'rest', km:0, strength:false, label:'Rest', notes:''});
+      days.push({id:uid(), date:fmtDate(date), dow:date.getDay(), type:'rest', km:0, strength:false, label:'Rest', notesOverride:null});
     }
     const longIdx = days.findIndex(x=>x.dow===longDow);
     let speedIdx = days.findIndex(x=>x.dow===speedDow);
@@ -391,7 +445,15 @@ function generatePlan(setup){
     const wantsSpeed = phase!=='base' && speedIdx!==-1;
     let speedKm = 0, speedType = 'tempo';
     if(wantsSpeed){
-      speedType = (phase==='peak' && raceKm<=10) ? 'intervals' : (phase==='peak' && raceKm>10 ? 'tempo' : 'tempo');
+      const weekWithinPhase = phase==='build' ? (w-baseCount) : phase==='peak' ? (w-baseCount-buildCount) : 0;
+      if(phase==='build'){
+        speedType = BUILD_ROTATION[weekWithinPhase % BUILD_ROTATION.length];
+      } else if(phase==='peak'){
+        const rotation = raceKm<=10 ? PEAK_ROTATION_SHORT : PEAK_ROTATION_LONG;
+        speedType = rotation[weekWithinPhase % rotation.length];
+      } else {
+        speedType = 'tempo';
+      }
       speedKm = round1(Math.min(remaining*0.4, raceKm<=10?8:9));
       remaining = Math.max(0, remaining-speedKm);
     }
@@ -408,7 +470,7 @@ function generatePlan(setup){
     let strengthLeft = setup.strengthPerWeek==null?2:setup.strengthPerWeek;
     strengthDows.forEach(dw=>{
       if(strengthLeft<=0) return;
-      const idx = days.findIndex(x=>x.dow===dw && x.type!=='long' && x.type!=='tempo' && x.type!=='intervals');
+      const idx = days.findIndex(x=>x.dow===dw && !QUALITY_TYPES.includes(x.type));
       if(idx!==-1){ days[idx].strength = true; strengthLeft--; }
     });
 
@@ -423,12 +485,12 @@ function generatePlan(setup){
       }
     }
 
-    days.forEach(day=>{ day.notes = describeWorkout(day, paces, setup.units, raceKm); });
+    days.forEach(day=>{ Object.assign(day, buildWorkoutMeta(day, raceKm)); });
 
-    weeks.push({weekIndex:w, phase, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), days});
+    weeks.push({weekIndex:w, phase, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), paces:weekPaces, days});
   }
 
-  return {generatedAt:new Date().toISOString(), raceDate:setup.raceDate, raceDistanceKm:raceKm, totalWeeks, paces, weeks};
+  return {generatedAt:new Date().toISOString(), raceDate:setup.raceDate, raceDistanceKm:raceKm, totalWeeks, paces:weeks[0].paces, weeks};
 }
 
 /* ============================= storage layer (local only) ============================= */
@@ -438,6 +500,8 @@ const Store = {
 
   getName(){ return this._get('lr_name', ''); },
   setName(name){ this._set('lr_name', name); },
+  getPaceFormat(){ return this._get('lr_pace_format', 'pace'); },
+  setPaceFormat(fmt){ this._set('lr_pace_format', fmt); },
   getSetup(){ return this._get('lr_setup', null); },
   setSetup(setup){ this._set('lr_setup', setup); },
   getPlan(){ return this._get('lr_plan', null); },
@@ -477,6 +541,7 @@ const ICONS = {
 const state = {
   view:'loading', // loading | onboarding | app
   name:'',
+  paceFormat:'pace', // 'pace' | 'speed'
   setup:null,
   plan:null,
   logs:[],
@@ -497,6 +562,7 @@ function boot(){
     navigator.serviceWorker.register('sw.js').catch(()=>{});
   }
   state.name = Store.getName();
+  state.paceFormat = Store.getPaceFormat();
   const setup = Store.getSetup();
   const plan = Store.getPlan();
   state.logs = Store.getLogs();
@@ -678,11 +744,9 @@ function renderOnboarding(){
 function renderApp(){
   const plan = state.plan;
   const week = plan.weeks[state.currentWeekIndex];
-  const raceDate = parseDate(plan.raceDate);
-  const daysToRace = daysBetween(todayDate(), raceDate);
 
   let body = '';
-  if(state.tab==='plan') body = renderPlanTab(week, plan, daysToRace);
+  if(state.tab==='plan') body = renderPlanTab(week, plan);
   else if(state.tab==='progress') body = renderProgressTab();
   else body = renderSettingsTab();
 
@@ -709,8 +773,13 @@ function phaseColorVar(phase){
 }
 function phaseLabel(phase){ return {base:'Base', build:'Build', peak:'Peak', taper:'Taper'}[phase]||phase; }
 
-function renderPlanTab(week, plan, daysToRace){
+function renderPlanTab(week, plan){
   const unit = state.setup.units;
+  const fmt = state.paceFormat;
+  const weekPaces = week.paces || plan.paces;
+  const raceDate = parseDate(plan.raceDate);
+  const weekStartDate = parseDate(week.weekStart);
+  const daysToRaceForWeek = daysBetween(weekStartDate, raceDate);
   const strip = plan.weeks.map((w,i)=>`
     <button class="week-tab ${i===state.currentWeekIndex?'active':''}" style="--phase-color:${phaseColorVar(w.phase)}" data-act="goto-week" data-i="${i}">
       <div class="wk">${phaseLabel(w.phase)}</div>
@@ -736,7 +805,7 @@ function renderPlanTab(week, plan, daysToRace){
           ${day.strength?`<span class="strength-badge">+ Strength</span>`:''}
           ${match?`<span class="strength-badge" style="color:var(--z-easy); background:var(--z-easy-bg)">Logged</span>`:''}
         </div>
-        <div class="day-desc">${esc(day.notes)}</div>
+        <div class="day-desc">${esc(dayDisplayText(day, weekPaces, unit, fmt))}</div>
       </div>
       <div class="day-side">
         ${day.km>0?`<div class="day-dist mono">${fmtDist(day.km,unit)}</div>`:''}
@@ -750,7 +819,7 @@ function renderPlanTab(week, plan, daysToRace){
   <div class="week-header">
     <div>
       <h2>${phaseLabel(week.phase)} · Week ${week.weekIndex+1}</h2>
-      <div class="week-meta">${niceDate(parseDate(week.weekStart))} – ${niceDate(addDays(parseDate(week.weekStart),6))} · ${daysToRace>=0?daysToRace+' days to race':'Race complete'}</div>
+      <div class="week-meta">${niceDate(weekStartDate)} – ${niceDate(addDays(weekStartDate,6))} · ${daysToRaceForWeek>0?daysToRaceForWeek+' days to race':(week.weekIndex===plan.totalWeeks-1?'Race week':'Race day has passed')}</div>
     </div>
     <div class="week-stat">
       <div class="v">${fmtDist(loggedKm,unit,1)} <span style="color:var(--muted); font-weight:600; font-size:12px;">/ ${fmtDist(week.targetKm,unit,1)}</span></div>
@@ -801,7 +870,7 @@ function renderProgressTab(){
     return `<div class="log-row">
       <div class="log-date">${niceDate(parseDate(l.date))}</div>
       <div class="log-mid"><div class="d">${fmtDist(l.distanceKm,unit)} · ${secToClock(l.durationSec)}</div>${l.notes?`<div class="t">${esc(l.notes)}</div>`:''}</div>
-      <div class="log-pace mono">${paceStr(pace,unit)}</div>
+      <div class="log-pace mono">${paceOrSpeedStr(pace,unit,state.paceFormat)}</div>
       <button class="btn btn-ghost btn-sm" data-act="delete-log" data-id="${l.id}" style="color:var(--muted)">${ICONS.close}</button>
     </div>`;
   }).join('') : `<div class="empty">No runs logged yet — tap "Log a run" to start tracking.</div>`;
@@ -831,7 +900,10 @@ function weekActualKm(week){
 }
 
 function renderSettingsTab(){
-  const s = state.setup, unit = s.units;
+  const s = state.setup, unit = s.units, fmt = state.paceFormat;
+  const currentWeek = state.plan.weeks[state.currentWeekIndex];
+  const cw = currentWeek.paces || state.plan.paces;
+  const speedUnitLabel = unit==='mi' ? 'mph' : 'km/h';
   return `
   <div class="container" style="padding-top:14px;">
     <h2 style="font-size:20px; margin-bottom:16px;">Settings</h2>
@@ -842,13 +914,17 @@ function renderSettingsTab(){
       <div class="settings-row"><div class="lbl">Units</div>
         <div class="chip-select"><button class="chip ${unit==='mi'?'active':''}" data-act="set-unit" data-u="mi">Miles</button><button class="chip ${unit==='km'?'active':''}" data-act="set-unit" data-u="km">Kilometers</button></div>
       </div>
+      <div class="settings-row"><div class="lbl">Pace display</div>
+        <div class="chip-select"><button class="chip ${fmt==='pace'?'active':''}" data-act="set-pace-format" data-f="pace">Pace</button><button class="chip ${fmt==='speed'?'active':''}" data-act="set-pace-format" data-f="speed">Speed (${speedUnitLabel})</button></div>
+      </div>
     </div>
 
     <div class="section-title">Race</div>
     <div class="card" style="padding:6px 16px;">
       <div class="settings-row"><div><div class="lbl">${raceLabel(s)}</div><div class="sub">${niceDateFull(parseDate(s.raceDate))}</div></div></div>
       <div class="settings-row"><div><div class="lbl">Weekly mileage used to build plan</div><div class="sub">${fmtDist(s.currentWeeklyKm,unit,1)}/week</div></div></div>
-      <div class="settings-row"><div><div class="lbl">Estimated paces</div><div class="sub">Easy ${paceStr(state.plan.paces.easyPerKm,unit)} · Tempo ${paceStr(state.plan.paces.tempoPerKm,unit)} · Race ${paceStr(state.plan.paces.racePerKm,unit)}</div></div></div>
+      <div class="settings-row"><div><div class="lbl">This week's paces</div><div class="sub">Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)} · Goal race pace ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}</div></div></div>
+      <div class="hint" style="padding:0 0 12px;">Training paces gradually get faster as your plan builds toward peak fitness, then hold steady through the taper.</div>
     </div>
 
     <div class="section-title">Plan controls</div>
@@ -903,12 +979,13 @@ function modalLogRun(){
 function modalEditDay(){
   const {weekIndex, dayIndex} = state.modal;
   const day = state.plan.weeks[weekIndex].days[dayIndex];
+  const week = state.plan.weeks[weekIndex];
   const unit = state.setup.units;
   const typeOpts = Object.keys(TYPE_META).map(t=>`<option value="${t}" ${day.type===t?'selected':''}>${TYPE_META[t].label}</option>`).join('');
   return modalShell(`Edit ${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}`, `
     <div class="field"><label class="field-label">Workout type</label><select class="input" id="ed-type">${typeOpts}</select></div>
     <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" step="0.1" min="0" id="ed-km" value="${round1(kmToUnit(day.km,unit))}"></div>
-    <div class="field"><label class="field-label">Notes</label><textarea class="input" id="ed-notes" rows="3">${esc(day.notes)}</textarea></div>
+    <div class="field"><label class="field-label">Notes</label><textarea class="input" id="ed-notes" rows="3">${esc(dayDisplayText(day, week.paces, unit, state.paceFormat))}</textarea></div>
     <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
       <label class="field-label" style="margin:0;">Add strength session</label>
       <input type="checkbox" id="ed-strength" ${day.strength?'checked':''} style="width:20px; height:20px;">
@@ -1063,7 +1140,7 @@ function onClick(e){
     const notes = document.getElementById('ed-notes').value;
     const strength = document.getElementById('ed-strength').checked;
     const day = state.plan.weeks[wi].days[di];
-    state.plan.weeks[wi].days[di] = {...day, type, km:round1(km), label:TYPE_META[type].label, notes, strength};
+    state.plan.weeks[wi].days[di] = {...day, type, km:round1(km), label:TYPE_META[type].label, notesOverride:notes, strength};
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     Store.setPlan(state.plan);
@@ -1075,6 +1152,13 @@ function onClick(e){
     if(u===state.setup.units) return;
     state.setup.units = u;
     Store.setSetup(state.setup);
+    render(); return;
+  }
+  if(act==='set-pace-format'){
+    const f = el.dataset.f;
+    if(f===state.paceFormat) return;
+    state.paceFormat = f;
+    Store.setPaceFormat(f);
     render(); return;
   }
   if(act==='open-edit-setup'){
@@ -1152,6 +1236,14 @@ function onChange(e){
   if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; }
   if(e.target.id==='in-recent-time'){ state.onboardDraft.recentTime = e.target.value; }
   if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; }
+  if(e.target.id==='ed-type' && state.modal && state.modal.type==='edit-day'){
+    const week = state.plan.weeks[state.modal.weekIndex];
+    const unit = state.setup.units;
+    const kmVal = unitToKm(Number(document.getElementById('ed-km').value)||0, unit);
+    const strengthVal = document.getElementById('ed-strength').checked;
+    const meta = buildWorkoutMeta({type:e.target.value, km:kmVal, strength:strengthVal}, state.plan.raceDistanceKm);
+    document.getElementById('ed-notes').value = renderWorkoutText(meta, week.paces, unit, state.paceFormat);
+  }
 }
 
 boot();
