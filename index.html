@@ -452,10 +452,20 @@ function generatePlan(setup){
   // but never demand more than a safe 35% growth over current mileage just to hit that
   // ratio (a 25mi/week runner doesn't need a 45mi/week peak for a half marathon).
   const idealPeakWeeklyKm = peakLongKm/longFraction;
-  const peakWeeklyKm = clamp(idealPeakWeeklyKm, currentKm*1.10, currentKm*1.35);
+  let peakWeeklyKm = clamp(idealPeakWeeklyKm, currentKm*1.10, currentKm*1.35);
   // With peak week capped, let the long run be a larger share of it (up to 34%) rather
   // than silently shrinking the peak long run itself below the race-distance target.
-  const achievablePeakLongKm = Math.min(peakLongKm, peakWeeklyKm*0.34);
+  let achievablePeakLongKm = Math.min(peakLongKm, peakWeeklyKm*0.34);
+  // User-supplied caps (half marathon+ only) scale the whole plan down to fit — applied
+  // as a ceiling on the peak targets, so the existing week-by-week ramp (which already
+  // never exceeds these) respects them automatically without a separate pass.
+  if(setup.maxWeeklyKm){ peakWeeklyKm = Math.max(Math.min(peakWeeklyKm, setup.maxWeeklyKm), Math.min(currentKm, setup.maxWeeklyKm)); }
+  if(setup.maxLongRunKm){ achievablePeakLongKm = Math.min(achievablePeakLongKm, setup.maxLongRunKm); }
+  // The long run ramps toward achievablePeakLongKm on its own track, rather than as a flat
+  // fraction of that week's total volume — a flat fraction can mathematically never reach
+  // the peak target once weekly volume is capped well below peakLongKm/longFraction (this
+  // is exactly what happens once maxWeeklyKm or the safe-growth cap above kicks in).
+  const startLongKm = Math.min(currentKm*longFraction, achievablePeakLongKm);
 
   let taperWeeks = Math.round(interp([[5,1],[10,1],[15,1],[21.0975,2],[32.19,2],[42.195,3]], raceKm));
   taperWeeks = clamp(taperWeeks, 1, Math.max(1,totalWeeks-1));
@@ -514,7 +524,9 @@ function generatePlan(setup){
     const phase = phaseFor(w);
     const weeklyKm = weeklyVols[w];
     const isRaceWeek = (w===totalWeeks-1);
-    const longKm = isRaceWeek ? Math.min(achievablePeakLongKm*0.3, weeklyKm*0.3) : Math.min(weeklyKm*longFraction, achievablePeakLongKm);
+    const longProgressFrac = peakWeeklyKm>currentKm ? clamp((weeklyKm-currentKm)/(peakWeeklyKm-currentKm), 0, 1) : 1;
+    const rampedLongKm = startLongKm + (achievablePeakLongKm-startLongKm)*longProgressFrac;
+    const longKm = isRaceWeek ? Math.min(achievablePeakLongKm*0.3, weeklyKm*0.3) : Math.min(rampedLongKm, weeklyKm*0.5);
 
     const frac = w>=buildWeeksCount ? 1 : clamp(w/rampWeeks, 0, 1);
     const weekPredicted5k = startPredicted5k + (endPredicted5k-startPredicted5k)*frac;
@@ -681,8 +693,10 @@ function defaultDraft(){
     units:'mi', recentDistanceKey:'5k', recentTime:'', goalTime:'',
     longDow:0, speedDow:3, strengthDows:[1,4],
     restDays: clamp(7 - runsPerWeekFor(unitToKm(20,'mi')), 1, 4),
+    maxLongRunMi: '', maxWeeklyMi: '',
   };
 }
+const LONG_DISTANCE_CAP_THRESHOLD_KM = 21.0975; // half marathon and up get optional long-run/volume caps
 
 /* ============================= onboarding submit ============================= */
 function submitOnboarding(){
@@ -703,6 +717,8 @@ function submitOnboarding(){
     goalTimeSec: goalSec,
     longDow: d.longDow, speedDow: d.speedDow, strengthDows: d.strengthDows,
     runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: 2,
+    maxLongRunKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxLongRunMi) ? unitToKm(Number(d.maxLongRunMi), d.units) : null,
+    maxWeeklyKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxWeeklyMi) ? unitToKm(Number(d.maxWeeklyMi), d.units) : null,
   };
   const plan = generatePlan(setup);
   state.name = d.name.trim();
@@ -810,6 +826,21 @@ function renderOnboarding(){
       <label class="field-label">Goal time for this race (optional)</label>
       <input class="input" type="text" id="in-goal-time" placeholder="e.g. 1:45:00 — leave blank to let paces guide you">
     </div>
+
+    ${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM ? `
+    <div class="section-title">Caps (optional)</div>
+    <div class="row">
+      <div class="field">
+        <label class="field-label">Max long run (${d.units})</label>
+        <input class="input" type="number" min="0" step="0.5" id="in-max-long" placeholder="no cap" value="${d.maxLongRunMi}">
+      </div>
+      <div class="field">
+        <label class="field-label">Max weekly mileage (${d.units})</label>
+        <input class="input" type="number" min="0" step="1" id="in-max-weekly" placeholder="no cap" value="${d.maxWeeklyMi}">
+      </div>
+    </div>
+    <div class="hint" style="margin-top:-8px; margin-bottom:16px;">If the plan would otherwise go higher, it scales back down to stay under whichever caps you set here.</div>
+    ` : ''}
 
     <div class="section-title">Weekly rhythm</div>
     <div class="field">
@@ -1184,6 +1215,21 @@ function modalEditSetup(){
     </div>
     <div class="field"><label class="field-label">Goal time (optional)</label><input class="input" type="text" id="es-goal-time" value="${d.goalTimeStr||''}"></div>
 
+    ${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM ? `
+    <div class="section-title">Caps (optional)</div>
+    <div class="row">
+      <div class="field">
+        <label class="field-label">Max long run (${d.units})</label>
+        <input class="input" type="number" min="0" step="0.5" id="es-max-long" placeholder="no cap" value="${d.maxLongRunMi}">
+      </div>
+      <div class="field">
+        <label class="field-label">Max weekly mileage (${d.units})</label>
+        <input class="input" type="number" min="0" step="1" id="es-max-weekly" placeholder="no cap" value="${d.maxWeeklyMi}">
+      </div>
+    </div>
+    <div class="hint" style="margin-top:-8px; margin-bottom:16px;">If the plan would otherwise go higher, it scales back down to stay under whichever caps you set here.</div>
+    ` : ''}
+
     <div class="section-title" style="margin-top:16px;">Weekly rhythm</div>
     <div class="field">
       <label class="field-label">Rest days per week</label>
@@ -1351,6 +1397,8 @@ function onClick(e){
       goalTimeStr: s.goalTimeSec? secToClock(s.goalTimeSec):'',
       longDow:s.longDow, speedDow:s.speedDow, strengthDows:[...s.strengthDows],
       restDays: clamp(7 - (s.runsPerWeek || runsPerWeekFor(s.currentWeeklyKm)), 1, 4),
+      maxLongRunMi: s.maxLongRunKm ? round1(kmToUnit(s.maxLongRunKm,s.units)) : '',
+      maxWeeklyMi: s.maxWeeklyKm ? round1(kmToUnit(s.maxWeeklyKm,s.units)) : '',
     }};
     render(); return;
   }
@@ -1380,13 +1428,17 @@ function onClick(e){
     d.raceDate = document.getElementById('es-date').value;
     d.currentWeeklyKm = unitToKm(Number(document.getElementById('es-weekly').value)||0, d.units);
     const recentPreset = RACE_PRESETS.find(r=>r.key===d.recentDistanceKey);
+    const maxLongEl = document.getElementById('es-max-long');
+    const maxWeeklyEl = document.getElementById('es-max-weekly');
     const setup = {...state.setup, raceKey:d.raceKey, raceDistanceKm:d.raceDistanceKm, raceDate:d.raceDate,
       currentWeeklyKm:d.currentWeeklyKm,
       recentDistanceKm: recentPreset ? recentPreset.km : null,
       recentTimeSec: parseDurationToSec(document.getElementById('es-recent-time').value) || state.setup.recentTimeSec,
       goalTimeSec: parseDurationToSec(document.getElementById('es-goal-time').value),
       longDow:d.longDow, speedDow:d.speedDow, strengthDows:d.strengthDows,
-      runsPerWeek: clamp(7 - d.restDays, 3, 6)};
+      runsPerWeek: clamp(7 - d.restDays, 3, 6),
+      maxLongRunKm: (maxLongEl && maxLongEl.value) ? unitToKm(Number(maxLongEl.value), d.units) : null,
+      maxWeeklyKm: (maxWeeklyEl && maxWeeklyEl.value) ? unitToKm(Number(maxWeeklyEl.value), d.units) : null};
     const plan = generatePlan(setup);
     Store.setSetup(setup); Store.setPlan(plan);
     state.setup = setup; state.plan = plan;
@@ -1420,6 +1472,8 @@ function onChange(e){
   if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; }
   if(e.target.id==='in-recent-time'){ state.onboardDraft.recentTime = e.target.value; }
   if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; }
+  if(e.target.id==='in-max-long'){ state.onboardDraft.maxLongRunMi = e.target.value; }
+  if(e.target.id==='in-max-weekly'){ state.onboardDraft.maxWeeklyMi = e.target.value; }
   if(state.modal && state.modal.type==='edit-day'){
     const draft = state.modal.draft;
     const unit = state.setup.units;
