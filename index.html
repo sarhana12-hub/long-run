@@ -447,7 +447,12 @@ function buildWorkoutMeta(day, raceDistanceKm){
       if(raceDistanceKm>15 && day.km >= raceDistanceKm*0.5){ meta.paceKey2='marathonPerKm'; meta.desc2='last quarter'; }
       return meta;
     }
-    case 'easy': return {descBase:'Conversational, easy effort', paceKey:'easyPerKm'};
+    case 'easy':{
+      const descBase = day.easyRole==='recovery' ? 'Very easy, short recovery jog'
+        : day.easyRole==='aerobic' ? 'Longer aerobic effort, conversational pace'
+        : 'Conversational, easy effort';
+      return {descBase, paceKey:'easyPerKm'};
+    }
     case 'tempo': return {descBase:'Continuous, comfortably hard', paceKey:'tempoPerKm'};
     case 'intervals':{
       const repM = raceDistanceKm<=10 ? 800 : 1000;
@@ -480,6 +485,7 @@ function renderWorkoutText(day, weekPaces, unit, fmt){
     if(p!=null) text += ` @ ${paceOrSpeedStr(p, unit, fmt)}`;
   }
   if(day.paceKey2 && weekPaces && weekPaces[day.paceKey2]!=null) text += ` (${day.desc2} @ ${paceOrSpeedStr(weekPaces[day.paceKey2], unit, fmt)})`;
+  if(day.strides) text += ' + strides (6 × 20s relaxed, full recovery)';
   return text;
 }
 function dayDisplayText(day, weekPaces, unit, fmt){
@@ -570,7 +576,17 @@ function generatePlan(setup){
   const weeklyVols = buildVols.concat(taperVols).slice(0, totalWeeks);
   while(weeklyVols.length<totalWeeks) weeklyVols.push(weeklyVols[weeklyVols.length-1]||currentKm);
 
-  const baseCount = Math.max(buildWeeksCount>=3?Math.round(buildWeeksCount*0.45):buildWeeksCount, buildWeeksCount>0?1:0);
+  // How much base-building someone needs depends on how close their CURRENT mileage
+  // already is to the race's IDEAL peak (uncapped) — a runner already at 75%+ of that
+  // has already built the aerobic engine base phase is for, and can move into quality
+  // work much sooner; someone starting well below it genuinely needs more weeks of pure
+  // volume before that's safe. Deliberately measured against idealPeakWeeklyKm, not the
+  // safety-clamped peakWeeklyKm, since that clamp keeps peak within 1.10-1.35x current
+  // mileage by construction — comparing against it would make every runner look
+  // "nearly at peak" regardless of actual fitness.
+  const fitnessRatio = idealPeakWeeklyKm>0 ? clamp(currentKm/idealPeakWeeklyKm, 0, 1) : 0;
+  const baseFraction = interp([[0,0.55],[0.5,0.45],[0.75,0.25],[1,0.10]], fitnessRatio);
+  const baseCount = Math.max(buildWeeksCount>=3?Math.round(buildWeeksCount*baseFraction):buildWeeksCount, buildWeeksCount>0?1:0);
   const buildCount = Math.max(buildWeeksCount-baseCount>=2? Math.round(buildWeeksCount*0.35):Math.max(0,buildWeeksCount-baseCount), 0);
   function phaseFor(i){
     if(i>=buildWeeksCount) return 'taper';
@@ -660,12 +676,33 @@ function generatePlan(setup){
     const easyDaysNeeded = Math.max(0, runsPerWeek-usedRunDays);
     const candidateIdxs = days.map((x,i)=>i).filter(i=>i!==longIdx && i!==speedIdx && i!==secondSpeedIdx);
     const easyIdxs = candidateIdxs.slice(0, easyDaysNeeded);
-    const perEasyKm = easyIdxs.length ? remaining/easyIdxs.length : 0;
+
+    // Easy days aren't run at one flat distance: the day right after the long run is a
+    // short recovery jog, and (when there's a third easy day) the one placed farthest from
+    // the long run is a longer "aerobic" run — real coaching practice, not evenly split miles.
+    const recoveryIdx = easyIdxs.find(i=>days[i].dow===(longDow+1)%7);
+    let aerobicIdx = null;
+    if(easyIdxs.length>=2){
+      const aerobicCandidates = easyIdxs.filter(i=>i!==recoveryIdx);
+      aerobicIdx = aerobicCandidates.reduce((best,i)=> circularDayDist(days[i].dow,longDow) > circularDayDist(days[best].dow,longDow) ? i : best, aerobicCandidates[0]);
+    }
+    const easyWeight = i => easyIdxs.length<2 ? 1 : (i===recoveryIdx ? 0.7 : i===aerobicIdx ? 1.3 : 1.0);
+    const totalEasyWeight = easyIdxs.reduce((s,i)=>s+easyWeight(i), 0);
+    const easyKmFor = i => totalEasyWeight>0 ? round1(remaining*easyWeight(i)/totalEasyWeight) : 0;
+    const easyLabelFor = i => i===recoveryIdx ? 'Recovery Run' : i===aerobicIdx ? 'Aerobic Run' : 'Easy Run';
+    const easyRoleFor = i => i===recoveryIdx ? 'recovery' : i===aerobicIdx ? 'aerobic' : 'easy';
+
+    // Strides (short relaxed accelerations) go on up to two easy days a week — skipping the
+    // recovery jog right after the long run, which should stay fully easy.
+    const stridesEligible = easyIdxs.filter(i=>i!==recoveryIdx);
+    const stridesIdxs = [];
+    if(aerobicIdx!=null) stridesIdxs.push(aerobicIdx);
+    stridesEligible.forEach(i=>{ if(stridesIdxs.length<2 && !stridesIdxs.includes(i)) stridesIdxs.push(i); });
 
     days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run'};
     if(wantsSpeed){ days[speedIdx] = {...days[speedIdx], type:speedType, km:speedKm, label:TYPE_META[speedType].label}; }
     if(secondSpeedIdx!==-1){ days[secondSpeedIdx] = {...days[secondSpeedIdx], type:secondSpeedType, km:secondSpeedKm, label:TYPE_META[secondSpeedType].label}; }
-    easyIdxs.forEach(i=>{ days[i] = {...days[i], type:'easy', km:round1(perEasyKm), label:'Easy Run'}; });
+    easyIdxs.forEach(i=>{ days[i] = {...days[i], type:'easy', km:easyKmFor(i), label:easyLabelFor(i), easyRole:easyRoleFor(i), strides:stridesIdxs.includes(i)}; });
 
     let strengthLeft = setup.strengthPerWeek==null?2:setup.strengthPerWeek;
     strengthDows.forEach(dw=>{
@@ -679,9 +716,9 @@ function generatePlan(setup){
       const targetIdx = raceIdx!==-1 ? raceIdx : 6;
       for(let i=0;i<7;i++){
         const diff = daysBetween(parseDate(days[i].date), raceDate);
-        if(i===targetIdx){ days[i] = {...days[i], type:'race', km:raceKm, label:'Race Day', strength:false}; }
-        else if(diff>0 && diff<=2){ days[i] = {...days[i], type:diff===1?'rest':'easy', km:diff===1?0:round1(Math.min(3,achievablePeakLongKm*0.15)), strength:false, label:diff===1?'Rest':'Shakeout Jog'}; }
-        else if(diff<0){ days[i] = {...days[i], type:'rest', km:0, strength:false, label:'Rest'}; }
+        if(i===targetIdx){ days[i] = {...days[i], type:'race', km:raceKm, label:'Race Day', strength:false, strides:false, easyRole:null}; }
+        else if(diff>0 && diff<=2){ days[i] = {...days[i], type:diff===1?'rest':'easy', km:diff===1?0:round1(Math.min(3,achievablePeakLongKm*0.15)), strength:false, strides:false, easyRole:null, label:diff===1?'Rest':'Shakeout Jog'}; }
+        else if(diff<0){ days[i] = {...days[i], type:'rest', km:0, strength:false, strides:false, easyRole:null, label:'Rest'}; }
       }
     }
 
@@ -1289,8 +1326,8 @@ function modalEditDay(){
   const matchedLog = state.logs.find(l=>l.date===day.date);
   const typeOpts = Object.keys(TYPE_META).map(t=>`<option value="${t}" ${draft.type===t?'selected':''}>${TYPE_META[t].label}</option>`).join('');
   const weekPaces = getWeekPaces(state.plan, week, state.logs);
-  const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength}, state.plan.raceDistanceKm);
-  const previewDay = {...meta, paceOverrideSecPerKm: draft.paceOverrideSecPerKm};
+  const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole}, state.plan.raceDistanceKm);
+  const previewDay = {...meta, paceOverrideSecPerKm: draft.paceOverrideSecPerKm, strides:draft.strides};
   const description = renderWorkoutText(previewDay, weekPaces, unit, fmt) || 'No planned distance for this day.';
   const recommendedSecPerKm = meta.paceKey ? weekPaces[meta.paceKey] : null;
   const effectiveSecPerKm = draft.paceOverrideSecPerKm!=null ? draft.paceOverrideSecPerKm : recommendedSecPerKm;
@@ -1316,6 +1353,11 @@ function modalEditDay(){
       <label class="field-label" style="margin:0;">Add strength session</label>
       <input type="checkbox" id="ed-strength" ${draft.strength?'checked':''} style="width:20px; height:20px;">
     </div>
+    ${draft.type==='easy' ? `
+    <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
+      <label class="field-label" style="margin:0;">Add strides</label>
+      <input type="checkbox" id="ed-strides" ${draft.strides?'checked':''} style="width:20px; height:20px;">
+    </div>` : ''}
     ${previewWarnings.length ? `<div class="banner" style="margin:0 0 16px;">${ICONS.bolt}<span>${previewWarnings.map(w=>esc(w)).join('<br>')}</span></div>` : ''}
     <div class="row" style="margin-top:6px;">
       <button class="btn" data-act="start-move" data-di="${dayIndex}">${ICONS.move} Swap with another day</button>
@@ -1467,7 +1509,7 @@ function onClick(e){
     const di = Number(el.dataset.i);
     const day = state.plan.weeks[state.currentWeekIndex].days[di];
     state.modal={type:'edit-day', weekIndex:state.currentWeekIndex, dayIndex:di, draft:{
-      type: day.type, km: day.km, strength: day.strength,
+      type: day.type, km: day.km, strength: day.strength, strides: !!day.strides, easyRole: day.easyRole ?? null,
       paceOverrideSecPerKm: day.paceOverrideSecPerKm ?? null,
     }};
     render(); return;
@@ -1501,8 +1543,9 @@ function onClick(e){
     const wi = Number(el.dataset.wi), di = Number(el.dataset.di);
     const draft = state.modal.draft;
     const day = state.plan.weeks[wi].days[di];
-    const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength}, state.plan.raceDistanceKm);
-    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta};
+    const strides = draft.type==='easy' && !!draft.strides;
+    const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole}, state.plan.raceDistanceKm);
+    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta};
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     Store.setPlan(state.plan);
@@ -1623,6 +1666,7 @@ function onChange(e){
     if(e.target.id==='ed-type'){ draft.type = e.target.value; render(); return; }
     if(e.target.id==='ed-km'){ draft.km = unitToKm(Number(e.target.value)||0, unit); render(); return; }
     if(e.target.id==='ed-strength'){ draft.strength = e.target.checked; render(); return; }
+    if(e.target.id==='ed-strides'){ draft.strides = e.target.checked; render(); return; }
     if(e.target.id==='ed-pace'){
       const secPerKm = parsePaceInput(e.target.value, unit, state.paceFormat);
       if(secPerKm!=null) draft.paceOverrideSecPerKm = secPerKm;
