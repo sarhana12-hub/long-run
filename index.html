@@ -1055,35 +1055,50 @@ function formatDurationDigits(raw){
   return digits.slice(0,hhLen)+':'+digits.slice(hhLen,hhLen+2)+':'+digits.slice(hhLen+2);
 }
 // Approximate typical running speeds (mph), roughly ordered slow to fast — not lab-precise,
-// just plausible fun-fact territory. Several entries cluster in the 4-9mph band since that's
-// where most recreational race paces (7-15 min/mi) actually land.
+// just plausible fun-fact territory. Heavily stacked in the 4-9mph band since that's where
+// most recreational race paces (7-15 min/mi) actually land — a few non-animal entries mixed
+// in for variety, each with its own one-line editorial comment.
 const ANIMAL_PACES_MPH = [
-  {name:'a garden snail', mph:0.03},
-  {name:'a giant tortoise', mph:0.2},
-  {name:'a hedgehog', mph:4},
-  {name:'a beaver', mph:5},
-  {name:'an opossum', mph:6},
-  {name:'a skunk', mph:7},
-  {name:'a groundhog', mph:8},
-  {name:'a chicken', mph:9},
-  {name:'a domestic pig', mph:11},
-  {name:'a squirrel', mph:12},
-  {name:'a wild turkey', mph:15},
-  {name:'a raccoon', mph:15},
-  {name:'a black bear', mph:25},
-  {name:'an elephant', mph:25},
-  {name:'a giraffe', mph:32},
-  {name:'a greyhound', mph:45},
-  {name:'a cheetah', mph:70},
+  {name:'a garden snail', mph:0.03, quip:'It would take one about three months to run a 5K. Respect the commitment though.'},
+  {name:'a giant tortoise', mph:0.2, quip:'Slow, but famously undefeated against hares.'},
+  {name:'a hedgehog', mph:4, quip:'Small legs, big effort, does not care what you think.'},
+  {name:'a caffeinated toddler', mph:5, quip:'Unpredictable, occasionally airborne, will not pace themselves.'},
+  {name:'your grandma power-walking to the early-bird buffet', mph:5, quip:'Arms pumping, purse swinging, will absolutely beat you to the shrimp.'},
+  {name:'a Roomba having a bad day', mph:5, quip:'Aggressive, directionless, will absolutely hit your ankle.'},
+  {name:'a house cat at a leisurely trot', mph:5, quip:"It has somewhere slightly better to be, but isn't rushing."},
+  {name:'a beaver', mph:5, quip:'Efficient, purposeful, definitely building something while it runs.'},
+  {name:'an opossum', mph:6, quip:'Running is plan B. Plan A was playing dead.'},
+  {name:'a duck making a break for it', mph:6, quip:'Waddling with real conviction.'},
+  {name:'a raccoon ambling, not fleeing', mph:6, quip:'No crime committed, no rush required.'},
+  {name:'a wombat on a casual jog', mph:6, quip:'Deceptively fast for something shaped like a loaf of bread.'},
+  {name:'a guinea pig at full commitment', mph:6, quip:'Extremely serious about a very short distance.'},
+  {name:'a capybara who has nowhere to be', mph:6.5, quip:'The most relaxed creature on Earth, technically still running.'},
+  {name:'a basset hound doing its best', mph:6.5, quip:'Ears flapping, dignity intact, personal record likely.'},
+  {name:'a camel at a walk, not a run', mph:6.5, quip:'Saving the real speed for when it actually matters.'},
+  {name:'a skunk', mph:7, quip:"Confident it doesn't need to go any faster than this."},
+  {name:'a Komodo dragon that has not spotted prey yet', mph:7, quip:'Casual for now. Please do not become the reason it speeds up.'},
+  {name:'a golf cart on the cart path', mph:7, quip:'Someone is definitely getting yelled at by the starter.'},
+  {name:'an airport moving walkway plus a light jog', mph:7, quip:'Technically cheating. Extremely effective.'},
+  {name:'a groundhog', mph:8, quip:'Currently the exact pace of your recent effort. Groundhog Day indeed.'},
+  {name:'a chicken', mph:9, quip:'Somehow both ridiculous and a little terrifying at full speed.'},
+  {name:'a domestic pig', mph:11, quip:"Faster than you'd think, and very smug about it."},
+  {name:'a squirrel', mph:12, quip:'Also capable of stopping dead in your path with zero warning.'},
+  {name:'a wild turkey', mph:15, quip:'Yes, it can outrun you. No, that is not a comforting thought.'},
+  {name:'a raccoon at a full sprint', mph:15, quip:'Moving with the specific urgency of something that just knocked over your trash cans.'},
+  {name:'a black bear', mph:25, quip:'Faster than an Olympic sprinter, mildly terrifying, please do not test this.'},
+  {name:'an elephant', mph:25, quip:'Somehow graceful. Deeply unfair for something that large.'},
+  {name:'a giraffe', mph:32, quip:'All legs, no business being this fast, does it anyway.'},
+  {name:'a greyhound', mph:45, quip:'Literally bred for exactly this. You are outmatched by design.'},
+  {name:'a cheetah', mph:70, quip:'Congratulations on a time that would still get lapped in about six seconds.'},
 ];
 // Picks from among the closest few matches (not always the single nearest) so entering a
-// similar pace twice doesn't always name the same animal.
+// similar pace twice doesn't always name the same thing.
 function animalPaceComparison(mph){
   if(!mph || mph<=0) return '';
   const closest = ANIMAL_PACES_MPH.map(a=>({...a, diff:Math.abs(a.mph-mph)})).sort((a,b)=>a.diff-b.diff);
   const pool = closest.slice(0, Math.min(3, closest.length));
   const pick = pool[Math.floor(Math.random()*pool.length)];
-  return `about the running pace of ${pick.name}`;
+  return `about the running pace of ${pick.name}. ${pick.quip}`;
 }
 function recentPaceHint(d){
   const preset = RACE_PRESETS.find(r=>r.key===d.recentDistanceKey);
@@ -1091,7 +1106,7 @@ function recentPaceHint(d){
   if(!preset || !sec) return 'Enter a finish time to see your pace per mile.';
   const secPerKm = sec/preset.km;
   const mph = 3600/(secPerKm*KM_PER_MI);
-  return `That's about ${paceStr(secPerKm,'mi')} pace — ${animalPaceComparison(mph)}.`;
+  return `That's about ${paceStr(secPerKm,'mi')} pace — ${animalPaceComparison(mph)}`;
 }
 
 function renderOnboardStep2(d){
