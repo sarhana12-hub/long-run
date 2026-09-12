@@ -129,6 +129,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .day-card{display:flex; align-items:center; gap:12px; padding:13px 14px; position:relative; width:100%; text-align:left; border:1px solid var(--line);}
 .day-card.move-target{outline:2px dashed var(--accent-strong); outline-offset:2px;}
 .day-card.move-source{outline:2px solid var(--accent-strong);}
+.day-card.logged{background:var(--accent-soft); border-color:var(--accent-strong);}
 .day-date{width:38px; flex:none; text-align:center;}
 .day-date .dow{font-size:10.5px; font-weight:700; color:var(--muted); text-transform:uppercase;}
 .day-date .dom{font-family:var(--font-mono); font-weight:700; font-size:17px;}
@@ -136,9 +137,11 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .day-top{display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;}
 .day-title{font-weight:700; font-size:14.5px;}
 .day-desc{font-size:12.5px; color:var(--muted); line-height:1.4;}
-.day-side{flex:none; text-align:right;}
+.day-side{flex:none; text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:5px;}
 .day-dist{font-family:var(--font-mono); font-weight:700; font-size:15px;}
 .day-pace{font-family:var(--font-mono); font-size:11px; color:var(--muted);}
+.day-check{width:19px; height:19px; border-radius:50%; background:var(--accent-strong); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; flex:none;}
+.day-check svg{width:11px; height:11px;}
 .strength-badge{font-size:10px; font-weight:700; color:var(--z-strength); background:var(--z-strength-bg); border-radius:6px; padding:2px 6px;}
 
 /* ---------- FAB & tabbar ---------- */
@@ -607,6 +610,7 @@ const ICONS = {
   close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   bolt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>',
   move:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
 };
 
 /* ============================= state ============================= */
@@ -869,17 +873,17 @@ function renderPlanTab(week, plan){
     const isMoveTarget = state.moveFrom && state.moveFrom.weekIndex===state.currentWeekIndex && state.moveFrom.dayIndex!==di;
     const dt = parseDate(day.date);
     return `
-    <button class="card day-card ${isMoveSrc?'move-source':''} ${isMoveTarget?'move-target':''}" data-act="${state.moveFrom? 'move-target':'open-day'}" data-i="${di}" style="${isToday?'border-color:var(--accent-strong)':''}">
+    <button class="card day-card ${match?'logged':''} ${isMoveSrc?'move-source':''} ${isMoveTarget?'move-target':''}" data-act="${state.moveFrom? 'move-target':'open-day'}" data-i="${di}" style="${isToday?'border-color:var(--accent-strong)':''}">
       <div class="day-date"><div class="dow">${DOW_LABELS[day.dow]}</div><div class="dom mono">${dt.getDate()}</div></div>
       <div class="day-main">
         <div class="day-top">
           <span class="pill" style="background:var(--${meta.bg}); color:var(--${meta.fg})">${day.label}</span>
           ${day.strength?`<span class="strength-badge">+ Strength</span>`:''}
-          ${match?`<span class="strength-badge" style="color:var(--z-easy); background:var(--z-easy-bg)">Logged</span>`:''}
         </div>
         <div class="day-desc">${esc(dayDisplayText(day, weekPaces, unit, fmt))}</div>
       </div>
       <div class="day-side">
+        ${match?`<div class="day-check">${ICONS.check}</div>`:''}
         ${day.km>0?`<div class="day-dist mono">${fmtDist(day.km,unit)}</div>`:''}
       </div>
     </button>`;
@@ -1049,11 +1053,66 @@ function modalLogRun(){
   `);
 }
 
+function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
+  const plannedKm = day.km;
+  const plannedPaceSecPerKm = day.paceKey ? (day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : getWeekPaces(plan, week, logs)[day.paceKey]) : null;
+  const actualPaceSecPerKm = log.distanceKm>0 ? log.durationSec/log.distanceKm : null;
+
+  const distLine = plannedKm>0
+    ? `${fmtDist(log.distanceKm,unit)} logged vs ${fmtDist(plannedKm,unit)} planned`
+    : `${fmtDist(log.distanceKm,unit)} logged — nothing was planned this day`;
+
+  let paceCompareLine = '';
+  if(plannedPaceSecPerKm!=null && actualPaceSecPerKm!=null){
+    const deltaSecPerKm = actualPaceSecPerKm-plannedPaceSecPerKm;
+    const deltaDisplayPerUnit = unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm;
+    if(Math.abs(deltaDisplayPerUnit)<3){
+      paceCompareLine = 'right on target pace';
+    } else if(fmt==='speed'){
+      const actualSpeed = 3600/(unit==='mi'?actualPaceSecPerKm*KM_PER_MI:actualPaceSecPerKm);
+      const plannedSpeed = 3600/(unit==='mi'?plannedPaceSecPerKm*KM_PER_MI:plannedPaceSecPerKm);
+      paceCompareLine = `${Math.abs(actualSpeed-plannedSpeed).toFixed(1)} ${unit==='mi'?'mph':'km/h'} ${actualSpeed<plannedSpeed?'slower':'faster'} than planned`;
+    } else {
+      paceCompareLine = `${secToClock(Math.abs(deltaDisplayPerUnit))}/${unit} ${deltaDisplayPerUnit>0?'slower':'faster'} than planned`;
+    }
+  }
+
+  const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', race:'race-day runs'};
+  const eligible = RECALIBRATION_TYPES.includes(day.type) && day.paceKey && PACE_MULTIPLIERS[day.paceKey];
+  let impactLine;
+  if(!eligible){
+    const noun = NONELIGIBLE_NOUNS[day.type];
+    impactLine = noun ? `No impact on future pacing — ${noun} aren't used to recalibrate paces.` : `No impact on future pacing — this run type isn't used to recalibrate paces.`;
+  } else {
+    const withPaces = getWeekPaces(plan, week, logs);
+    const withoutPaces = getWeekPaces(plan, week, logs.filter(l=>l.id!==log.id));
+    const deltaSecPerKm = withPaces.tempoPerKm - withoutPaces.tempoPerKm;
+    const deltaPerUnit = unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm;
+    if(Math.abs(deltaPerUnit)<1){
+      impactLine = `No meaningful change to future pacing from this run alone.`;
+    } else {
+      impactLine = `This run nudged your upcoming training paces about ${Math.round(Math.abs(deltaPerUnit))} sec/${unit} ${deltaPerUnit>0?'slower':'faster'}.`;
+    }
+  }
+
+  return `<div class="card" style="padding:14px 16px; margin-bottom:16px; background:var(--accent-soft); border-color:var(--accent-strong);">
+    <div style="display:flex; align-items:center; gap:6px; font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink); margin-bottom:8px;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      Logged
+    </div>
+    <div style="font-weight:700; font-size:14.5px;">${esc(distLine)}</div>
+    <div style="font-size:13px; color:var(--ink-soft); margin-top:2px;">${secToClock(log.durationSec)}${actualPaceSecPerKm!=null?' · '+paceOrSpeedStr(actualPaceSecPerKm,unit,fmt):''}${paceCompareLine?' · '+paceCompareLine:''}</div>
+    <div class="hint" style="margin-top:8px; color:var(--ink-soft);">${impactLine}</div>
+    <button class="btn btn-ghost btn-sm" data-act="delete-log" data-id="${log.id}" style="margin-top:10px; color:#C4432E;">Remove this log</button>
+  </div>`;
+}
+
 function modalEditDay(){
   const {weekIndex, dayIndex, draft} = state.modal;
   const week = state.plan.weeks[weekIndex];
   const day = week.days[dayIndex];
   const unit = state.setup.units, fmt = state.paceFormat;
+  const matchedLog = state.logs.find(l=>l.date===day.date);
   const typeOpts = Object.keys(TYPE_META).map(t=>`<option value="${t}" ${draft.type===t?'selected':''}>${TYPE_META[t].label}</option>`).join('');
   const weekPaces = getWeekPaces(state.plan, week, state.logs);
   const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength}, state.plan.raceDistanceKm);
@@ -1064,6 +1123,7 @@ function modalEditDay(){
   const speedUnitLabel = unit==='mi' ? 'mph' : 'km/h';
 
   return modalShell(`Edit ${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}`, `
+    ${matchedLog ? renderLoggedComparisonHtml(day, matchedLog, state.plan, week, state.logs, unit, fmt) : ''}
     <div class="field"><label class="field-label">Workout type</label><select class="input" id="ed-type">${typeOpts}</select></div>
     <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" step="0.1" min="0" id="ed-km" value="${round1(kmToUnit(draft.km,unit))}"></div>
     <div class="field">
