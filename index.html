@@ -313,6 +313,44 @@ function deriveScheduleFromLongDow(longDow){
   return { speedDow, strengthDows };
 }
 
+function circularDayDist(a,b){ const diff=Math.abs(a-b); return Math.min(diff,7-diff); }
+
+/* Flags — never blocks — spacing that runs against common coaching guidance: hard
+   efforts (the long run and any quality workout) less than 48h apart, and strength
+   sessions landing the day before a hard effort (or stacked onto one) rather than
+   paired with recovery. Users can rearrange freely; this just keeps them informed. */
+function scheduleWarnings(week){
+  const warnings = [];
+  const longDay = week.days.find(d=>d.type==='long');
+  const qualityDays = week.days.filter(d=>QUALITY_TYPES.includes(d.type) && d.type!=='long');
+  const hardDays = longDay ? [longDay, ...qualityDays] : qualityDays;
+
+  if(longDay){
+    qualityDays.forEach(q=>{
+      if(circularDayDist(q.dow, longDay.dow)<2){
+        warnings.push(`${q.label} (${DOW_LABELS[q.dow]}) is only a day from your Long Run (${DOW_LABELS[longDay.dow]}) — most coaches recommend 48+ hours between hard efforts.`);
+      }
+    });
+  }
+  for(let i=0;i<qualityDays.length;i++){
+    for(let j=i+1;j<qualityDays.length;j++){
+      if(circularDayDist(qualityDays[i].dow, qualityDays[j].dow)<2){
+        warnings.push(`${qualityDays[i].label} and ${qualityDays[j].label} are back-to-back — most coaches recommend 48+ hours between hard efforts.`);
+      }
+    }
+  }
+  week.days.filter(d=>d.strength).forEach(s=>{
+    hardDays.forEach(h=>{
+      if(h.id===s.id){
+        warnings.push(`Strength is stacked on top of ${h.label} (${DOW_LABELS[h.dow]}) — pairing it with an easier day instead lets both sessions actually recover.`);
+      } else if(((h.dow-1+7)%7)===s.dow){
+        warnings.push(`Strength on ${DOW_LABELS[s.dow]} falls right before ${h.label} (${DOW_LABELS[h.dow]}) — many coaches keep the day before a hard effort fresh instead.`);
+      }
+    });
+  });
+  return warnings;
+}
+
 function basePredicted5kSec(setup){
   if(setup.recentDistanceKm && setup.recentTimeSec){
     return riegel(setup.recentTimeSec, setup.recentDistanceKm, 5);
@@ -960,6 +998,7 @@ function renderPlanTab(week, plan){
   const unit = state.setup.units;
   const fmt = state.paceFormat;
   const weekPaces = getWeekPaces(plan, week, state.logs);
+  const warnings = scheduleWarnings(week);
   const raceDate = parseDate(plan.raceDate);
   const weekStartDate = parseDate(week.weekStart);
   const daysToRaceForWeek = daysBetween(weekStartDate, raceDate);
@@ -998,6 +1037,7 @@ function renderPlanTab(week, plan){
 
   return `
   ${state.moveFrom!=null && state.moveFrom.weekIndex===state.currentWeekIndex ? `<div class="banner">${ICONS.move}<span>Choose a day to swap with "${week.days[state.moveFrom.dayIndex].label}". <a class="link-btn" data-act="cancel-move" style="color:inherit">Cancel</a></span></div>`:''}
+  ${warnings.length ? `<div class="banner">${ICONS.bolt}<span>${warnings.map(w=>esc(w)).join('<br>')}</span></div>` : ''}
   <div class="week-strip">${strip}</div>
   <div class="week-header">
     <div>
@@ -1228,6 +1268,8 @@ function modalEditDay(){
   const recommendedSecPerKm = meta.paceKey ? weekPaces[meta.paceKey] : null;
   const effectiveSecPerKm = draft.paceOverrideSecPerKm!=null ? draft.paceOverrideSecPerKm : recommendedSecPerKm;
   const speedUnitLabel = unit==='mi' ? 'mph' : 'km/h';
+  const previewDays = week.days.map((wd,i)=> i===dayIndex ? {...wd, type:draft.type, strength:draft.strength, label:TYPE_META[draft.type].label} : wd);
+  const previewWarnings = scheduleWarnings({...week, days:previewDays});
 
   return modalShell(`Edit ${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}`, `
     ${matchedLog ? renderLoggedComparisonHtml(day, matchedLog, state.plan, week, state.logs, unit, fmt) : ''}
@@ -1247,6 +1289,7 @@ function modalEditDay(){
       <label class="field-label" style="margin:0;">Add strength session</label>
       <input type="checkbox" id="ed-strength" ${draft.strength?'checked':''} style="width:20px; height:20px;">
     </div>
+    ${previewWarnings.length ? `<div class="banner" style="margin:0 0 16px;">${ICONS.bolt}<span>${previewWarnings.map(w=>esc(w)).join('<br>')}</span></div>` : ''}
     <div class="row" style="margin-top:6px;">
       <button class="btn" data-act="start-move" data-di="${dayIndex}">${ICONS.move} Swap with another day</button>
       <button class="btn btn-primary" data-act="save-day" data-wi="${weekIndex}" data-di="${dayIndex}">Save</button>
