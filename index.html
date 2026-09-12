@@ -1189,8 +1189,13 @@ function phaseColorVar(phase){
 }
 function phaseLabel(phase){ return {base:'Base', build:'Build', peak:'Peak', taper:'Taper'}[phase]||phase; }
 // Cutback weeks display as their own label/color rather than whatever phase they fall
-// in — the underlying phase still drives workout selection, this is display-only.
-function weekDisplayLabel(week){ return week.isCutback ? 'Cutback' : phaseLabel(week.phase); }
+// in — the underlying phase still drives workout selection, this is display-only. The
+// very last week (the one race day actually falls in) displays as "Race Week" rather
+// than "Taper" even though it's still internally the taper phase.
+function weekDisplayLabel(week, totalWeeks){
+  if(week.weekIndex===totalWeeks-1) return 'Race Week';
+  return week.isCutback ? 'Cutback' : phaseLabel(week.phase);
+}
 function weekColorVar(week){ return week.isCutback ? 'var(--z-rest)' : phaseColorVar(week.phase); }
 
 function renderPlanTab(week, plan){
@@ -1203,7 +1208,7 @@ function renderPlanTab(week, plan){
   const daysToRaceForWeek = daysBetween(weekStartDate, raceDate);
   const strip = plan.weeks.map((w,i)=>`
     <button class="week-tab ${i===state.currentWeekIndex?'active':''}" style="--phase-color:${weekColorVar(w)}" data-act="goto-week" data-i="${i}">
-      <div class="wk">${weekDisplayLabel(w)}</div>
+      <div class="wk">${weekDisplayLabel(w, plan.totalWeeks)}</div>
       <div class="wn">${i+1}</div>
     </button>`).join('');
 
@@ -1240,7 +1245,7 @@ function renderPlanTab(week, plan){
   <div class="week-strip">${strip}</div>
   <div class="week-header">
     <div>
-      <h2>${weekDisplayLabel(week)} · Week ${week.weekIndex+1}</h2>
+      <h2>${weekDisplayLabel(week, plan.totalWeeks)} · Week ${week.weekIndex+1}</h2>
       <div class="week-meta">${niceDate(weekStartDate)} – ${niceDate(addDays(weekStartDate,6))} · ${daysToRaceForWeek>0?daysToRaceForWeek+' days to race':(week.weekIndex===plan.totalWeeks-1?'Race week':'Race day has passed')}</div>
     </div>
     <div class="week-stat">
