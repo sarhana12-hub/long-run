@@ -108,6 +108,11 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 /* ---------- onboarding ---------- */
 .hero-pad{padding:28px 18px 10px;}
 .eyebrow{font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-strong);}
+.step-indicator{display:flex; align-items:center; gap:10px; margin:2px 0 20px;}
+.step-indicator .step-label{font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.02em;}
+.step-dots{display:flex; gap:6px;}
+.step-dot{width:7px; height:7px; border-radius:50%; background:var(--line);}
+.step-dot.active{background:var(--accent-strong);}
 
 /* ---------- week strip ---------- */
 .week-strip{display:flex; gap:8px; overflow-x:auto; padding:2px 18px 14px; scrollbar-width:none;}
@@ -796,6 +801,7 @@ const state = {
   moveFrom:null,
   modal:null,
   onboardDraft:null,
+  onboardStep:1,
   toast:null,
 };
 
@@ -821,6 +827,7 @@ function boot(){
   } else {
     state.view = 'onboarding';
     state.onboardDraft = defaultDraft();
+    state.onboardStep = 1;
   }
   render();
 }
@@ -837,6 +844,17 @@ function defaultDraft(){
   };
 }
 const LONG_DISTANCE_CAP_THRESHOLD_KM = 21.0975; // half marathon and up get optional long-run/volume caps
+
+// Same required-field checks submitOnboarding() makes at the end, run per-step so
+// "Next" catches a missing name/date on step 1 instead of bouncing back from step 3.
+function onboardStepError(step){
+  const d = state.onboardDraft;
+  if(step===1){
+    if(!d.name || !d.name.trim()) return 'Enter your name';
+    if(!d.raceDate) return 'Pick a race date first';
+  }
+  return null;
+}
 
 /* ============================= onboarding submit ============================= */
 function submitOnboarding(){
@@ -916,24 +934,17 @@ function strengthCountChipsHtml(value, act){
 }
 
 /* ============================= render: onboarding ============================= */
-function renderOnboarding(){
-  const d = state.onboardDraft;
+const ONBOARD_STEPS = [
+  {title:'The race', hint:'Your name, race distance, and the day itself.'},
+  {title:'Your fitness', hint:'Current mileage and a recent time so paces are calibrated to you.'},
+  {title:'How you train', hint:'Fine-tune how the plan builds you up — sensible defaults are already picked.'},
+];
+
+function renderOnboardStep1(d){
   const presetChips = RACE_PRESETS.map(r=>`<button class="chip ${d.raceKey===r.key?'active':''}" data-act="pick-race" data-key="${r.key}">${r.label}</button>`).join('');
   const unitChips = ['mi','km'].map(u=>`<button class="chip ${d.units===u?'active':''}" data-act="pick-unit" data-u="${u}">${u==='mi'?'Miles':'Kilometers'}</button>`).join('');
-  const recentChips = RACE_PRESETS.slice(0,5).map(r=>`<button class="chip ${d.recentDistanceKey===r.key?'active':''}" data-act="pick-recent" data-key="${r.key}">${r.label}</button>`).join('');
-  const dowGrid = (name, selected, multi)=> dowGridHtml(name, selected, multi, 'pick-dow');
   const weeksToRace = d.raceDate ? Math.max(1,Math.ceil((parseDate(d.raceDate)-todayDate())/86400000/7)) : null;
-  const runDaysPerWeek = clamp(7 - d.restDays, 3, 6);
-
   return `
-  <div class="topbar">
-    <div class="brand"><div class="brand-mark">${ICONS.route}</div><div class="brand-name">Long Run</div></div>
-  </div>
-  <div class="container">
-    <div class="eyebrow" style="margin-top:6px;">Training plans, tailored to race day</div>
-    <h1 style="font-size:24px; margin:6px 0 4px;">Let's build your plan</h1>
-    <div class="hint" style="margin-bottom:20px;">A few numbers so the plan fits you: your race, your date, your current mileage, and a recent time to calibrate paces.</div>
-
     <div class="section-title" style="margin-top:0;">Your name</div>
     <div class="field">
       <input class="input" type="text" id="in-name" placeholder="e.g. Ahmed" value="${esc(d.name)}">
@@ -958,8 +969,13 @@ function renderOnboarding(){
       <input class="input" type="date" id="in-race-date" value="${d.raceDate}">
       ${weeksToRace? `<div class="hint">${weeksToRace} week${weeksToRace===1?'':'s'} from today.</div>`:''}
     </div>
+  `;
+}
 
-    <div class="section-title">Current fitness</div>
+function renderOnboardStep2(d){
+  const recentChips = RACE_PRESETS.slice(0,5).map(r=>`<button class="chip ${d.recentDistanceKey===r.key?'active':''}" data-act="pick-recent" data-key="${r.key}">${r.label}</button>`).join('');
+  return `
+    <div class="section-title" style="margin-top:0;">Current fitness</div>
     <div class="field">
       <label class="field-label">Current weekly mileage (${d.units})</label>
       <input class="input" type="number" min="0" step="1" id="in-weekly" value="${d.currentWeeklyMi}">
@@ -972,11 +988,17 @@ function renderOnboarding(){
     </div>
     <div class="field">
       <label class="field-label">Goal time for this race (optional)</label>
-      <input class="input" type="text" id="in-goal-time" placeholder="e.g. 1:45:00 — leave blank to let paces guide you">
+      <input class="input" type="text" id="in-goal-time" placeholder="e.g. 1:45:00 — leave blank to let paces guide you" value="${esc(d.goalTime)}">
     </div>
+  `;
+}
 
+function renderOnboardStep3(d){
+  const dowGrid = (name, selected, multi)=> dowGridHtml(name, selected, multi, 'pick-dow');
+  const runDaysPerWeek = clamp(7 - d.restDays, 3, 6);
+  return `
     ${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM ? `
-    <div class="section-title">Caps (optional)</div>
+    <div class="section-title" style="margin-top:0;">Caps (optional)</div>
     <div class="row">
       <div class="field">
         <label class="field-label">Max long run (${d.units})</label>
@@ -990,7 +1012,7 @@ function renderOnboarding(){
     <div class="hint" style="margin-top:-8px; margin-bottom:16px;">If the plan would otherwise go higher, it scales back down to stay under whichever caps you set here.</div>
     ` : ''}
 
-    <div class="section-title">Training style</div>
+    <div class="section-title" style="${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM?'':'margin-top:0;'}">Training style</div>
     <div class="field">
       <label class="field-label">Long run emphasis</label>
       <div class="chip-select">${emphasisChipsHtml(d.longRunEmphasis, 'pick-long-emphasis')}</div>
@@ -1018,8 +1040,42 @@ function renderOnboarding(){
       <div class="dow-grid">${dowGrid('longDow', d.longDow, false)}</div>
       <div class="hint">Speed work and strength days are placed automatically for proper recovery spacing — move any day later from the plan itself if you'd rather.</div>
     </div>
+  `;
+}
 
-    <button class="btn btn-primary btn-block" style="margin:22px 0 30px; padding:14px;" data-act="generate-plan">Generate my plan</button>
+function renderOnboarding(){
+  const d = state.onboardDraft;
+  const step = state.onboardStep || 1;
+  const meta = ONBOARD_STEPS[step-1];
+  const stepHtml = step===1 ? renderOnboardStep1(d) : step===2 ? renderOnboardStep2(d) : renderOnboardStep3(d);
+  const dotsHtml = ONBOARD_STEPS.map((s,i)=>`<span class="step-dot ${i+1<=step?'active':''}"></span>`).join('');
+  const navHtml = step<3 ? `
+    <div class="row" style="margin:22px 0 30px;">
+      ${step>1?'<button class="btn btn-block" style="padding:14px;" data-act="onboard-back">Back</button>':''}
+      <button class="btn btn-primary btn-block" style="padding:14px;" data-act="onboard-next">Next</button>
+    </div>
+  ` : `
+    <div class="row" style="margin:22px 0 30px;">
+      <button class="btn btn-block" style="padding:14px;" data-act="onboard-back">Back</button>
+      <button class="btn btn-primary btn-block" style="padding:14px;" data-act="generate-plan">Generate my plan</button>
+    </div>
+  `;
+
+  return `
+  <div class="topbar">
+    <div class="brand"><div class="brand-mark">${ICONS.route}</div><div class="brand-name">Long Run</div></div>
+  </div>
+  <div class="container">
+    <div class="eyebrow" style="margin-top:6px;">Training plans, tailored to race day</div>
+    <h1 style="font-size:24px; margin:6px 0 4px;">${meta.title}</h1>
+    <div class="hint" style="margin-bottom:14px;">${meta.hint}</div>
+    <div class="step-indicator">
+      <span class="step-label">Step ${step} of ${ONBOARD_STEPS.length}</span>
+      <div class="step-dots">${dotsHtml}</div>
+    </div>
+
+    ${stepHtml}
+    ${navHtml}
   </div>
   `;
 }
@@ -1485,6 +1541,13 @@ function onClick(e){
     }
     render(); return;
   }
+  if(act==='onboard-back'){ state.onboardStep = Math.max(1, state.onboardStep-1); render(); return; }
+  if(act==='onboard-next'){
+    const err = onboardStepError(state.onboardStep);
+    if(err){ showToast(err); return; }
+    state.onboardStep = Math.min(3, state.onboardStep+1);
+    render(); return;
+  }
   if(act==='generate-plan'){ submitOnboarding(); return; }
 
   if(act==='open-log'){ state.modal={type:'log-run'}; render(); return; }
@@ -1640,7 +1703,7 @@ function onClick(e){
   if(act==='do-reset'){
     Store.resetAll();
     state.name=''; state.setup=null; state.plan=null; state.logs=[]; state.modal=null;
-    state.view='onboarding'; state.onboardDraft = defaultDraft();
+    state.view='onboarding'; state.onboardDraft = defaultDraft(); state.onboardStep = 1;
     render(); return;
   }
   if(act==='close-modal'){ state.modal=null; state.moveFrom=null; render(); return; }
