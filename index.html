@@ -1385,15 +1385,55 @@ function modalShell(title, innerHtml){
   </div>`;
 }
 
+// The plan day (and its own week, for pace lookup) matching a given date, if any.
+function plannedWorkoutForDate(dateStr){
+  if(!state.plan || !dateStr) return null;
+  for(const week of state.plan.weeks){
+    const day = week.days.find(x=>x.date===dateStr);
+    if(day) return {day, week};
+  }
+  return null;
+}
+function plannedWorkoutHtml(dateStr){
+  const found = plannedWorkoutForDate(dateStr);
+  if(!found){
+    return `<div class="field"><label class="field-label">Planned for this day</label><div class="input" style="color:var(--ink-soft);">No planned workout for this date.</div></div>`;
+  }
+  const {day, week} = found;
+  const meta = TYPE_META[day.type];
+  const unit = state.setup.units, fmt = state.paceFormat;
+  const weekPaces = getWeekPaces(state.plan, week, state.logs);
+  const desc = dayDisplayText(day, weekPaces, unit, fmt);
+  return `<div class="field">
+    <label class="field-label">Planned for this day</label>
+    <div class="input" style="height:auto; display:flex; flex-direction:column; gap:6px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="pill" style="background:var(--${meta.bg}); color:var(--${meta.fg})">${day.label}</span>
+        ${day.km>0?`<span class="mono" style="font-size:12.5px; color:var(--ink-soft);">${fmtDist(day.km,unit)}</span>`:''}
+      </div>
+      ${desc?`<div style="color:var(--ink-soft); font-size:13px;">${esc(desc)}</div>`:''}
+    </div>
+  </div>`;
+}
+function logPaceHint(d, unit){
+  const distV = Number(d.dist);
+  const durSec = parseDurationToSec(d.time);
+  if(!distV || !durSec) return 'Enter distance and time to see your pace per mile.';
+  const paceSecPerKm = durSec/unitToKm(distV, unit);
+  return `That's about ${paceStr(paceSecPerKm,'mi')} pace.`;
+}
+
 function modalLogRun(){
   const unit = state.setup.units;
-  const d = state.modal.data || {date:fmtDate(todayDate()), dist:'', time:'', notes:''};
+  const d = state.modal.data || (state.modal.data = {date:fmtDate(todayDate()), dist:'', time:'', notes:''});
   return modalShell('Log a run', `
     <div class="field"><label class="field-label">Date</label><input class="input" type="date" id="lr-date" value="${d.date}"></div>
+    <div id="lr-planned">${plannedWorkoutHtml(d.date)}</div>
     <div class="row">
       <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" step="0.01" min="0" id="lr-dist" value="${d.dist}" placeholder="e.g. 5.2"></div>
-      <div class="field"><label class="field-label">Time (h:mm:ss)</label><input class="input" type="text" id="lr-time" value="${d.time}" placeholder="e.g. 45:30"></div>
+      <div class="field"><label class="field-label">Time (h:mm:ss)</label><input class="input" type="text" inputmode="numeric" id="lr-time" value="${d.time}" placeholder="Just type digits, e.g. 4530"></div>
     </div>
+    <div class="hint" id="lr-pace-hint" style="margin-bottom:14px;">${logPaceHint(d, unit)}</div>
     <div class="field"><label class="field-label">Notes (optional)</label><input class="input" type="text" id="lr-notes" value="${esc(d.notes)}" placeholder="How did it feel?"></div>
     <button class="btn btn-primary btn-block" data-act="save-log" style="padding:13px;">Save run</button>
   `);
@@ -1626,16 +1666,14 @@ function onClick(e){
   }
   if(act==='generate-plan'){ submitOnboarding(); return; }
 
-  if(act==='open-log'){ state.modal={type:'log-run'}; render(); return; }
+  if(act==='open-log'){ state.modal={type:'log-run', data:{date:fmtDate(todayDate()), dist:'', time:'', notes:''}}; render(); return; }
   if(act==='save-log'){
     const unit = state.setup.units;
-    const dateV = document.getElementById('lr-date').value;
-    const distV = Number(document.getElementById('lr-dist').value);
-    const timeV = document.getElementById('lr-time').value;
-    const notesV = document.getElementById('lr-notes').value;
-    const durSec = parseDurationToSec(timeV);
-    if(!dateV || !distV || !durSec){ showToast('Enter date, distance and time'); return; }
-    const logData = {date:dateV, distanceKm:unitToKm(distV,unit), durationSec:durSec, notes:notesV, createdAt:new Date().toISOString()};
+    const d = state.modal.data;
+    const durSec = parseDurationToSec(d.time);
+    const distV = Number(d.dist);
+    if(!d.date || !distV || !durSec){ showToast('Enter date, distance and time'); return; }
+    const logData = {date:d.date, distanceKm:unitToKm(distV,unit), durationSec:durSec, notes:d.notes, createdAt:new Date().toISOString()};
     const item = Store.addLog(logData);
     state.logs = [item, ...state.logs];
     state.modal=null; showToast('Run logged'); return;
@@ -1801,6 +1839,20 @@ function onInput(e){
     const hintEl = document.getElementById('recent-pace-hint');
     if(hintEl) hintEl.textContent = recentPaceHint(state.onboardDraft);
   }
+  if(state.modal && state.modal.type==='log-run'){
+    const d = state.modal.data;
+    if(e.target.id==='lr-time'){
+      const formatted = formatDurationDigits(e.target.value);
+      e.target.value = formatted;
+      d.time = formatted;
+    }
+    if(e.target.id==='lr-dist'){ d.dist = e.target.value; }
+    if(e.target.id==='lr-notes'){ d.notes = e.target.value; }
+    if(e.target.id==='lr-time' || e.target.id==='lr-dist'){
+      const hintEl = document.getElementById('lr-pace-hint');
+      if(hintEl) hintEl.textContent = logPaceHint(d, state.setup.units);
+    }
+  }
 }
 function onChange(e){
   if(e.target.id==='in-race-date'){ state.onboardDraft.raceDate = e.target.value; }
@@ -1808,6 +1860,10 @@ function onChange(e){
   if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; }
   if(e.target.id==='in-max-long'){ state.onboardDraft.maxLongRunMi = e.target.value; }
   if(e.target.id==='in-max-weekly'){ state.onboardDraft.maxWeeklyMi = e.target.value; }
+  if(state.modal && state.modal.type==='log-run' && e.target.id==='lr-date'){
+    state.modal.data.date = e.target.value;
+    render(); return;
+  }
   if(state.modal && state.modal.type==='edit-day'){
     const draft = state.modal.draft;
     const unit = state.setup.units;
