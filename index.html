@@ -301,6 +301,17 @@ function runsPerWeekFor(currentKm){
   if(currentKm < 56) return 4;
   return 5;
 }
+// Speed day and strength days are derived from the one day the user actually picks (long
+// run), rather than asked for separately: speed day sits opposite the long run in the
+// week (circular offset of 3, giving 48+ hours' separation both directions — the real
+// coaching guideline, vs. any specific day-of-week), and strength lands on the recovery
+// day right after the long run and right after the speed day. Anyone can still move
+// things around afterward with the day-swap feature.
+function deriveScheduleFromLongDow(longDow){
+  const speedDow = (longDow+3) % 7;
+  const strengthDows = [(longDow+1)%7, (longDow+4)%7];
+  return { speedDow, strengthDows };
+}
 
 function basePredicted5kSec(setup){
   if(setup.recentDistanceKm && setup.recentTimeSec){
@@ -726,7 +737,7 @@ function defaultDraft(){
     name: state.name || '',
     raceKey:'half', raceDistanceKm:21.0975, raceDate:'', currentWeeklyMi: 20,
     units:'mi', recentDistanceKey:'5k', recentTime:'', goalTime:'',
-    longDow:0, speedDow:3, strengthDows:[1,4],
+    longDow:0,
     restDays: clamp(7 - runsPerWeekFor(unitToKm(20,'mi')), 1, 4),
     maxLongRunMi: '', maxWeeklyMi: '',
     longRunEmphasis: 'balanced', speedEmphasis: 'balanced',
@@ -751,7 +762,7 @@ function submitOnboarding(){
     recentDistanceKm: recentPreset? recentPreset.km : null,
     recentTimeSec: recentSec,
     goalTimeSec: goalSec,
-    longDow: d.longDow, speedDow: d.speedDow, strengthDows: d.strengthDows,
+    longDow: d.longDow, ...deriveScheduleFromLongDow(d.longDow),
     runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: 2,
     maxLongRunKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxLongRunMi) ? unitToKm(Number(d.maxLongRunMi), d.units) : null,
     maxWeeklyKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxWeeklyMi) ? unitToKm(Number(d.maxWeeklyMi), d.units) : null,
@@ -904,14 +915,7 @@ function renderOnboarding(){
     <div class="field">
       <label class="field-label">Long run day</label>
       <div class="dow-grid">${dowGrid('longDow', d.longDow, false)}</div>
-    </div>
-    <div class="field">
-      <label class="field-label">Speed / tempo day</label>
-      <div class="dow-grid">${dowGrid('speedDow', d.speedDow, false)}</div>
-    </div>
-    <div class="field">
-      <label class="field-label">Strength days</label>
-      <div class="dow-grid">${dowGrid('strengthDows', d.strengthDows, true)}</div>
+      <div class="hint">Speed work and strength days are placed automatically for proper recovery spacing — move any day later from the plan itself if you'd rather.</div>
     </div>
 
     <button class="btn btn-primary btn-block" style="margin:22px 0 30px; padding:14px;" data-act="generate-plan">Generate my plan</button>
@@ -1302,14 +1306,7 @@ function modalEditSetup(){
     <div class="field">
       <label class="field-label">Long run day</label>
       <div class="dow-grid">${dowGridHtml('longDow', d.longDow, false, 'es-pick-dow')}</div>
-    </div>
-    <div class="field">
-      <label class="field-label">Speed / tempo day</label>
-      <div class="dow-grid">${dowGridHtml('speedDow', d.speedDow, false, 'es-pick-dow')}</div>
-    </div>
-    <div class="field">
-      <label class="field-label">Strength days</label>
-      <div class="dow-grid">${dowGridHtml('strengthDows', d.strengthDows, true, 'es-pick-dow')}</div>
+      <div class="hint">Speed work and strength days are placed automatically for proper recovery spacing — move any day later from the plan itself if you'd rather.</div>
     </div>
 
     <button class="btn btn-primary btn-block" data-act="regenerate-plan" style="padding:13px;">Regenerate plan</button>
@@ -1460,7 +1457,7 @@ function onClick(e){
       recentDistanceKey: matchedRecent ? matchedRecent.key : '5k',
       recentTimeStr: s.recentTimeSec? secToClock(s.recentTimeSec):'',
       goalTimeStr: s.goalTimeSec? secToClock(s.goalTimeSec):'',
-      longDow:s.longDow, speedDow:s.speedDow, strengthDows:[...s.strengthDows],
+      longDow:s.longDow,
       restDays: clamp(7 - (s.runsPerWeek || runsPerWeekFor(s.currentWeeklyKm)), 1, 4),
       maxLongRunMi: s.maxLongRunKm ? round1(kmToUnit(s.maxLongRunKm,s.units)) : '',
       maxWeeklyMi: s.maxWeeklyKm ? round1(kmToUnit(s.maxWeeklyKm,s.units)) : '',
@@ -1503,7 +1500,7 @@ function onClick(e){
       recentDistanceKm: recentPreset ? recentPreset.km : null,
       recentTimeSec: parseDurationToSec(document.getElementById('es-recent-time').value) || state.setup.recentTimeSec,
       goalTimeSec: parseDurationToSec(document.getElementById('es-goal-time').value),
-      longDow:d.longDow, speedDow:d.speedDow, strengthDows:d.strengthDows,
+      longDow:d.longDow, ...deriveScheduleFromLongDow(d.longDow),
       runsPerWeek: clamp(7 - d.restDays, 3, 6),
       maxLongRunKm: (maxLongEl && maxLongEl.value) ? unitToKm(Number(maxLongEl.value), d.units) : null,
       maxWeeklyKm: (maxWeeklyEl && maxWeeklyEl.value) ? unitToKm(Number(maxWeeklyEl.value), d.units) : null,
