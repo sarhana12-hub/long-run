@@ -972,6 +972,26 @@ function renderOnboardStep1(d){
   `;
 }
 
+// Auto-inserts colons as the user types digits, so "2230" becomes "22:30" and
+// "34500" becomes "3:45:00" without anyone having to type ':' themselves.
+function formatDurationDigits(raw){
+  const digits = String(raw).replace(/\D/g,'').slice(0,6);
+  if(digits.length<=2) return digits;
+  if(digits.length<=4){
+    const mmLen = digits.length-2;
+    return digits.slice(0,mmLen)+':'+digits.slice(mmLen);
+  }
+  const hhLen = digits.length-4;
+  return digits.slice(0,hhLen)+':'+digits.slice(hhLen,hhLen+2)+':'+digits.slice(hhLen+2);
+}
+function recentPaceHint(d){
+  const preset = RACE_PRESETS.find(r=>r.key===d.recentDistanceKey);
+  const sec = parseDurationToSec(d.recentTime);
+  if(!preset || !sec) return 'Enter a finish time to see your pace per mile.';
+  const secPerKm = sec/preset.km;
+  return `That's about ${paceStr(secPerKm,'mi')} pace.`;
+}
+
 function renderOnboardStep2(d){
   const recentChips = RACE_PRESETS.slice(0,5).map(r=>`<button class="chip ${d.recentDistanceKey===r.key?'active':''}" data-act="pick-recent" data-key="${r.key}">${r.label}</button>`).join('');
   return `
@@ -984,7 +1004,8 @@ function renderOnboardStep2(d){
     <div class="field">
       <label class="field-label">Most recent race (optional, calibrates your paces)</label>
       <div class="chip-select" style="margin-bottom:10px;">${recentChips}</div>
-      <input class="input" type="text" id="in-recent-time" placeholder="Finish time, e.g. 24:30" value="${esc(d.recentTime)}">
+      <input class="input" type="text" inputmode="numeric" id="in-recent-time" placeholder="HH:MM:SS — just type digits" value="${esc(d.recentTime)}">
+      <div class="hint" id="recent-pace-hint">${recentPaceHint(d)}</div>
     </div>
     <div class="field">
       <label class="field-label">Goal time for this race (optional)</label>
@@ -1718,11 +1739,17 @@ function onInput(e){
       document.querySelectorAll('[data-act="pick-race"]').forEach(c=>c.classList.remove('active'));
     }
   }
+  if(e.target.id==='in-recent-time'){
+    const formatted = formatDurationDigits(e.target.value);
+    e.target.value = formatted;
+    state.onboardDraft.recentTime = formatted;
+    const hintEl = document.getElementById('recent-pace-hint');
+    if(hintEl) hintEl.textContent = recentPaceHint(state.onboardDraft);
+  }
 }
 function onChange(e){
   if(e.target.id==='in-race-date'){ state.onboardDraft.raceDate = e.target.value; }
   if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; }
-  if(e.target.id==='in-recent-time'){ state.onboardDraft.recentTime = e.target.value; }
   if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; }
   if(e.target.id==='in-max-long'){ state.onboardDraft.maxLongRunMi = e.target.value; }
   if(e.target.id==='in-max-weekly'){ state.onboardDraft.maxWeeklyMi = e.target.value; }
