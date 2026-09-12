@@ -296,15 +296,63 @@ function basePredicted5kSec(setup){
   const tierPace = interp([[10,7.5*60],[30,6.6*60],[50,5.9*60],[80,5.3*60]], setup.currentWeeklyKm||20);
   return tierPace*5;
 }
+const PACE_MULTIPLIERS = { easyPerKm:1.30, longPerKm:1.33, marathonPerKm:1.15, tempoPerKm:1.07, intervalPerKm:0.97 };
 function paceZonesFromPredicted5k(predicted5kSec){
   const p5kPerKm = predicted5kSec/5;
-  return {
-    easyPerKm: p5kPerKm*1.30,
-    longPerKm: p5kPerKm*1.33,
-    marathonPerKm: p5kPerKm*1.15,
-    tempoPerKm: p5kPerKm*1.07,
-    intervalPerKm: p5kPerKm*0.97,
-  };
+  const zones = {};
+  for(const key in PACE_MULTIPLIERS) zones[key] = p5kPerKm*PACE_MULTIPLIERS[key];
+  return zones;
+}
+
+/* Recalibration: blend the deterministic fitness projection with real performance
+   from recently logged tempo/interval/over-under runs (the only workout types with
+   a controlled, comparable target pace — easy/long/hills/fartlek are intentionally
+   loose or terrain-dependent and aren't a clean fitness signal). Only ever adjusts
+   the current week onward; past weeks keep the paces that were actually prescribed. */
+const RECALIBRATION_TYPES = ['tempo','intervals','overunder'];
+function findPlanDay(plan, date){
+  for(const week of plan.weeks){
+    const day = week.days.find(d=>d.date===date);
+    if(day) return day;
+  }
+  return null;
+}
+function computeRecalibration(plan, logs){
+  const matches = [];
+  for(const log of logs){
+    const day = findPlanDay(plan, log.date);
+    if(day && RECALIBRATION_TYPES.includes(day.type) && day.paceKey && PACE_MULTIPLIERS[day.paceKey] && log.distanceKm>0){
+      const actualPaceSecPerKm = log.durationSec/log.distanceKm;
+      const impliedPredicted5k = (actualPaceSecPerKm/PACE_MULTIPLIERS[day.paceKey])*5;
+      matches.push({date:log.date, impliedPredicted5k});
+    }
+  }
+  if(!matches.length) return null;
+  matches.sort((a,b)=> a.date<b.date?1:-1);
+  const recent = matches.slice(0,3);
+  const perfImplied5k = recent.reduce((s,m)=>s+m.impliedPredicted5k,0)/recent.length;
+  const weight = recent.length===1?0.25:recent.length===2?0.35:0.45;
+  return {perfImplied5k, weight, count:recent.length};
+}
+function getWeekPaces(plan, week, logs){
+  if(plan.startPredicted5kSec==null){
+    return week.paces || plan.paces; // plans saved before recalibration existed
+  }
+  const frac = week.weekIndex>=plan.buildWeeksCount ? 1 : clamp(week.weekIndex/plan.rampWeeks, 0, 1);
+  const baseline5k = plan.startPredicted5kSec + (plan.endPredicted5kSec-plan.startPredicted5kSec)*frac;
+  const weekStartDate = parseDate(week.weekStart);
+  const isPastWeek = addDays(weekStartDate,6) < todayDate();
+
+  let effective5k = baseline5k;
+  let effectiveEnd5k = plan.endPredicted5kSec;
+  const recal = isPastWeek ? null : computeRecalibration(plan, logs);
+  if(recal){
+    effective5k = baseline5k*(1-recal.weight) + recal.perfImplied5k*recal.weight;
+    effectiveEnd5k = plan.endPredicted5kSec*(1-recal.weight) + recal.perfImplied5k*recal.weight;
+  }
+  const zones = paceZonesFromPredicted5k(effective5k);
+  zones.racePerKm = plan.goalRacePerKm!=null ? plan.goalRacePerKm : riegel(effectiveEnd5k,5,plan.raceDistanceKm)/plan.raceDistanceKm;
+  return zones;
 }
 
 /* Workout description is split from pace: descBase/paceKey are stored on the day,
@@ -490,7 +538,12 @@ function generatePlan(setup){
     weeks.push({weekIndex:w, phase, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), paces:weekPaces, days});
   }
 
-  return {generatedAt:new Date().toISOString(), raceDate:setup.raceDate, raceDistanceKm:raceKm, totalWeeks, paces:weeks[0].paces, weeks};
+  return {
+    generatedAt:new Date().toISOString(), raceDate:setup.raceDate, raceDistanceKm:raceKm, totalWeeks,
+    startPredicted5kSec:startPredicted5k, endPredicted5kSec:endPredicted5k, buildWeeksCount, rampWeeks,
+    goalRacePerKm: (setup.goalTimeSec && raceKm) ? setup.goalTimeSec/raceKm : null,
+    paces:weeks[0].paces, weeks,
+  };
 }
 
 /* ============================= storage layer (local only) ============================= */
@@ -776,7 +829,7 @@ function phaseLabel(phase){ return {base:'Base', build:'Build', peak:'Peak', tap
 function renderPlanTab(week, plan){
   const unit = state.setup.units;
   const fmt = state.paceFormat;
-  const weekPaces = week.paces || plan.paces;
+  const weekPaces = getWeekPaces(plan, week, state.logs);
   const raceDate = parseDate(plan.raceDate);
   const weekStartDate = parseDate(week.weekStart);
   const daysToRaceForWeek = daysBetween(weekStartDate, raceDate);
@@ -902,7 +955,8 @@ function weekActualKm(week){
 function renderSettingsTab(){
   const s = state.setup, unit = s.units, fmt = state.paceFormat;
   const currentWeek = state.plan.weeks[state.currentWeekIndex];
-  const cw = currentWeek.paces || state.plan.paces;
+  const cw = getWeekPaces(state.plan, currentWeek, state.logs);
+  const recal = computeRecalibration(state.plan, state.logs);
   const speedUnitLabel = unit==='mi' ? 'mph' : 'km/h';
   return `
   <div class="container" style="padding-top:14px;">
@@ -924,7 +978,7 @@ function renderSettingsTab(){
       <div class="settings-row"><div><div class="lbl">${raceLabel(s)}</div><div class="sub">${niceDateFull(parseDate(s.raceDate))}</div></div></div>
       <div class="settings-row"><div><div class="lbl">Weekly mileage used to build plan</div><div class="sub">${fmtDist(s.currentWeeklyKm,unit,1)}/week</div></div></div>
       <div class="settings-row"><div><div class="lbl">This week's paces</div><div class="sub">Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)} · Goal race pace ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}</div></div></div>
-      <div class="hint" style="padding:0 0 12px;">Training paces gradually get faster as your plan builds toward peak fitness, then hold steady through the taper.</div>
+      <div class="hint" style="padding:0 0 12px;">Training paces gradually get faster as your plan builds toward peak fitness, then hold steady through the taper.${recal ? ` Right now they're also adjusted based on your last ${recal.count} logged tempo/interval/over-under run${recal.count===1?'':'s'}.` : ''}</div>
     </div>
 
     <div class="section-title">Plan controls</div>
@@ -985,7 +1039,7 @@ function modalEditDay(){
   return modalShell(`Edit ${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}`, `
     <div class="field"><label class="field-label">Workout type</label><select class="input" id="ed-type">${typeOpts}</select></div>
     <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" step="0.1" min="0" id="ed-km" value="${round1(kmToUnit(day.km,unit))}"></div>
-    <div class="field"><label class="field-label">Notes</label><textarea class="input" id="ed-notes" rows="3">${esc(dayDisplayText(day, week.paces, unit, state.paceFormat))}</textarea></div>
+    <div class="field"><label class="field-label">Notes</label><textarea class="input" id="ed-notes" rows="3">${esc(dayDisplayText(day, getWeekPaces(state.plan, week, state.logs), unit, state.paceFormat))}</textarea></div>
     <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
       <label class="field-label" style="margin:0;">Add strength session</label>
       <input type="checkbox" id="ed-strength" ${day.strength?'checked':''} style="width:20px; height:20px;">
@@ -1242,7 +1296,7 @@ function onChange(e){
     const kmVal = unitToKm(Number(document.getElementById('ed-km').value)||0, unit);
     const strengthVal = document.getElementById('ed-strength').checked;
     const meta = buildWorkoutMeta({type:e.target.value, km:kmVal, strength:strengthVal}, state.plan.raceDistanceKm);
-    document.getElementById('ed-notes').value = renderWorkoutText(meta, week.paces, unit, state.paceFormat);
+    document.getElementById('ed-notes').value = renderWorkoutText(meta, getWeekPaces(state.plan, week, state.logs), unit, state.paceFormat);
   }
 }
 
