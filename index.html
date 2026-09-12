@@ -551,13 +551,17 @@ function generatePlan(setup){
   const buildWeeksCount = Math.max(0, totalWeeks - taperWeeks);
 
   const buildVols = [];
+  const cutbackFlags = [];
   let vol = currentKm;
   for(let i=0;i<buildWeeksCount;i++){
-    if(i>0){
-      const isCutback = (i % 4 === 3);
-      vol = isCutback ? Math.max(currentKm, buildVols[i-1]*0.8) : Math.min(buildVols[i-1]*1.10, peakWeeklyKm);
+    const isCutback = i>0 && (i % 4 === 3);
+    if(isCutback){
+      vol = Math.max(currentKm, buildVols[i-1]*0.8);
+    } else if(i>0){
+      vol = Math.min(buildVols[i-1]*1.10, peakWeeklyKm);
     }
     buildVols.push(round1(vol));
+    cutbackFlags.push(isCutback);
   }
   const taperCurves = {1:[0.55], 2:[0.7,0.45], 3:[0.75,0.6,0.4]};
   const taperCurve = taperCurves[taperWeeks] || taperCurves[3].slice(-taperWeeks);
@@ -683,7 +687,7 @@ function generatePlan(setup){
 
     days.forEach(day=>{ Object.assign(day, buildWorkoutMeta(day, raceKm)); });
 
-    weeks.push({weekIndex:w, phase, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), paces:weekPaces, days});
+    weeks.push({weekIndex:w, phase, isCutback: w<buildWeeksCount && !!cutbackFlags[w], weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), paces:weekPaces, days});
   }
 
   return {
@@ -1012,6 +1016,10 @@ function phaseColorVar(phase){
   return phase==='taper' ? 'var(--z-race)' : phase==='peak' ? 'var(--z-intervals)' : phase==='build' ? 'var(--z-tempo)' : 'var(--z-easy)';
 }
 function phaseLabel(phase){ return {base:'Base', build:'Build', peak:'Peak', taper:'Taper'}[phase]||phase; }
+// Cutback weeks display as their own label/color rather than whatever phase they fall
+// in — the underlying phase still drives workout selection, this is display-only.
+function weekDisplayLabel(week){ return week.isCutback ? 'Cutback' : phaseLabel(week.phase); }
+function weekColorVar(week){ return week.isCutback ? 'var(--z-rest)' : phaseColorVar(week.phase); }
 
 function renderPlanTab(week, plan){
   const unit = state.setup.units;
@@ -1022,8 +1030,8 @@ function renderPlanTab(week, plan){
   const weekStartDate = parseDate(week.weekStart);
   const daysToRaceForWeek = daysBetween(weekStartDate, raceDate);
   const strip = plan.weeks.map((w,i)=>`
-    <button class="week-tab ${i===state.currentWeekIndex?'active':''}" style="--phase-color:${phaseColorVar(w.phase)}" data-act="goto-week" data-i="${i}">
-      <div class="wk">${phaseLabel(w.phase)}</div>
+    <button class="week-tab ${i===state.currentWeekIndex?'active':''}" style="--phase-color:${weekColorVar(w)}" data-act="goto-week" data-i="${i}">
+      <div class="wk">${weekDisplayLabel(w)}</div>
       <div class="wn">${i+1}</div>
     </button>`).join('');
 
@@ -1060,7 +1068,7 @@ function renderPlanTab(week, plan){
   <div class="week-strip">${strip}</div>
   <div class="week-header">
     <div>
-      <h2>${phaseLabel(week.phase)} · Week ${week.weekIndex+1}</h2>
+      <h2>${weekDisplayLabel(week)} · Week ${week.weekIndex+1}</h2>
       <div class="week-meta">${niceDate(weekStartDate)} – ${niceDate(addDays(weekStartDate,6))} · ${daysToRaceForWeek>0?daysToRaceForWeek+' days to race':(week.weekIndex===plan.totalWeeks-1?'Race week':'Race day has passed')}</div>
     </div>
     <div class="week-stat">
