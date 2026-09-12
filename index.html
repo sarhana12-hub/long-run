@@ -965,6 +965,7 @@ function submitOnboarding(){
   state.currentWeekIndex = idx===-1?0:idx;
   state.view='app'; state.tab='plan';
   render();
+  window.scrollTo(0,0);
 }
 
 /* ============================= render: root ============================= */
@@ -979,6 +980,23 @@ function render(){
   }
   app.innerHTML = html;
   bindGlobal();
+  if(state.view==='app' && state.tab==='plan') keepActiveWeekTabVisible();
+}
+// The week strip is its own horizontal scroller, freshly re-rendered (and reset to
+// scrollLeft 0) on every render — so without this, jumping to a week beyond what fits on
+// screen (goto-week, reopening the app mid-plan, switching tabs and back) leaves the
+// active week's tab scrolled off to the right with no indication anything is selected.
+// Only nudges the scroll when the active tab genuinely isn't visible, and only ever
+// touches the strip's own horizontal scroll — never the page's vertical position.
+function keepActiveWeekTabVisible(){
+  const strip = document.querySelector('.week-strip');
+  const activeBtn = strip && strip.querySelector('.week-tab.active');
+  if(!strip || !activeBtn) return;
+  const stripRect = strip.getBoundingClientRect();
+  const activeRect = activeBtn.getBoundingClientRect();
+  if(activeRect.left>=stripRect.left && activeRect.right<=stripRect.right) return;
+  const targetScrollLeft = strip.scrollLeft + (activeRect.left-stripRect.left) - (stripRect.width-activeRect.width)/2;
+  strip.scrollLeft = Math.max(0, targetScrollLeft);
 }
 
 function renderLoading(){
@@ -1729,12 +1747,12 @@ function onClick(e){
     }
     render(); return;
   }
-  if(act==='onboard-back'){ state.onboardStep = Math.max(1, state.onboardStep-1); render(); return; }
+  if(act==='onboard-back'){ state.onboardStep = Math.max(1, state.onboardStep-1); render(); window.scrollTo(0,0); return; }
   if(act==='onboard-next'){
     const err = onboardStepError(state.onboardStep);
     if(err){ showToast(err); return; }
     state.onboardStep = Math.min(3, state.onboardStep+1);
-    render(); return;
+    render(); window.scrollTo(0,0); return;
   }
   if(act==='generate-plan'){ submitOnboarding(); return; }
 
@@ -1883,14 +1901,14 @@ function onClick(e){
     const today = todayDate();
     let idx = plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
     state.currentWeekIndex = idx===-1?0:idx;
-    state.modal=null; showToast('Plan regenerated'); return;
+    state.modal=null; showToast('Plan regenerated'); window.scrollTo(0,0); return;
   }
   if(act==='confirm-reset'){ state.modal={type:'confirm-reset'}; render(); return; }
   if(act==='do-reset'){
     Store.resetAll();
     state.name=''; state.setup=null; state.plan=null; state.logs=[]; state.modal=null;
     state.view='onboarding'; state.onboardDraft = defaultDraft(); state.onboardStep = 1;
-    render(); return;
+    render(); window.scrollTo(0,0); return;
   }
   if(act==='close-modal'){ state.modal=null; state.moveFrom=null; render(); return; }
 }
