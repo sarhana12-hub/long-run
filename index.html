@@ -299,10 +299,19 @@ function basePredicted5kSec(setup){
   const tierPace = interp([[10,7.5*60],[30,6.6*60],[50,5.9*60],[80,5.3*60]], setup.currentWeeklyKm||20);
   return tierPace*5;
 }
-const PACE_MULTIPLIERS = { easyPerKm:1.30, longPerKm:1.33, marathonPerKm:1.15, tempoPerKm:1.07, intervalPerKm:0.97 };
+// Easy/tempo/interval are flat multiples of 5K-equivalent pace, cross-checked against
+// Jack Daniels' VDOT tables (e.g. VDOT 43: easy ~9:15-9:50/mi, tempo ~7:38-7:43/mi,
+// interval ~7:00-7:05/mi — this table reproduces all three within a few sec/mi).
+// Long run pace is NOT a flat multiple of 5K pace: it's anchored to the Riegel-predicted
+// marathon-equivalent pace plus a small cushion, matching how modern coached plans
+// (Runna-style) treat the long run as aerobically purposeful rather than just "easy effort" —
+// a flat 33%-off-5K-pace long run runs meaningfully slower than that convention.
+const PACE_MULTIPLIERS = { easyPerKm:1.30, tempoPerKm:1.07, intervalPerKm:0.97 };
+const LONG_VS_MARATHON = 1.03;
 function paceZonesFromPredicted5k(predicted5kSec){
   const p5kPerKm = predicted5kSec/5;
-  const zones = {};
+  const marathonPerKm = riegel(predicted5kSec, 5, 42.195)/42.195;
+  const zones = { marathonPerKm, longPerKm: marathonPerKm*LONG_VS_MARATHON };
   for(const key in PACE_MULTIPLIERS) zones[key] = p5kPerKm*PACE_MULTIPLIERS[key];
   return zones;
 }
@@ -434,9 +443,19 @@ function generatePlan(setup){
   const raceKm = setup.raceDistanceKm;
 
   const peakLongKm = interp([[5,9],[10,13],[15,14.5],[21.0975,18],[32.19,26],[42.195,32]], raceKm);
-  const longFraction = interp([[5,0.35],[10,0.30],[15,0.28],[21.0975,0.25],[32.19,0.22],[42.195,0.20]], raceKm);
-  let peakWeeklyKm = peakLongKm/longFraction;
-  peakWeeklyKm = Math.max(peakWeeklyKm, currentKm*1.08);
+  // Long run as a fraction of that week's total volume. Kept roughly flat (not
+  // dropping steeply with race distance) since an already-well-built-up runner
+  // shouldn't be forced into a token long run just because the fraction table says so —
+  // that was capping long runs well short of common real-world guidance for half marathons.
+  const longFraction = interp([[5,0.35],[10,0.32],[15,0.30],[21.0975,0.30],[32.19,0.24],[42.195,0.20]], raceKm);
+  // Ideal peak week implied by wanting the long run at exactly `longFraction` of it —
+  // but never demand more than a safe 35% growth over current mileage just to hit that
+  // ratio (a 25mi/week runner doesn't need a 45mi/week peak for a half marathon).
+  const idealPeakWeeklyKm = peakLongKm/longFraction;
+  const peakWeeklyKm = clamp(idealPeakWeeklyKm, currentKm*1.10, currentKm*1.35);
+  // With peak week capped, let the long run be a larger share of it (up to 34%) rather
+  // than silently shrinking the peak long run itself below the race-distance target.
+  const achievablePeakLongKm = Math.min(peakLongKm, peakWeeklyKm*0.34);
 
   let taperWeeks = Math.round(interp([[5,1],[10,1],[15,1],[21.0975,2],[32.19,2],[42.195,3]], raceKm));
   taperWeeks = clamp(taperWeeks, 1, Math.max(1,totalWeeks-1));
@@ -495,7 +514,7 @@ function generatePlan(setup){
     const phase = phaseFor(w);
     const weeklyKm = weeklyVols[w];
     const isRaceWeek = (w===totalWeeks-1);
-    const longKm = isRaceWeek ? Math.min(peakLongKm*0.3, weeklyKm*0.3) : Math.min(weeklyKm*longFraction, peakLongKm);
+    const longKm = isRaceWeek ? Math.min(achievablePeakLongKm*0.3, weeklyKm*0.3) : Math.min(weeklyKm*longFraction, achievablePeakLongKm);
 
     const frac = w>=buildWeeksCount ? 1 : clamp(w/rampWeeks, 0, 1);
     const weekPredicted5k = startPredicted5k + (endPredicted5k-startPredicted5k)*frac;
@@ -550,7 +569,7 @@ function generatePlan(setup){
       for(let i=0;i<7;i++){
         const diff = daysBetween(parseDate(days[i].date), raceDate);
         if(i===targetIdx){ days[i] = {...days[i], type:'race', km:raceKm, label:'Race Day', strength:false}; }
-        else if(diff>0 && diff<=2){ days[i] = {...days[i], type:diff===1?'rest':'easy', km:diff===1?0:round1(Math.min(3,peakLongKm*0.15)), strength:false, label:diff===1?'Rest':'Shakeout Jog'}; }
+        else if(diff>0 && diff<=2){ days[i] = {...days[i], type:diff===1?'rest':'easy', km:diff===1?0:round1(Math.min(3,achievablePeakLongKm*0.15)), strength:false, label:diff===1?'Rest':'Shakeout Jog'}; }
         else if(diff<0){ days[i] = {...days[i], type:'rest', km:0, strength:false, label:'Rest'}; }
       }
     }
