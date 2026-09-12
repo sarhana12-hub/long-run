@@ -230,6 +230,16 @@ const QUALITY_TYPES = ['long','tempo','intervals','hills','fartlek','overunder']
 const BUILD_ROTATION = ['tempo','hills','fartlek'];
 const PEAK_ROTATION_SHORT = ['intervals','hills','fartlek','tempo'];
 const PEAK_ROTATION_LONG = ['tempo','overunder','intervals'];
+const LONG_EMPHASIS_PARAMS = {
+  low:      { peakScale:0.85, fractionScale:0.80 },
+  balanced: { peakScale:1.00, fractionScale:1.00 },
+  high:     { peakScale:1.30, fractionScale:1.25 },
+};
+const SPEED_EMPHASIS_PARAMS = {
+  low:      { sessionScale:0.70, secondSession:false, introducePhase:'peak' },
+  balanced: { sessionScale:1.00, secondSession:false, introducePhase:'build' },
+  high:     { sessionScale:1.30, secondSession:true,  introducePhase:'build' },
+};
 
 /* ============================= tiny utils ============================= */
 function pad2(n){ return String(n).padStart(2,'0'); }
@@ -442,12 +452,19 @@ function generatePlan(setup){
   const currentKm = setup.currentWeeklyKm;
   const raceKm = setup.raceDistanceKm;
 
-  const peakLongKm = interp([[5,9],[10,13],[15,14.5],[21.0975,18],[32.19,26],[42.195,32]], raceKm);
+  // Long run and speed-work emphasis: different, equally legitimate schools of thought
+  // (Daniels-style capped long runs vs. Lydiard-style high-mileage long runs; race-specific
+  // speed work vs. minimal speed work) scale the same underlying knobs rather than
+  // branching into separate plan-generation logic.
+  const longEmphasis = LONG_EMPHASIS_PARAMS[setup.longRunEmphasis] || LONG_EMPHASIS_PARAMS.balanced;
+  const speedEmphasis = SPEED_EMPHASIS_PARAMS[setup.speedEmphasis] || SPEED_EMPHASIS_PARAMS.balanced;
+
+  const peakLongKm = interp([[5,9],[10,13],[15,14.5],[21.0975,18],[32.19,26],[42.195,32]], raceKm) * longEmphasis.peakScale;
   // Long run as a fraction of that week's total volume. Kept roughly flat (not
   // dropping steeply with race distance) since an already-well-built-up runner
   // shouldn't be forced into a token long run just because the fraction table says so —
   // that was capping long runs well short of common real-world guidance for half marathons.
-  const longFraction = interp([[5,0.35],[10,0.32],[15,0.30],[21.0975,0.30],[32.19,0.24],[42.195,0.20]], raceKm);
+  const longFraction = interp([[5,0.35],[10,0.32],[15,0.30],[21.0975,0.30],[32.19,0.24],[42.195,0.20]], raceKm) * longEmphasis.fractionScale;
   // Ideal peak week implied by wanting the long run at exactly `longFraction` of it —
   // but never demand more than a safe 35% growth over current mileage just to hit that
   // ratio (a 25mi/week runner doesn't need a 45mi/week peak for a half marathon).
@@ -455,7 +472,7 @@ function generatePlan(setup){
   let peakWeeklyKm = clamp(idealPeakWeeklyKm, currentKm*1.10, currentKm*1.35);
   // With peak week capped, let the long run be a larger share of it (up to 34%) rather
   // than silently shrinking the peak long run itself below the race-distance target.
-  let achievablePeakLongKm = Math.min(peakLongKm, peakWeeklyKm*0.34);
+  let achievablePeakLongKm = Math.min(peakLongKm, peakWeeklyKm*0.34*longEmphasis.fractionScale);
   // User-supplied caps (half marathon+ only) scale the whole plan down to fit — applied
   // as a ceiling on the peak targets, so the existing week-by-week ramp (which already
   // never exceeds these) respects them automatically without a separate pass.
@@ -543,10 +560,11 @@ function generatePlan(setup){
     if(speedIdx===longIdx) speedIdx = -1;
 
     let remaining = Math.max(0, weeklyKm-longKm);
-    const wantsSpeed = phase!=='base' && speedIdx!==-1;
+    const speedAllowedPhases = speedEmphasis.introducePhase==='peak' ? ['peak','taper'] : ['build','peak','taper'];
+    const wantsSpeed = speedAllowedPhases.includes(phase) && speedIdx!==-1;
     let speedKm = 0, speedType = 'tempo';
+    const weekWithinPhase = phase==='build' ? (w-baseCount) : phase==='peak' ? (w-baseCount-buildCount) : 0;
     if(wantsSpeed){
-      const weekWithinPhase = phase==='build' ? (w-baseCount) : phase==='peak' ? (w-baseCount-buildCount) : 0;
       if(phase==='build'){
         speedType = BUILD_ROTATION[weekWithinPhase % BUILD_ROTATION.length];
       } else if(phase==='peak'){
@@ -555,17 +573,34 @@ function generatePlan(setup){
       } else {
         speedType = 'tempo';
       }
-      speedKm = round1(Math.min(remaining*0.4, raceKm<=10?8:9));
+      speedKm = round1(Math.min(remaining*0.4, raceKm<=10?8:9) * speedEmphasis.sessionScale);
       remaining = Math.max(0, remaining-speedKm);
     }
-    const usedRunDays = 1+(wantsSpeed?1:0);
+    // "High" speed emphasis adds a second, lighter quality session in build/peak weeks
+    // (never taper — tapering stays light regardless of philosophy), placed on whichever
+    // remaining day sits furthest from the primary speed day.
+    let secondSpeedIdx = -1, secondSpeedKm = 0, secondSpeedType = null;
+    if(wantsSpeed && speedEmphasis.secondSession && (phase==='build' || phase==='peak')){
+      const dayDist = (a,b)=>{ const diff=Math.abs(a-b); return Math.min(diff,7-diff); };
+      const candidates = days.map((x,i)=>i).filter(i=>i!==longIdx && i!==speedIdx);
+      candidates.sort((a,b)=> dayDist(days[b].dow,speedDow)-dayDist(days[a].dow,speedDow));
+      if(candidates.length){
+        secondSpeedIdx = candidates[0];
+        const rotation2 = phase==='build' ? BUILD_ROTATION : (raceKm<=10 ? PEAK_ROTATION_SHORT : PEAK_ROTATION_LONG);
+        secondSpeedType = rotation2[(weekWithinPhase+1) % rotation2.length];
+        secondSpeedKm = round1(speedKm*0.6);
+        remaining = Math.max(0, remaining-secondSpeedKm);
+      }
+    }
+    const usedRunDays = 1 + (wantsSpeed?1:0) + (secondSpeedIdx!==-1?1:0);
     const easyDaysNeeded = Math.max(0, runsPerWeek-usedRunDays);
-    const candidateIdxs = days.map((x,i)=>i).filter(i=>i!==longIdx && i!==speedIdx);
+    const candidateIdxs = days.map((x,i)=>i).filter(i=>i!==longIdx && i!==speedIdx && i!==secondSpeedIdx);
     const easyIdxs = candidateIdxs.slice(0, easyDaysNeeded);
     const perEasyKm = easyIdxs.length ? remaining/easyIdxs.length : 0;
 
     days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run'};
     if(wantsSpeed){ days[speedIdx] = {...days[speedIdx], type:speedType, km:speedKm, label:TYPE_META[speedType].label}; }
+    if(secondSpeedIdx!==-1){ days[secondSpeedIdx] = {...days[secondSpeedIdx], type:secondSpeedType, km:secondSpeedKm, label:TYPE_META[secondSpeedType].label}; }
     easyIdxs.forEach(i=>{ days[i] = {...days[i], type:'easy', km:round1(perEasyKm), label:'Easy Run'}; });
 
     let strengthLeft = setup.strengthPerWeek==null?2:setup.strengthPerWeek;
@@ -694,6 +729,7 @@ function defaultDraft(){
     longDow:0, speedDow:3, strengthDows:[1,4],
     restDays: clamp(7 - runsPerWeekFor(unitToKm(20,'mi')), 1, 4),
     maxLongRunMi: '', maxWeeklyMi: '',
+    longRunEmphasis: 'balanced', speedEmphasis: 'balanced',
   };
 }
 const LONG_DISTANCE_CAP_THRESHOLD_KM = 21.0975; // half marathon and up get optional long-run/volume caps
@@ -719,6 +755,7 @@ function submitOnboarding(){
     runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: 2,
     maxLongRunKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxLongRunMi) ? unitToKm(Number(d.maxLongRunMi), d.units) : null,
     maxWeeklyKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxWeeklyMi) ? unitToKm(Number(d.maxWeeklyMi), d.units) : null,
+    longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis,
   };
   const plan = generatePlan(setup);
   state.name = d.name.trim();
@@ -765,6 +802,10 @@ function dowGridHtml(name, selected, multi, act){
 }
 function restDaysChipsHtml(restDays, act){
   return [1,2,3,4].map(n=>`<button class="chip ${restDays===n?'active':''}" data-act="${act}" data-n="${n}">${n}</button>`).join('');
+}
+const EMPHASIS_LEVELS = [{key:'low', label:'Less'}, {key:'balanced', label:'Balanced'}, {key:'high', label:'More'}];
+function emphasisChipsHtml(value, act){
+  return EMPHASIS_LEVELS.map(l=>`<button class="chip ${value===l.key?'active':''}" data-act="${act}" data-key="${l.key}">${l.label}</button>`).join('');
 }
 
 /* ============================= render: onboarding ============================= */
@@ -841,6 +882,18 @@ function renderOnboarding(){
     </div>
     <div class="hint" style="margin-top:-8px; margin-bottom:16px;">If the plan would otherwise go higher, it scales back down to stay under whichever caps you set here.</div>
     ` : ''}
+
+    <div class="section-title">Training style</div>
+    <div class="field">
+      <label class="field-label">Long run emphasis</label>
+      <div class="chip-select">${emphasisChipsHtml(d.longRunEmphasis, 'pick-long-emphasis')}</div>
+      <div class="hint">Longer favors big aerobic long runs (Lydiard-style); shorter keeps them closer to a capped, easy-effort length (Daniels-style).</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Speed work emphasis</label>
+      <div class="chip-select">${emphasisChipsHtml(d.speedEmphasis, 'pick-speed-emphasis')}</div>
+      <div class="hint">More adds a second quality session most weeks; less saves speed work for closer to race day.</div>
+    </div>
 
     <div class="section-title">Weekly rhythm</div>
     <div class="field">
@@ -1230,6 +1283,16 @@ function modalEditSetup(){
     <div class="hint" style="margin-top:-8px; margin-bottom:16px;">If the plan would otherwise go higher, it scales back down to stay under whichever caps you set here.</div>
     ` : ''}
 
+    <div class="section-title">Training style</div>
+    <div class="field">
+      <label class="field-label">Long run emphasis</label>
+      <div class="chip-select">${emphasisChipsHtml(d.longRunEmphasis, 'es-pick-long-emphasis')}</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Speed work emphasis</label>
+      <div class="chip-select">${emphasisChipsHtml(d.speedEmphasis, 'es-pick-speed-emphasis')}</div>
+    </div>
+
     <div class="section-title" style="margin-top:16px;">Weekly rhythm</div>
     <div class="field">
       <label class="field-label">Rest days per week</label>
@@ -1292,6 +1355,8 @@ function onClick(e){
   if(act==='pick-unit'){ state.onboardDraft.units = el.dataset.u; render(); return; }
   if(act==='pick-recent'){ state.onboardDraft.recentDistanceKey = el.dataset.key; render(); return; }
   if(act==='pick-restdays'){ state.onboardDraft.restDays = Number(el.dataset.n); render(); return; }
+  if(act==='pick-long-emphasis'){ state.onboardDraft.longRunEmphasis = el.dataset.key; render(); return; }
+  if(act==='pick-speed-emphasis'){ state.onboardDraft.speedEmphasis = el.dataset.key; render(); return; }
   if(act==='pick-dow'){
     const name = el.dataset.name, i = Number(el.dataset.i), multi = el.dataset.multi==='1';
     if(multi){
@@ -1399,6 +1464,7 @@ function onClick(e){
       restDays: clamp(7 - (s.runsPerWeek || runsPerWeekFor(s.currentWeeklyKm)), 1, 4),
       maxLongRunMi: s.maxLongRunKm ? round1(kmToUnit(s.maxLongRunKm,s.units)) : '',
       maxWeeklyMi: s.maxWeeklyKm ? round1(kmToUnit(s.maxWeeklyKm,s.units)) : '',
+      longRunEmphasis: s.longRunEmphasis || 'balanced', speedEmphasis: s.speedEmphasis || 'balanced',
     }};
     render(); return;
   }
@@ -1409,6 +1475,8 @@ function onClick(e){
   }
   if(act==='es-pick-recent'){ state.modal.draft.recentDistanceKey = el.dataset.key; render(); return; }
   if(act==='es-pick-restdays'){ state.modal.draft.restDays = Number(el.dataset.n); render(); return; }
+  if(act==='es-pick-long-emphasis'){ state.modal.draft.longRunEmphasis = el.dataset.key; render(); return; }
+  if(act==='es-pick-speed-emphasis'){ state.modal.draft.speedEmphasis = el.dataset.key; render(); return; }
   if(act==='es-pick-dow'){
     const name = el.dataset.name, i = Number(el.dataset.i), multi = el.dataset.multi==='1';
     const draft = state.modal.draft;
@@ -1438,7 +1506,8 @@ function onClick(e){
       longDow:d.longDow, speedDow:d.speedDow, strengthDows:d.strengthDows,
       runsPerWeek: clamp(7 - d.restDays, 3, 6),
       maxLongRunKm: (maxLongEl && maxLongEl.value) ? unitToKm(Number(maxLongEl.value), d.units) : null,
-      maxWeeklyKm: (maxWeeklyEl && maxWeeklyEl.value) ? unitToKm(Number(maxWeeklyEl.value), d.units) : null};
+      maxWeeklyKm: (maxWeeklyEl && maxWeeklyEl.value) ? unitToKm(Number(maxWeeklyEl.value), d.units) : null,
+      longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis};
     const plan = generatePlan(setup);
     Store.setSetup(setup); Store.setPlan(plan);
     state.setup = setup; state.plan = plan;
