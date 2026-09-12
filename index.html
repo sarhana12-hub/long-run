@@ -1150,6 +1150,7 @@ function modalEditDay(){
 function modalEditSetup(){
   const d = state.modal.draft;
   const presetChips = RACE_PRESETS.map(r=>`<button class="chip ${d.raceKey===r.key?'active':''}" data-act="es-pick-race" data-key="${r.key}">${r.label}</button>`).join('');
+  const recentChips = RACE_PRESETS.slice(0,5).map(r=>`<button class="chip ${d.recentDistanceKey===r.key?'active':''}" data-act="es-pick-recent" data-key="${r.key}">${r.label}</button>`).join('');
   const runDaysPerWeek = clamp(7 - d.restDays, 3, 6);
   return modalShell('Edit inputs & regenerate', `
     <div class="field"><label class="field-label">Race distance</label><div class="chip-select" style="margin-bottom:8px;">${presetChips}</div>
@@ -1157,7 +1158,11 @@ function modalEditSetup(){
     </div>
     <div class="field"><label class="field-label">Race date</label><input class="input" type="date" id="es-date" value="${d.raceDate}"></div>
     <div class="field"><label class="field-label">Current weekly mileage (${d.units})</label><input class="input" type="number" min="0" id="es-weekly" value="${round1(kmToUnit(d.currentWeeklyKm,d.units))}"></div>
-    <div class="field"><label class="field-label">Recent race time (h:mm:ss)</label><input class="input" type="text" id="es-recent-time" value="${d.recentTimeStr||''}" placeholder="e.g. 24:30"></div>
+    <div class="field">
+      <label class="field-label">Most recent race (calibrates your paces)</label>
+      <div class="chip-select" style="margin-bottom:10px;">${recentChips}</div>
+      <input class="input" type="text" id="es-recent-time" value="${d.recentTimeStr||''}" placeholder="Finish time, e.g. 24:30">
+    </div>
     <div class="field"><label class="field-label">Goal time (optional)</label><input class="input" type="text" id="es-goal-time" value="${d.goalTimeStr||''}"></div>
 
     <div class="section-title" style="margin-top:16px;">Weekly rhythm</div>
@@ -1318,9 +1323,11 @@ function onClick(e){
   }
   if(act==='open-edit-setup'){
     const s = state.setup;
+    const matchedRecent = RACE_PRESETS.slice(0,5).find(r=>s.recentDistanceKm && Math.abs(r.km-s.recentDistanceKm)<0.05);
     state.modal = {type:'edit-setup', draft:{
       raceKey:s.raceKey, raceDistanceKm:s.raceDistanceKm, raceDate:s.raceDate, units:s.units,
       currentWeeklyKm:s.currentWeeklyKm,
+      recentDistanceKey: matchedRecent ? matchedRecent.key : '5k',
       recentTimeStr: s.recentTimeSec? secToClock(s.recentTimeSec):'',
       goalTimeStr: s.goalTimeSec? secToClock(s.goalTimeSec):'',
       longDow:s.longDow, speedDow:s.speedDow, strengthDows:[...s.strengthDows],
@@ -1333,6 +1340,7 @@ function onClick(e){
     state.modal.draft.raceKey = preset.key; state.modal.draft.raceDistanceKm = preset.km;
     render(); return;
   }
+  if(act==='es-pick-recent'){ state.modal.draft.recentDistanceKey = el.dataset.key; render(); return; }
   if(act==='es-pick-restdays'){ state.modal.draft.restDays = Number(el.dataset.n); render(); return; }
   if(act==='es-pick-dow'){
     const name = el.dataset.name, i = Number(el.dataset.i), multi = el.dataset.multi==='1';
@@ -1352,8 +1360,10 @@ function onClick(e){
     if(customDist){ d.raceKey='custom'; d.raceDistanceKm = unitToKm(Number(customDist), d.units); }
     d.raceDate = document.getElementById('es-date').value;
     d.currentWeeklyKm = unitToKm(Number(document.getElementById('es-weekly').value)||0, d.units);
+    const recentPreset = RACE_PRESETS.find(r=>r.key===d.recentDistanceKey);
     const setup = {...state.setup, raceKey:d.raceKey, raceDistanceKm:d.raceDistanceKm, raceDate:d.raceDate,
       currentWeeklyKm:d.currentWeeklyKm,
+      recentDistanceKm: recentPreset ? recentPreset.km : null,
       recentTimeSec: parseDurationToSec(document.getElementById('es-recent-time').value) || state.setup.recentTimeSec,
       goalTimeSec: parseDurationToSec(document.getElementById('es-goal-time').value),
       longDow:d.longDow, speedDow:d.speedDow, strengthDows:d.strengthDows,
