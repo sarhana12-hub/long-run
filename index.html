@@ -1,0 +1,1109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Long Run</title>
+<meta name="description" content="A personalized week-by-week running training plan and tracker.">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#101511">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Long Run">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#F3F5F0; --surface:#FFFFFF; --surface-2:#EAEEE4; --raised:#FFFFFF;
+  --ink:#121A16; --ink-soft:#45524B; --muted:#6C776F; --line:#DBE3D8; --line-soft:#E8EDE3;
+  --accent:#C3F53A; --accent-ink:#122006; --accent-soft:#E9FAC0; --accent-strong:#9FCE22;
+  --z-easy:#2E7C9C; --z-easy-bg:#E0EEF3;
+  --z-long:#4A4E9E; --z-long-bg:#E7E7F6;
+  --z-tempo:#B96E14; --z-tempo-bg:#F8E9D3;
+  --z-intervals:#BC3F2A; --z-intervals-bg:#F8E1DA;
+  --z-strength:#75628A; --z-strength-bg:#ECE6F2;
+  --z-rest:#8B958D; --z-rest-bg:#EBEFE8;
+  --z-race:#9C7A0A; --z-race-bg:#F6EBC9;
+  --shadow: 0 1px 2px rgba(18,26,22,.06), 0 8px 24px -12px rgba(18,26,22,.18);
+  --radius: 16px;
+  --font-display:'Bricolage Grotesque','Arial Black',sans-serif;
+  --font-body:'Manrope',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'JetBrains Mono','SFMono-Regular',Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101511; --surface:#1A211C; --surface-2:#212922; --raised:#232B25;
+    --ink:#EAEFE9; --ink-soft:#C2CCC4; --muted:#8B9790; --line:#2B342D; --line-soft:#242C26;
+    --accent:#D4FA4D; --accent-ink:#0E1704; --accent-soft:#2C3712; --accent-strong:#BFEA36;
+    --z-easy:#74C3E3; --z-easy-bg:#1B2E38;
+    --z-long:#9B9FEF; --z-long-bg:#25274A;
+    --z-tempo:#F0AC55; --z-tempo-bg:#3B2A14;
+    --z-intervals:#F1836A; --z-intervals-bg:#3C231D;
+    --z-strength:#C2A9D8; --z-strength-bg:#2E2638;
+    --z-rest:#8B968D; --z-rest-bg:#20261F;
+    --z-race:#E9C860; --z-race-bg:#3A2F0F;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101511; --surface:#1A211C; --surface-2:#212922; --raised:#232B25;
+  --ink:#EAEFE9; --ink-soft:#C2CCC4; --muted:#8B9790; --line:#2B342D; --line-soft:#242C26;
+  --accent:#D4FA4D; --accent-ink:#0E1704; --accent-soft:#2C3712; --accent-strong:#BFEA36;
+  --z-easy:#74C3E3; --z-easy-bg:#1B2E38;
+  --z-long:#9B9FEF; --z-long-bg:#25274A;
+  --z-tempo:#F0AC55; --z-tempo-bg:#3B2A14;
+  --z-intervals:#F1836A; --z-intervals-bg:#3C231D;
+  --z-strength:#C2A9D8; --z-strength-bg:#2E2638;
+  --z-rest:#8B968D; --z-rest-bg:#20261F;
+  --z-race:#E9C860; --z-race-bg:#3A2F0F;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0; padding:0;}
+body{background:var(--bg); color:var(--ink); font-family:var(--font-body); -webkit-font-smoothing:antialiased;}
+h1,h2,h3{font-family:var(--font-display); text-wrap:balance; margin:0;}
+.mono{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+button{font-family:inherit; cursor:pointer;}
+input,select,textarea{font-family:inherit; font-size:15px;}
+::selection{background:var(--accent-soft);}
+
+#app{max-width:520px; margin:0 auto; min-height:100dvh; padding-bottom:96px; position:relative;}
+
+/* ---------- top bar ---------- */
+.topbar{display:flex; align-items:center; justify-content:space-between; padding:16px 18px 8px;}
+.brand{display:flex; align-items:center; gap:8px;}
+.brand-mark{width:30px; height:30px; border-radius:9px; background:var(--accent); display:flex; align-items:center; justify-content:center; flex:none;}
+.brand-mark svg{width:17px; height:17px;}
+.brand-name{font-family:var(--font-display); font-weight:800; font-size:19px; letter-spacing:-.01em;}
+
+/* ---------- generic ---------- */
+.container{padding:0 18px;}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow);}
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-weight:700; font-size:14px; padding:11px 16px; transition:transform .1s ease;}
+.btn:active{transform:scale(.97);}
+.btn-primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+.btn-ghost{border-color:transparent; background:transparent;}
+.btn-block{width:100%;}
+.btn-sm{padding:7px 12px; font-size:12.5px; border-radius:10px;}
+.btn-danger{color:#C4432E; border-color:#C4432E33;}
+label.field-label{display:block; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px;}
+.input, select.input, textarea.input{width:100%; padding:11px 13px; border-radius:11px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink);}
+.input:focus, select.input:focus, textarea.input:focus{outline:2px solid var(--accent); outline-offset:1px;}
+.field{margin-bottom:16px;}
+.row{display:flex; gap:10px;}
+.row > *{flex:1;}
+.hint{font-size:12px; color:var(--muted); margin-top:6px; line-height:1.4;}
+.section-title{font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:22px 2px 10px;}
+.pill{display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:999px; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em;}
+.chip-select{display:flex; flex-wrap:wrap; gap:8px;}
+.chip{padding:8px 14px; border-radius:999px; border:1px solid var(--line); background:var(--surface-2); font-size:13.5px; font-weight:600; color:var(--ink-soft);}
+.chip.active{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; text-underline-offset:2px;}
+
+/* ---------- onboarding ---------- */
+.hero-pad{padding:28px 18px 10px;}
+.eyebrow{font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-strong);}
+
+/* ---------- week strip ---------- */
+.week-strip{display:flex; gap:8px; overflow-x:auto; padding:2px 18px 14px; scrollbar-width:none;}
+.week-strip::-webkit-scrollbar{display:none;}
+.week-tab{flex:none; min-width:56px; border-radius:13px; border:1px solid var(--line); background:var(--surface); padding:8px 4px; text-align:center;}
+.week-tab .wk{font-size:10.5px; color:var(--muted); font-weight:700; text-transform:uppercase;}
+.week-tab .wn{font-family:var(--font-mono); font-weight:700; font-size:15px;}
+.week-tab.active{border-color:var(--phase-color, var(--accent)); box-shadow:inset 0 -3px 0 var(--phase-color, var(--accent));}
+
+.week-header{padding:4px 18px 14px; display:flex; align-items:flex-end; justify-content:space-between; gap:12px;}
+.week-header h2{font-size:21px;}
+.week-meta{font-size:12.5px; color:var(--muted); margin-top:3px;}
+.week-stat{text-align:right;}
+.week-stat .v{font-family:var(--font-mono); font-weight:700; font-size:18px;}
+.week-stat .l{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+
+/* ---------- day cards ---------- */
+.day-list{display:flex; flex-direction:column; gap:10px; padding:0 18px;}
+.day-card{display:flex; align-items:center; gap:12px; padding:13px 14px; position:relative; width:100%; text-align:left; border:1px solid var(--line);}
+.day-card.move-target{outline:2px dashed var(--accent-strong); outline-offset:2px;}
+.day-card.move-source{outline:2px solid var(--accent-strong);}
+.day-date{width:38px; flex:none; text-align:center;}
+.day-date .dow{font-size:10.5px; font-weight:700; color:var(--muted); text-transform:uppercase;}
+.day-date .dom{font-family:var(--font-mono); font-weight:700; font-size:17px;}
+.day-main{flex:1; min-width:0;}
+.day-top{display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;}
+.day-title{font-weight:700; font-size:14.5px;}
+.day-desc{font-size:12.5px; color:var(--muted); line-height:1.4;}
+.day-side{flex:none; text-align:right;}
+.day-dist{font-family:var(--font-mono); font-weight:700; font-size:15px;}
+.day-pace{font-family:var(--font-mono); font-size:11px; color:var(--muted);}
+.strength-badge{font-size:10px; font-weight:700; color:var(--z-strength); background:var(--z-strength-bg); border-radius:6px; padding:2px 6px;}
+
+/* ---------- FAB & tabbar ---------- */
+.fab{position:fixed; right:20px; bottom:88px; z-index:20; background:var(--accent); color:var(--accent-ink); border:none; border-radius:999px; padding:14px 20px 14px 16px; font-weight:800; font-size:14px; display:flex; align-items:center; gap:7px; box-shadow:0 10px 24px -8px rgba(0,0,0,.35); max-width:460px; margin:0 auto;}
+.tabbar{position:fixed; left:0; right:0; bottom:0; z-index:15; background:var(--surface); border-top:1px solid var(--line); display:flex; padding:8px 10px calc(8px + env(safe-area-inset-bottom));}
+.tabbar-inner{max-width:520px; margin:0 auto; display:flex; width:100%;}
+.tab-btn{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:none; color:var(--muted); font-size:10.5px; font-weight:700; padding:6px 0;}
+.tab-btn svg{width:20px; height:20px;}
+.tab-btn.active{color:var(--ink);}
+.tab-btn.active svg{color:var(--accent-strong);}
+
+/* ---------- modal / sheet ---------- */
+.overlay{position:fixed; inset:0; background:rgba(10,14,11,.45); z-index:40; display:flex; align-items:flex-end; justify-content:center;}
+.sheet{background:var(--surface); width:100%; max-width:520px; border-radius:20px 20px 0 0; padding:18px 18px calc(20px + env(safe-area-inset-bottom)); max-height:88dvh; overflow-y:auto; box-shadow:var(--shadow); position:relative;}
+.sheet-handle{width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 14px;}
+.sheet-title{font-size:19px; margin-bottom:16px;}
+.sheet-close{position:absolute; top:14px; right:14px; background:var(--surface-2); border-radius:50%; width:30px; height:30px; border:none; display:flex; align-items:center; justify-content:center; color:var(--muted);}
+
+/* ---------- progress ---------- */
+.stat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:0 18px;}
+.stat-tile{padding:14px 12px;}
+.stat-tile .v{font-family:var(--font-mono); font-weight:800; font-size:20px;}
+.stat-tile .l{font-size:11px; color:var(--muted); margin-top:2px;}
+.chart-card{margin:0 18px; padding:18px 16px 8px;}
+.chart-rows{display:flex; align-items:flex-end; gap:6px; height:140px; padding-top:8px;}
+.chart-col{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:6px; height:100%; position:relative;}
+.bar-track{width:100%; max-width:26px; height:100%; border-radius:6px; background:var(--surface-2); display:flex; align-items:flex-end; overflow:hidden; position:relative;}
+.bar-planned{width:100%; background:var(--line); border-radius:6px 6px 0 0;}
+.bar-actual{position:absolute; bottom:0; left:0; width:100%; background:var(--accent-strong); border-radius:6px 6px 0 0;}
+.chart-col .wl{font-size:9.5px; color:var(--muted); font-weight:700;}
+.legend{display:flex; gap:16px; padding:10px 4px 14px; font-size:11.5px; color:var(--muted);}
+.legend span{display:inline-flex; align-items:center; gap:5px;}
+.legend i{width:9px; height:9px; border-radius:3px; display:inline-block;}
+.log-row{display:flex; align-items:center; gap:12px; padding:12px 14px;}
+.log-row + .log-row{border-top:1px solid var(--line-soft);}
+.log-date{width:46px; flex:none; font-size:11.5px; color:var(--muted); font-weight:700;}
+.log-mid{flex:1;}
+.log-mid .d{font-weight:700; font-size:14px;}
+.log-mid .t{font-size:12px; color:var(--muted);}
+.log-pace{font-family:var(--font-mono); font-weight:700; font-size:13.5px; text-align:right;}
+.empty{padding:30px 20px; text-align:center; color:var(--muted); font-size:13.5px;}
+
+.center-screen{min-height:100dvh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; padding:20px;}
+.banner{margin:8px 18px 0; padding:10px 13px; border-radius:12px; background:var(--z-tempo-bg); color:var(--z-tempo); font-size:12.5px; font-weight:600; display:flex; gap:8px; align-items:flex-start;}
+.toast{position:fixed; bottom:100px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:999px; font-size:13px; font-weight:700; z-index:60; box-shadow:var(--shadow);}
+.dow-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px;}
+.dow-opt{padding:8px 0; text-align:center; border-radius:9px; border:1px solid var(--line); background:var(--surface-2); font-size:11.5px; font-weight:700; color:var(--muted);}
+.dow-opt.sel{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+.settings-row{display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:1px solid var(--line-soft); gap:12px;}
+.settings-row:last-child{border-bottom:none;}
+.settings-row .lbl{font-weight:700; font-size:14px;}
+.settings-row .sub{font-size:12px; color:var(--muted); margin-top:2px;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================= constants ============================= */
+const KM_PER_MI = 1.609344;
+const DOW_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const RACE_PRESETS = [
+  {key:'5k', label:'5K', km:5},
+  {key:'10k', label:'10K', km:10},
+  {key:'15k', label:'15K', km:15},
+  {key:'10mi', label:'10 Miles', km:10*KM_PER_MI},
+  {key:'half', label:'Half Marathon', km:21.0975},
+  {key:'20mi', label:'20 Miles', km:20*KM_PER_MI},
+  {key:'marathon', label:'Marathon', km:42.195},
+];
+const TYPE_META = {
+  rest:{label:'Rest', bg:'--z-rest-bg', fg:'--z-rest'},
+  easy:{label:'Easy Run', bg:'--z-easy-bg', fg:'--z-easy'},
+  long:{label:'Long Run', bg:'--z-long-bg', fg:'--z-long'},
+  tempo:{label:'Tempo', bg:'--z-tempo-bg', fg:'--z-tempo'},
+  intervals:{label:'Intervals', bg:'--z-intervals-bg', fg:'--z-intervals'},
+  race:{label:'Race Day', bg:'--z-race-bg', fg:'--z-race'},
+};
+
+/* ============================= tiny utils ============================= */
+function pad2(n){ return String(n).padStart(2,'0'); }
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+function round1(v){ return Math.round(v*10)/10; }
+function fmtDate(d){ const dt = (d instanceof Date)? d : new Date(d+'T00:00:00'); return `${dt.getFullYear()}-${pad2(dt.getMonth()+1)}-${pad2(dt.getDate())}`; }
+function parseDate(s){ return new Date(s+'T00:00:00'); }
+function addDays(d,n){ const nd = new Date(d); nd.setDate(nd.getDate()+n); return nd; }
+function daysBetween(a,b){ return Math.round((b-a)/86400000); }
+function startOfWeek(d){ const nd=new Date(d); const dow=nd.getDay(); return addDays(nd,-dow); }
+function todayDate(){ const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
+function niceDate(d){ return d.toLocaleDateString(undefined,{month:'short', day:'numeric'}); }
+function niceDateFull(d){ return d.toLocaleDateString(undefined,{weekday:'long', month:'short', day:'numeric', year:'numeric'}); }
+
+function interp(anchors, x){
+  if(x<=anchors[0][0]) return anchors[0][1];
+  for(let i=0;i<anchors.length-1;i++){
+    const [x0,y0]=anchors[i], [x1,y1]=anchors[i+1];
+    if(x<=x1){ const t=(x-x0)/(x1-x0); return y0+t*(y1-y0); }
+  }
+  return anchors[anchors.length-1][1];
+}
+function riegel(t1,d1,d2){ return t1*Math.pow(d2/d1,1.06); }
+
+function parseDurationToSec(str){
+  if(!str) return null;
+  const parts = str.trim().split(':').map(s=>Number(s));
+  if(parts.some(n=>isNaN(n))) return null;
+  if(parts.length===2) return parts[0]*60+parts[1];
+  if(parts.length===3) return parts[0]*3600+parts[1]*60+parts[2];
+  return null;
+}
+function secToClock(totalSec){
+  totalSec = Math.max(0, Math.round(totalSec));
+  const h = Math.floor(totalSec/3600), m = Math.floor((totalSec%3600)/60), s = totalSec%60;
+  if(h>0) return `${h}:${pad2(m)}:${pad2(s)}`;
+  return `${m}:${pad2(s)}`;
+}
+function paceStr(secPerKm, unit){
+  const secPerUnit = unit==='mi' ? secPerKm*KM_PER_MI : secPerKm;
+  return `${secToClock(secPerUnit)}/${unit}`;
+}
+function kmToUnit(km, unit){ return unit==='mi' ? km/KM_PER_MI : km; }
+function unitToKm(v, unit){ return unit==='mi' ? v*KM_PER_MI : v; }
+function fmtDist(km, unit, digits){ digits = digits==null?1:digits; return `${kmToUnit(km,unit).toFixed(digits)} ${unit}`; }
+
+/* ============================= plan generation ============================= */
+function runsPerWeekFor(currentKm){
+  if(currentKm < 32) return 3;
+  if(currentKm < 56) return 4;
+  return 5;
+}
+
+function computePaces(setup){
+  let predicted5k;
+  if(setup.recentDistanceKm && setup.recentTimeSec){
+    predicted5k = riegel(setup.recentTimeSec, setup.recentDistanceKm, 5);
+  } else {
+    const tierPace = interp([[10,7.5*60],[30,6.6*60],[50,5.9*60],[80,5.3*60]], setup.currentWeeklyKm||20);
+    predicted5k = tierPace*5;
+  }
+  const p5kPerKm = predicted5k/5;
+  const paces = {
+    easyPerKm: p5kPerKm*1.30,
+    longPerKm: p5kPerKm*1.33,
+    marathonPerKm: p5kPerKm*1.15,
+    tempoPerKm: p5kPerKm*1.07,
+    intervalPerKm: p5kPerKm*0.97,
+  };
+  if(setup.goalTimeSec && setup.raceDistanceKm){
+    paces.racePerKm = setup.goalTimeSec/setup.raceDistanceKm;
+  } else if(setup.raceDistanceKm){
+    paces.racePerKm = riegel(predicted5k, 5, setup.raceDistanceKm)/setup.raceDistanceKm;
+  } else {
+    paces.racePerKm = p5kPerKm;
+  }
+  paces.predicted5kSec = predicted5k;
+  return paces;
+}
+
+function describeWorkout(day, paces, unit, raceDistanceKm){
+  const p = (v)=>paceStr(v, unit);
+  switch(day.type){
+    case 'long':{
+      const mpTag = (raceDistanceKm>15 && day.km >= (raceDistanceKm*0.5)) ? ` — last quarter @ ${p(paces.marathonPerKm)}` : '';
+      return `${fmtDist(day.km,unit)} steady @ ${p(paces.longPerKm)}${mpTag}`;
+    }
+    case 'easy': return `${fmtDist(day.km,unit)} conversational @ ${p(paces.easyPerKm)}`;
+    case 'tempo': return `${fmtDist(day.km,unit)} continuous @ ${p(paces.tempoPerKm)} (comfortably hard)`;
+    case 'intervals':{
+      const repM = raceDistanceKm<=10 ? 800 : 1000;
+      const reps = Math.max(4, Math.round((day.km*1000)/ (repM*1.4)));
+      return `${reps} × ${repM}m @ ${p(paces.intervalPerKm)}, jog ${Math.round(repM*0.5)}m recovery`;
+    }
+    case 'race': return `Goal pace ${p(paces.racePerKm)} — ${fmtDist(day.km,unit)}`;
+    case 'rest': return day.strength ? 'Rest day — mobility & light stretching' : 'Full rest — recovery day';
+    default: return '';
+  }
+}
+
+function generatePlan(setup){
+  const today = todayDate();
+  const raceDate = parseDate(setup.raceDate);
+  const totalDays = daysBetween(startOfWeek(today), raceDate);
+  const totalWeeks = Math.max(1, Math.ceil((totalDays+1)/7));
+  const currentKm = setup.currentWeeklyKm;
+  const raceKm = setup.raceDistanceKm;
+
+  const peakLongKm = interp([[5,9],[10,13],[15,14.5],[21.0975,18],[32.19,26],[42.195,32]], raceKm);
+  const longFraction = interp([[5,0.35],[10,0.30],[15,0.28],[21.0975,0.25],[32.19,0.22],[42.195,0.20]], raceKm);
+  let peakWeeklyKm = peakLongKm/longFraction;
+  peakWeeklyKm = Math.max(peakWeeklyKm, currentKm*1.08);
+
+  let taperWeeks = Math.round(interp([[5,1],[10,1],[15,1],[21.0975,2],[32.19,2],[42.195,3]], raceKm));
+  taperWeeks = clamp(taperWeeks, 1, Math.max(1,totalWeeks-1));
+  if(totalWeeks<=2) taperWeeks = totalWeeks;
+
+  const buildWeeksCount = Math.max(0, totalWeeks - taperWeeks);
+
+  const buildVols = [];
+  let vol = currentKm;
+  for(let i=0;i<buildWeeksCount;i++){
+    if(i>0){
+      const isCutback = (i % 4 === 3);
+      vol = isCutback ? Math.max(currentKm, buildVols[i-1]*0.8) : Math.min(buildVols[i-1]*1.10, peakWeeklyKm);
+    }
+    buildVols.push(round1(vol));
+  }
+  const taperCurves = {1:[0.55], 2:[0.7,0.45], 3:[0.75,0.6,0.4]};
+  const taperCurve = taperCurves[taperWeeks] || taperCurves[3].slice(-taperWeeks);
+  const lastBuild = buildVols.length ? buildVols[buildVols.length-1] : Math.max(currentKm, peakWeeklyKm*0.5);
+  const taperVols = taperCurve.map(m=>round1(lastBuild*m));
+  const weeklyVols = buildVols.concat(taperVols).slice(0, totalWeeks);
+  while(weeklyVols.length<totalWeeks) weeklyVols.push(weeklyVols[weeklyVols.length-1]||currentKm);
+
+  const baseCount = Math.max(buildWeeksCount>=3?Math.round(buildWeeksCount*0.45):buildWeeksCount, buildWeeksCount>0?1:0);
+  const buildCount = Math.max(buildWeeksCount-baseCount>=2? Math.round(buildWeeksCount*0.35):Math.max(0,buildWeeksCount-baseCount), 0);
+  function phaseFor(i){
+    if(i>=buildWeeksCount) return 'taper';
+    if(i<baseCount) return 'base';
+    if(i<baseCount+buildCount) return 'build';
+    return 'peak';
+  }
+
+  const paces = computePaces(setup);
+  const longDow = setup.longDow ?? 0;
+  const speedDow = setup.speedDow ?? 3;
+  const strengthDows = setup.strengthDows ?? [1,4];
+  const runsPerWeek = setup.runsPerWeek || runsPerWeekFor(currentKm);
+  const weekStart0 = startOfWeek(today);
+
+  const weeks = [];
+  for(let w=0; w<totalWeeks; w++){
+    const weekStart = addDays(weekStart0, w*7);
+    const phase = phaseFor(w);
+    const weeklyKm = weeklyVols[w];
+    const isRaceWeek = (w===totalWeeks-1);
+    const longKm = isRaceWeek ? Math.min(peakLongKm*0.3, weeklyKm*0.3) : Math.min(weeklyKm*longFraction, peakLongKm);
+
+    const days = [];
+    for(let d=0; d<7; d++){
+      const date = addDays(weekStart, d);
+      days.push({id:uid(), date:fmtDate(date), dow:date.getDay(), type:'rest', km:0, strength:false, label:'Rest', notes:''});
+    }
+    const longIdx = days.findIndex(x=>x.dow===longDow);
+    let speedIdx = days.findIndex(x=>x.dow===speedDow);
+    if(speedIdx===longIdx) speedIdx = -1;
+
+    let remaining = Math.max(0, weeklyKm-longKm);
+    const wantsSpeed = phase!=='base' && speedIdx!==-1;
+    let speedKm = 0, speedType = 'tempo';
+    if(wantsSpeed){
+      speedType = (phase==='peak' && raceKm<=10) ? 'intervals' : (phase==='peak' && raceKm>10 ? 'tempo' : 'tempo');
+      speedKm = round1(Math.min(remaining*0.4, raceKm<=10?8:9));
+      remaining = Math.max(0, remaining-speedKm);
+    }
+    const usedRunDays = 1+(wantsSpeed?1:0);
+    const easyDaysNeeded = Math.max(0, runsPerWeek-usedRunDays);
+    const candidateIdxs = days.map((x,i)=>i).filter(i=>i!==longIdx && i!==speedIdx);
+    const easyIdxs = candidateIdxs.slice(0, easyDaysNeeded);
+    const perEasyKm = easyIdxs.length ? remaining/easyIdxs.length : 0;
+
+    days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run'};
+    if(wantsSpeed){ days[speedIdx] = {...days[speedIdx], type:speedType, km:speedKm, label:TYPE_META[speedType].label}; }
+    easyIdxs.forEach(i=>{ days[i] = {...days[i], type:'easy', km:round1(perEasyKm), label:'Easy Run'}; });
+
+    let strengthLeft = setup.strengthPerWeek==null?2:setup.strengthPerWeek;
+    strengthDows.forEach(dw=>{
+      if(strengthLeft<=0) return;
+      const idx = days.findIndex(x=>x.dow===dw && x.type!=='long' && x.type!=='tempo' && x.type!=='intervals');
+      if(idx!==-1){ days[idx].strength = true; strengthLeft--; }
+    });
+
+    if(isRaceWeek){
+      const raceIdx = days.findIndex(x=>x.date===fmtDate(raceDate));
+      const targetIdx = raceIdx!==-1 ? raceIdx : 6;
+      for(let i=0;i<7;i++){
+        const diff = daysBetween(parseDate(days[i].date), raceDate);
+        if(i===targetIdx){ days[i] = {...days[i], type:'race', km:raceKm, label:'Race Day', strength:false}; }
+        else if(diff>0 && diff<=2){ days[i] = {...days[i], type:diff===1?'rest':'easy', km:diff===1?0:round1(Math.min(3,peakLongKm*0.15)), strength:false, label:diff===1?'Rest':'Shakeout Jog'}; }
+        else if(diff<0){ days[i] = {...days[i], type:'rest', km:0, strength:false, label:'Rest'}; }
+      }
+    }
+
+    days.forEach(day=>{ day.notes = describeWorkout(day, paces, setup.units, raceKm); });
+
+    weeks.push({weekIndex:w, phase, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), days});
+  }
+
+  return {generatedAt:new Date().toISOString(), raceDate:setup.raceDate, raceDistanceKm:raceKm, totalWeeks, paces, weeks};
+}
+
+/* ============================= storage layer (local only) ============================= */
+const Store = {
+  _get(key, fallback){ try{ const v = localStorage.getItem(key); return v==null? fallback : JSON.parse(v); }catch(e){ return fallback; } },
+  _set(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} },
+
+  getName(){ return this._get('lr_name', ''); },
+  setName(name){ this._set('lr_name', name); },
+  getSetup(){ return this._get('lr_setup', null); },
+  setSetup(setup){ this._set('lr_setup', setup); },
+  getPlan(){ return this._get('lr_plan', null); },
+  setPlan(plan){ this._set('lr_plan', plan); },
+  getLogs(){ return this._get('lr_logs', []); },
+  addLog(entry){
+    const logs = this.getLogs();
+    const item = {id:'l_'+uid(), ...entry};
+    logs.unshift(item);
+    this._set('lr_logs', logs);
+    return item;
+  },
+  deleteLog(id){
+    const logs = this.getLogs().filter(l=>l.id!==id);
+    this._set('lr_logs', logs);
+  },
+  resetAll(){
+    localStorage.removeItem('lr_name');
+    localStorage.removeItem('lr_setup');
+    localStorage.removeItem('lr_plan');
+    localStorage.removeItem('lr_logs');
+  }
+};
+
+/* ============================= icons ============================= */
+const ICONS = {
+  route:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M6 15.5V13a4 4 0 0 1 4-4h4a4 4 0 0 0 4-4"/></svg>',
+  chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  bolt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>',
+  move:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>',
+};
+
+/* ============================= state ============================= */
+const state = {
+  view:'loading', // loading | onboarding | app
+  name:'',
+  setup:null,
+  plan:null,
+  logs:[],
+  tab:'plan',
+  currentWeekIndex:0,
+  moveFrom:null,
+  modal:null,
+  onboardDraft:null,
+  toast:null,
+};
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function showToast(msg){ state.toast = msg; render(); setTimeout(()=>{ state.toast=null; render(); }, 2200); }
+
+/* ============================= bootstrap ============================= */
+function boot(){
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+  state.name = Store.getName();
+  const setup = Store.getSetup();
+  const plan = Store.getPlan();
+  state.logs = Store.getLogs();
+  if(setup && plan){
+    state.setup = setup; state.plan = plan;
+    const today = todayDate();
+    let idx = plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
+    state.currentWeekIndex = idx===-1?0:idx;
+    state.view = 'app'; state.tab='plan';
+  } else {
+    state.view = 'onboarding';
+    state.onboardDraft = defaultDraft();
+  }
+  render();
+}
+
+function defaultDraft(){
+  return {
+    name: state.name || '',
+    raceKey:'half', raceDistanceKm:21.0975, raceDate:'', currentWeeklyMi: 20,
+    units:'mi', recentDistanceKey:'5k', recentTime:'', goalTime:'',
+    longDow:0, speedDow:3, strengthDows:[1,4],
+  };
+}
+
+/* ============================= onboarding submit ============================= */
+function submitOnboarding(){
+  const d = state.onboardDraft;
+  if(!d.name || !d.name.trim()){ showToast('Enter your name'); return; }
+  if(!d.raceDate){ showToast('Pick a race date first'); return; }
+  const recentPreset = RACE_PRESETS.find(r=>r.key===d.recentDistanceKey);
+  const recentSec = parseDurationToSec(d.recentTime);
+  const goalSec = parseDurationToSec(d.goalTime);
+  const setup = {
+    units: d.units,
+    raceKey: d.raceKey,
+    raceDistanceKm: d.raceDistanceKm,
+    raceDate: d.raceDate,
+    currentWeeklyKm: unitToKm(Number(d.currentWeeklyMi)||0, d.units),
+    recentDistanceKm: recentPreset? recentPreset.km : null,
+    recentTimeSec: recentSec,
+    goalTimeSec: goalSec,
+    longDow: d.longDow, speedDow: d.speedDow, strengthDows: d.strengthDows,
+    runsPerWeek: null, strengthPerWeek: 2,
+  };
+  const plan = generatePlan(setup);
+  state.name = d.name.trim();
+  Store.setName(state.name);
+  Store.setSetup(setup);
+  Store.setPlan(plan);
+  state.setup = setup; state.plan = plan;
+  const today = todayDate();
+  let idx = plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
+  state.currentWeekIndex = idx===-1?0:idx;
+  state.view='app'; state.tab='plan';
+  render();
+}
+
+/* ============================= render: root ============================= */
+function render(){
+  const app = document.getElementById('app');
+  let html;
+  if(state.view==='loading') html = renderLoading();
+  else if(state.view==='onboarding') html = renderOnboarding();
+  else html = renderApp();
+  if(state.view!=='loading'){
+    html += (state.modal ? renderModal() : '') + (state.toast ? `<div class="toast">${esc(state.toast)}</div>` : '');
+  }
+  app.innerHTML = html;
+  bindGlobal();
+}
+
+function renderLoading(){
+  return `<div class="center-screen">
+    <div class="brand-mark" style="width:52px;height:52px;border-radius:16px;">${ICONS.route.replace('width:17px','width:26px').replace('height:17px','height:26px')}</div>
+    <div style="color:var(--muted); font-size:13px; font-weight:600;">Loading Long Run…</div>
+  </div>`;
+}
+
+function raceLabel(setup){
+  const preset = RACE_PRESETS.find(r=>r.key===setup.raceKey);
+  if(preset && Math.abs(preset.km-setup.raceDistanceKm)<0.05) return preset.label;
+  return fmtDist(setup.raceDistanceKm, setup.units||'mi',1);
+}
+
+/* ============================= render: onboarding ============================= */
+function renderOnboarding(){
+  const d = state.onboardDraft;
+  const presetChips = RACE_PRESETS.map(r=>`<button class="chip ${d.raceKey===r.key?'active':''}" data-act="pick-race" data-key="${r.key}">${r.label}</button>`).join('');
+  const unitChips = ['mi','km'].map(u=>`<button class="chip ${d.units===u?'active':''}" data-act="pick-unit" data-u="${u}">${u==='mi'?'Miles':'Kilometers'}</button>`).join('');
+  const recentChips = RACE_PRESETS.slice(0,5).map(r=>`<button class="chip ${d.recentDistanceKey===r.key?'active':''}" data-act="pick-recent" data-key="${r.key}">${r.label}</button>`).join('');
+  const dowGrid = (name, selected, multi)=> DOW_LABELS.map((l,i)=>`<button class="dow-opt ${ (multi? selected.includes(i): selected===i) ?'sel':''}" data-act="pick-dow" data-name="${name}" data-i="${i}" data-multi="${multi?1:0}">${l}</button>`).join('');
+  const weeksToRace = d.raceDate ? Math.max(1,Math.ceil((parseDate(d.raceDate)-todayDate())/86400000/7)) : null;
+
+  return `
+  <div class="topbar">
+    <div class="brand"><div class="brand-mark">${ICONS.route}</div><div class="brand-name">Long Run</div></div>
+  </div>
+  <div class="container">
+    <div class="eyebrow" style="margin-top:6px;">Training plans, tailored to race day</div>
+    <h1 style="font-size:24px; margin:6px 0 4px;">Let's build your plan</h1>
+    <div class="hint" style="margin-bottom:20px;">A few numbers so the plan fits you: your race, your date, your current mileage, and a recent time to calibrate paces.</div>
+
+    <div class="section-title" style="margin-top:0;">Your name</div>
+    <div class="field">
+      <input class="input" type="text" id="in-name" placeholder="e.g. Ahmed" value="${esc(d.name)}">
+    </div>
+
+    <div class="section-title">Race distance</div>
+    <div class="chip-select" style="margin-bottom:8px;">${presetChips}</div>
+    <div class="row" style="margin-bottom:16px;">
+      <div class="field" style="margin-bottom:0;">
+        <label class="field-label">Custom distance (${d.units})</label>
+        <input class="input" type="number" min="1" step="0.1" id="in-custom-dist" value="${d.raceKey==='custom'? round1(kmToUnit(d.raceDistanceKm,d.units)):''}" placeholder="e.g. 8">
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label class="field-label">Units</label>
+        <div class="chip-select">${unitChips}</div>
+      </div>
+    </div>
+
+    <div class="section-title">Race day</div>
+    <div class="field">
+      <label class="field-label">Date</label>
+      <input class="input" type="date" id="in-race-date" value="${d.raceDate}">
+      ${weeksToRace? `<div class="hint">${weeksToRace} week${weeksToRace===1?'':'s'} from today.</div>`:''}
+    </div>
+
+    <div class="section-title">Current fitness</div>
+    <div class="field">
+      <label class="field-label">Current weekly mileage (${d.units})</label>
+      <input class="input" type="number" min="0" step="1" id="in-weekly" value="${d.currentWeeklyMi}">
+      <div class="hint">Rough average over the last few weeks is fine.</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Most recent race (optional, calibrates your paces)</label>
+      <div class="chip-select" style="margin-bottom:10px;">${recentChips}</div>
+      <input class="input" type="text" id="in-recent-time" placeholder="Finish time, e.g. 24:30" value="${esc(d.recentTime)}">
+    </div>
+    <div class="field">
+      <label class="field-label">Goal time for this race (optional)</label>
+      <input class="input" type="text" id="in-goal-time" placeholder="e.g. 1:45:00 — leave blank to let paces guide you">
+    </div>
+
+    <div class="section-title">Weekly rhythm</div>
+    <div class="field">
+      <label class="field-label">Long run day</label>
+      <div class="dow-grid">${dowGrid('longDow', d.longDow, false)}</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Speed / tempo day</label>
+      <div class="dow-grid">${dowGrid('speedDow', d.speedDow, false)}</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Strength days</label>
+      <div class="dow-grid">${dowGrid('strengthDows', d.strengthDows, true)}</div>
+    </div>
+
+    <button class="btn btn-primary btn-block" style="margin:22px 0 30px; padding:14px;" data-act="generate-plan">Generate my plan</button>
+  </div>
+  `;
+}
+
+/* ============================= render: main app ============================= */
+function renderApp(){
+  const plan = state.plan;
+  const week = plan.weeks[state.currentWeekIndex];
+  const raceDate = parseDate(plan.raceDate);
+  const daysToRace = daysBetween(todayDate(), raceDate);
+
+  let body = '';
+  if(state.tab==='plan') body = renderPlanTab(week, plan, daysToRace);
+  else if(state.tab==='progress') body = renderProgressTab();
+  else body = renderSettingsTab();
+
+  return `
+  <div class="topbar">
+    <div class="brand"><div class="brand-mark">${ICONS.route}</div><div class="brand-name">Long Run</div></div>
+    <div style="font-weight:700; font-size:13.5px; color:var(--muted);">${esc(state.name)}</div>
+  </div>
+  ${body}
+  <button class="fab" data-act="open-log">${ICONS.plus} Log a run</button>
+  <div class="tabbar"><div class="tabbar-inner">
+    ${tabBtn('plan', ICONS.route, 'Plan')}
+    ${tabBtn('progress', ICONS.chart, 'Progress')}
+    ${tabBtn('settings', ICONS.gear, 'Settings')}
+  </div></div>
+  `;
+}
+function tabBtn(key,icon,label){
+  return `<button class="tab-btn ${state.tab===key?'active':''}" data-act="set-tab" data-tab="${key}">${icon}<span>${label}</span></button>`;
+}
+
+function phaseColorVar(phase){
+  return phase==='taper' ? 'var(--z-race)' : phase==='peak' ? 'var(--z-intervals)' : phase==='build' ? 'var(--z-tempo)' : 'var(--z-easy)';
+}
+function phaseLabel(phase){ return {base:'Base', build:'Build', peak:'Peak', taper:'Taper'}[phase]||phase; }
+
+function renderPlanTab(week, plan, daysToRace){
+  const unit = state.setup.units;
+  const strip = plan.weeks.map((w,i)=>`
+    <button class="week-tab ${i===state.currentWeekIndex?'active':''}" style="--phase-color:${phaseColorVar(w.phase)}" data-act="goto-week" data-i="${i}">
+      <div class="wk">${phaseLabel(w.phase)}</div>
+      <div class="wn">${i+1}</div>
+    </button>`).join('');
+
+  const loggedThisWeek = logsInWeek(week);
+  const loggedKm = loggedThisWeek.reduce((s,l)=>s+l.distanceKm,0);
+
+  const dayCards = week.days.map((day,di)=>{
+    const meta = TYPE_META[day.type];
+    const isToday = fmtDate(todayDate())===day.date;
+    const match = loggedThisWeek.find(l=>l.date===day.date);
+    const isMoveSrc = state.moveFrom && state.moveFrom.weekIndex===state.currentWeekIndex && state.moveFrom.dayIndex===di;
+    const isMoveTarget = state.moveFrom && state.moveFrom.weekIndex===state.currentWeekIndex && state.moveFrom.dayIndex!==di;
+    const dt = parseDate(day.date);
+    return `
+    <button class="card day-card ${isMoveSrc?'move-source':''} ${isMoveTarget?'move-target':''}" data-act="${state.moveFrom? 'move-target':'open-day'}" data-i="${di}" style="${isToday?'border-color:var(--accent-strong)':''}">
+      <div class="day-date"><div class="dow">${DOW_LABELS[day.dow]}</div><div class="dom mono">${dt.getDate()}</div></div>
+      <div class="day-main">
+        <div class="day-top">
+          <span class="pill" style="background:var(--${meta.bg}); color:var(--${meta.fg})">${day.label}</span>
+          ${day.strength?`<span class="strength-badge">+ Strength</span>`:''}
+          ${match?`<span class="strength-badge" style="color:var(--z-easy); background:var(--z-easy-bg)">Logged</span>`:''}
+        </div>
+        <div class="day-desc">${esc(day.notes)}</div>
+      </div>
+      <div class="day-side">
+        ${day.km>0?`<div class="day-dist mono">${fmtDist(day.km,unit)}</div>`:''}
+      </div>
+    </button>`;
+  }).join('');
+
+  return `
+  ${state.moveFrom!=null && state.moveFrom.weekIndex===state.currentWeekIndex ? `<div class="banner">${ICONS.move}<span>Choose a day to swap with "${week.days[state.moveFrom.dayIndex].label}". <a class="link-btn" data-act="cancel-move" style="color:inherit">Cancel</a></span></div>`:''}
+  <div class="week-strip">${strip}</div>
+  <div class="week-header">
+    <div>
+      <h2>${phaseLabel(week.phase)} · Week ${week.weekIndex+1}</h2>
+      <div class="week-meta">${niceDate(parseDate(week.weekStart))} – ${niceDate(addDays(parseDate(week.weekStart),6))} · ${daysToRace>=0?daysToRace+' days to race':'Race complete'}</div>
+    </div>
+    <div class="week-stat">
+      <div class="v">${fmtDist(loggedKm,unit,1)} <span style="color:var(--muted); font-weight:600; font-size:12px;">/ ${fmtDist(week.targetKm,unit,1)}</span></div>
+      <div class="l">logged this week</div>
+    </div>
+  </div>
+  <div class="day-list">${dayCards}</div>
+  <div style="height:20px"></div>
+  `;
+}
+
+function logsInWeek(week){
+  const ws = parseDate(week.weekStart), we = addDays(ws,7);
+  return state.logs.filter(l=>{ const d=parseDate(l.date); return d>=ws && d<we; });
+}
+
+function renderProgressTab(){
+  const plan = state.plan, unit = state.setup.units;
+  const raceDate = parseDate(plan.raceDate);
+  const daysToRace = daysBetween(todayDate(), raceDate);
+  const totalLoggedKm = state.logs.reduce((s,l)=>s+l.distanceKm,0);
+  const plannedToDateWeeks = plan.weeks.filter(w=>parseDate(w.weekStart) <= todayDate());
+  const plannedToDateKm = plannedToDateWeeks.reduce((s,w)=>{
+    return s + w.days.filter(d=>parseDate(d.date)<=todayDate()).reduce((s2,d)=>s2+d.km,0);
+  },0);
+  const plannedRunsToDate = plannedToDateWeeks.reduce((s,w)=> s + w.days.filter(d=>parseDate(d.date)<=todayDate() && d.km>0).length, 0);
+  const loggedRunsToDate = state.logs.length;
+  const adherence = plannedRunsToDate>0 ? Math.round(100*Math.min(1,loggedRunsToDate/plannedRunsToDate)) : 0;
+
+  const chartWeeks = plan.weeks.filter(w=>parseDate(w.weekStart)<=addDays(todayDate(),7)).slice(-8);
+  const maxKm = Math.max(1, ...chartWeeks.map(w=>Math.max(w.targetKm, weekActualKm(w))));
+  const bars = chartWeeks.map(w=>{
+    const actual = weekActualKm(w);
+    const plannedPct = clamp((w.targetKm/maxKm)*100,2,100);
+    const actualPct = clamp((actual/maxKm)*100,0,100);
+    return `<div class="chart-col">
+      <div class="bar-track" style="height:100%;">
+        <div class="bar-planned" style="height:${plannedPct}%"></div>
+        <div class="bar-actual" style="height:${actualPct}%"></div>
+      </div>
+      <div class="wl">${w.weekIndex+1}</div>
+    </div>`;
+  }).join('');
+
+  const recentLogs = state.logs.slice(0,12);
+  const logRows = recentLogs.length ? recentLogs.map(l=>{
+    const pace = l.durationSec/l.distanceKm;
+    return `<div class="log-row">
+      <div class="log-date">${niceDate(parseDate(l.date))}</div>
+      <div class="log-mid"><div class="d">${fmtDist(l.distanceKm,unit)} · ${secToClock(l.durationSec)}</div>${l.notes?`<div class="t">${esc(l.notes)}</div>`:''}</div>
+      <div class="log-pace mono">${paceStr(pace,unit)}</div>
+      <button class="btn btn-ghost btn-sm" data-act="delete-log" data-id="${l.id}" style="color:var(--muted)">${ICONS.close}</button>
+    </div>`;
+  }).join('') : `<div class="empty">No runs logged yet — tap "Log a run" to start tracking.</div>`;
+
+  return `
+  <div class="container" style="padding-top:14px;">
+    <h2 style="font-size:20px; margin-bottom:2px;">${esc(state.name)}'s progress</h2>
+    <div class="hint" style="margin-bottom:16px;">${daysToRace>=0? daysToRace+' days until '+raceLabel(state.setup) : 'Race day has passed — nice work.'}</div>
+  </div>
+  <div class="stat-grid" style="margin-bottom:16px;">
+    <div class="card stat-tile"><div class="v">${fmtDist(totalLoggedKm,unit,0)}</div><div class="l">total logged</div></div>
+    <div class="card stat-tile"><div class="v">${adherence}%</div><div class="l">runs completed</div></div>
+    <div class="card stat-tile"><div class="v">${fmtDist(Math.max(0,plannedToDateKm-totalLoggedKm),unit,0)}</div><div class="l">behind plan</div></div>
+  </div>
+  <div class="section-title" style="padding:0 20px;">Weekly mileage — planned vs. actual</div>
+  <div class="card chart-card">
+    <div class="chart-rows">${bars}</div>
+    <div class="legend"><span><i style="background:var(--line)"></i>Planned</span><span><i style="background:var(--accent-strong)"></i>Logged</span></div>
+  </div>
+  <div class="section-title" style="padding:0 20px;">Recent runs</div>
+  <div class="card" style="margin:0 18px 24px;">${logRows}</div>
+  `;
+}
+
+function weekActualKm(week){
+  return logsInWeek(week).reduce((s,l)=>s+l.distanceKm,0);
+}
+
+function renderSettingsTab(){
+  const s = state.setup, unit = s.units;
+  return `
+  <div class="container" style="padding-top:14px;">
+    <h2 style="font-size:20px; margin-bottom:16px;">Settings</h2>
+
+    <div class="section-title" style="margin-top:0;">Profile</div>
+    <div class="card" style="padding:6px 16px;">
+      <div class="settings-row"><div><div class="lbl">${esc(state.name)}</div><div class="sub">This plan lives only on this device</div></div></div>
+      <div class="settings-row"><div class="lbl">Units</div>
+        <div class="chip-select"><button class="chip ${unit==='mi'?'active':''}" data-act="set-unit" data-u="mi">Miles</button><button class="chip ${unit==='km'?'active':''}" data-act="set-unit" data-u="km">Kilometers</button></div>
+      </div>
+    </div>
+
+    <div class="section-title">Race</div>
+    <div class="card" style="padding:6px 16px;">
+      <div class="settings-row"><div><div class="lbl">${raceLabel(s)}</div><div class="sub">${niceDateFull(parseDate(s.raceDate))}</div></div></div>
+      <div class="settings-row"><div><div class="lbl">Weekly mileage used to build plan</div><div class="sub">${fmtDist(s.currentWeeklyKm,unit,1)}/week</div></div></div>
+      <div class="settings-row"><div><div class="lbl">Estimated paces</div><div class="sub">Easy ${paceStr(state.plan.paces.easyPerKm,unit)} · Tempo ${paceStr(state.plan.paces.tempoPerKm,unit)} · Race ${paceStr(state.plan.paces.racePerKm,unit)}</div></div></div>
+    </div>
+
+    <div class="section-title">Plan controls</div>
+    <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
+      <div class="hint">Regenerating rebuilds every week of your plan from today's inputs. Your logged runs are kept — only the plan itself changes.</div>
+      <button class="btn btn-block" data-act="open-edit-setup">Edit inputs & regenerate plan</button>
+    </div>
+
+    <div class="section-title">Danger zone</div>
+    <div class="card" style="padding:14px 16px;">
+      <button class="btn btn-danger btn-block" data-act="confirm-reset">Start over (erase this device's data)</button>
+    </div>
+    <div style="height:24px"></div>
+  </div>`;
+}
+
+/* ============================= modals ============================= */
+function renderModal(){
+  const m = state.modal;
+  if(m.type==='log-run') return modalLogRun();
+  if(m.type==='edit-day') return modalEditDay();
+  if(m.type==='edit-setup') return modalEditSetup();
+  if(m.type==='confirm-reset') return modalConfirmReset();
+  return '';
+}
+
+function modalShell(title, innerHtml){
+  return `<div class="overlay" data-act="close-modal-overlay">
+    <div class="sheet" data-stop="1">
+      <div class="sheet-handle"></div>
+      <button class="sheet-close" data-act="close-modal">${ICONS.close}</button>
+      <h3 class="sheet-title">${title}</h3>
+      ${innerHtml}
+    </div>
+  </div>`;
+}
+
+function modalLogRun(){
+  const unit = state.setup.units;
+  const d = state.modal.data || {date:fmtDate(todayDate()), dist:'', time:'', notes:''};
+  return modalShell('Log a run', `
+    <div class="field"><label class="field-label">Date</label><input class="input" type="date" id="lr-date" value="${d.date}"></div>
+    <div class="row">
+      <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" step="0.01" min="0" id="lr-dist" value="${d.dist}" placeholder="e.g. 5.2"></div>
+      <div class="field"><label class="field-label">Time (h:mm:ss)</label><input class="input" type="text" id="lr-time" value="${d.time}" placeholder="e.g. 45:30"></div>
+    </div>
+    <div class="field"><label class="field-label">Notes (optional)</label><input class="input" type="text" id="lr-notes" value="${esc(d.notes)}" placeholder="How did it feel?"></div>
+    <button class="btn btn-primary btn-block" data-act="save-log" style="padding:13px;">Save run</button>
+  `);
+}
+
+function modalEditDay(){
+  const {weekIndex, dayIndex} = state.modal;
+  const day = state.plan.weeks[weekIndex].days[dayIndex];
+  const unit = state.setup.units;
+  const typeOpts = Object.keys(TYPE_META).map(t=>`<option value="${t}" ${day.type===t?'selected':''}>${TYPE_META[t].label}</option>`).join('');
+  return modalShell(`Edit ${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}`, `
+    <div class="field"><label class="field-label">Workout type</label><select class="input" id="ed-type">${typeOpts}</select></div>
+    <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" step="0.1" min="0" id="ed-km" value="${round1(kmToUnit(day.km,unit))}"></div>
+    <div class="field"><label class="field-label">Notes</label><textarea class="input" id="ed-notes" rows="3">${esc(day.notes)}</textarea></div>
+    <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
+      <label class="field-label" style="margin:0;">Add strength session</label>
+      <input type="checkbox" id="ed-strength" ${day.strength?'checked':''} style="width:20px; height:20px;">
+    </div>
+    <div class="row" style="margin-top:6px;">
+      <button class="btn" data-act="start-move" data-di="${dayIndex}">${ICONS.move} Swap with another day</button>
+      <button class="btn btn-primary" data-act="save-day" data-wi="${weekIndex}" data-di="${dayIndex}">Save</button>
+    </div>
+  `);
+}
+
+function modalEditSetup(){
+  const d = state.modal.draft;
+  const presetChips = RACE_PRESETS.map(r=>`<button class="chip ${d.raceKey===r.key?'active':''}" data-act="es-pick-race" data-key="${r.key}">${r.label}</button>`).join('');
+  return modalShell('Edit inputs & regenerate', `
+    <div class="field"><label class="field-label">Race distance</label><div class="chip-select" style="margin-bottom:8px;">${presetChips}</div>
+      <input class="input" type="number" step="0.1" min="1" id="es-custom-dist" placeholder="Custom distance (${d.units})" value="${d.raceKey==='custom'?round1(kmToUnit(d.raceDistanceKm,d.units)):''}">
+    </div>
+    <div class="field"><label class="field-label">Race date</label><input class="input" type="date" id="es-date" value="${d.raceDate}"></div>
+    <div class="field"><label class="field-label">Current weekly mileage (${d.units})</label><input class="input" type="number" min="0" id="es-weekly" value="${round1(kmToUnit(d.currentWeeklyKm,d.units))}"></div>
+    <div class="field"><label class="field-label">Recent race time (h:mm:ss)</label><input class="input" type="text" id="es-recent-time" value="${d.recentTimeStr||''}" placeholder="e.g. 24:30"></div>
+    <div class="field"><label class="field-label">Goal time (optional)</label><input class="input" type="text" id="es-goal-time" value="${d.goalTimeStr||''}"></div>
+    <button class="btn btn-primary btn-block" data-act="regenerate-plan" style="padding:13px;">Regenerate plan</button>
+  `);
+}
+
+function modalConfirmReset(){
+  return modalShell('Start over?', `
+    <div class="hint" style="margin-bottom:18px;">This erases your plan and logged runs on this device. This can't be undone.</div>
+    <div class="row"><button class="btn btn-block" data-act="close-modal">Cancel</button><button class="btn btn-danger btn-block" data-act="do-reset">Erase & start over</button></div>
+  `);
+}
+
+/* ============================= events ============================= */
+function bindGlobal(){
+  const app = document.getElementById('app');
+  app.onclick = onClick;
+  app.oninput = onInput;
+  app.onchange = onChange;
+}
+
+function findAct(el){
+  while(el && el!==document){ if(el.dataset && el.dataset.act) return el; el = el.parentElement; }
+  return null;
+}
+
+function onClick(e){
+  if(e.target.classList && e.target.classList.contains('overlay')){
+    state.modal=null; render(); return;
+  }
+  const el = findAct(e.target);
+  if(!el) return;
+  const act = el.dataset.act;
+
+  if(act==='set-tab'){ state.tab = el.dataset.tab; render(); return; }
+  if(act==='goto-week'){ state.currentWeekIndex = Number(el.dataset.i); state.moveFrom=null; render(); return; }
+
+  if(act==='pick-race'){
+    const preset = RACE_PRESETS.find(r=>r.key===el.dataset.key);
+    state.onboardDraft.raceKey = preset.key; state.onboardDraft.raceDistanceKm = preset.km;
+    render(); return;
+  }
+  if(act==='pick-unit'){ state.onboardDraft.units = el.dataset.u; render(); return; }
+  if(act==='pick-recent'){ state.onboardDraft.recentDistanceKey = el.dataset.key; render(); return; }
+  if(act==='pick-dow'){
+    const name = el.dataset.name, i = Number(el.dataset.i), multi = el.dataset.multi==='1';
+    if(multi){
+      const arr = state.onboardDraft[name];
+      const idx = arr.indexOf(i);
+      if(idx===-1) arr.push(i); else arr.splice(idx,1);
+    } else {
+      state.onboardDraft[name] = i;
+    }
+    render(); return;
+  }
+  if(act==='generate-plan'){ submitOnboarding(); return; }
+
+  if(act==='open-log'){ state.modal={type:'log-run'}; render(); return; }
+  if(act==='save-log'){
+    const unit = state.setup.units;
+    const dateV = document.getElementById('lr-date').value;
+    const distV = Number(document.getElementById('lr-dist').value);
+    const timeV = document.getElementById('lr-time').value;
+    const notesV = document.getElementById('lr-notes').value;
+    const durSec = parseDurationToSec(timeV);
+    if(!dateV || !distV || !durSec){ showToast('Enter date, distance and time'); return; }
+    const logData = {date:dateV, distanceKm:unitToKm(distV,unit), durationSec:durSec, notes:notesV, createdAt:new Date().toISOString()};
+    const item = Store.addLog(logData);
+    state.logs = [item, ...state.logs];
+    state.modal=null; showToast('Run logged'); return;
+  }
+  if(act==='delete-log'){
+    const id = el.dataset.id;
+    Store.deleteLog(id);
+    state.logs = state.logs.filter(l=>l.id!==id);
+    render(); return;
+  }
+
+  if(act==='open-day'){
+    const di = Number(el.dataset.i);
+    state.modal={type:'edit-day', weekIndex:state.currentWeekIndex, dayIndex:di};
+    render(); return;
+  }
+  if(act==='move-target'){
+    const di = Number(el.dataset.i);
+    if(state.moveFrom && state.moveFrom.weekIndex===state.currentWeekIndex){
+      const a = state.moveFrom.dayIndex, b = di;
+      if(a===b){ state.moveFrom=null; render(); return; }
+      const week = state.plan.weeks[state.currentWeekIndex];
+      const da = week.days[a], db_ = week.days[b];
+      const keepA = {date:da.date, dow:da.dow, id:da.id}, keepB = {date:db_.date, dow:db_.dow, id:db_.id};
+      week.days[a] = {...db_, ...keepA};
+      week.days[b] = {...da, ...keepB};
+      Store.setPlan(state.plan);
+      state.moveFrom=null;
+      showToast('Swapped');
+    }
+    return;
+  }
+  if(act==='cancel-move'){ state.moveFrom=null; render(); return; }
+  if(act==='start-move'){
+    state.moveFrom = {weekIndex:state.currentWeekIndex, dayIndex:Number(el.dataset.di)};
+    state.modal=null; render(); return;
+  }
+  if(act==='save-day'){
+    const wi = Number(el.dataset.wi), di = Number(el.dataset.di);
+    const unit = state.setup.units;
+    const type = document.getElementById('ed-type').value;
+    const km = unitToKm(Number(document.getElementById('ed-km').value)||0, unit);
+    const notes = document.getElementById('ed-notes').value;
+    const strength = document.getElementById('ed-strength').checked;
+    const day = state.plan.weeks[wi].days[di];
+    state.plan.weeks[wi].days[di] = {...day, type, km:round1(km), label:TYPE_META[type].label, notes, strength};
+    const week = state.plan.weeks[wi];
+    week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
+    Store.setPlan(state.plan);
+    state.modal=null; showToast('Day updated'); return;
+  }
+
+  if(act==='set-unit'){
+    const u = el.dataset.u;
+    if(u===state.setup.units) return;
+    state.setup.units = u;
+    Store.setSetup(state.setup);
+    render(); return;
+  }
+  if(act==='open-edit-setup'){
+    const s = state.setup;
+    state.modal = {type:'edit-setup', draft:{
+      raceKey:s.raceKey, raceDistanceKm:s.raceDistanceKm, raceDate:s.raceDate, units:s.units,
+      currentWeeklyKm:s.currentWeeklyKm,
+      recentTimeStr: s.recentTimeSec? secToClock(s.recentTimeSec):'',
+      goalTimeStr: s.goalTimeSec? secToClock(s.goalTimeSec):'',
+      longDow:s.longDow, speedDow:s.speedDow, strengthDows:s.strengthDows,
+    }};
+    render(); return;
+  }
+  if(act==='es-pick-race'){
+    const preset = RACE_PRESETS.find(r=>r.key===el.dataset.key);
+    state.modal.draft.raceKey = preset.key; state.modal.draft.raceDistanceKm = preset.km;
+    render(); return;
+  }
+  if(act==='regenerate-plan'){
+    const d = state.modal.draft;
+    const customDist = document.getElementById('es-custom-dist').value;
+    if(customDist){ d.raceKey='custom'; d.raceDistanceKm = unitToKm(Number(customDist), d.units); }
+    d.raceDate = document.getElementById('es-date').value;
+    d.currentWeeklyKm = unitToKm(Number(document.getElementById('es-weekly').value)||0, d.units);
+    const setup = {...state.setup, raceKey:d.raceKey, raceDistanceKm:d.raceDistanceKm, raceDate:d.raceDate,
+      currentWeeklyKm:d.currentWeeklyKm,
+      recentTimeSec: parseDurationToSec(document.getElementById('es-recent-time').value) || state.setup.recentTimeSec,
+      goalTimeSec: parseDurationToSec(document.getElementById('es-goal-time').value)};
+    const plan = generatePlan(setup);
+    Store.setSetup(setup); Store.setPlan(plan);
+    state.setup = setup; state.plan = plan;
+    const today = todayDate();
+    let idx = plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
+    state.currentWeekIndex = idx===-1?0:idx;
+    state.modal=null; showToast('Plan regenerated'); return;
+  }
+  if(act==='confirm-reset'){ state.modal={type:'confirm-reset'}; render(); return; }
+  if(act==='do-reset'){
+    Store.resetAll();
+    state.name=''; state.setup=null; state.plan=null; state.logs=[]; state.modal=null;
+    state.view='onboarding'; state.onboardDraft = defaultDraft();
+    render(); return;
+  }
+  if(act==='close-modal'){ state.modal=null; state.moveFrom=null; render(); return; }
+}
+
+function onInput(e){
+  if(e.target.id==='in-name'){ state.onboardDraft.name = e.target.value; }
+  if(e.target.id==='in-custom-dist'){
+    const v = Number(e.target.value);
+    if(v>0){
+      state.onboardDraft.raceKey='custom'; state.onboardDraft.raceDistanceKm = unitToKm(v, state.onboardDraft.units);
+      document.querySelectorAll('[data-act="pick-race"]').forEach(c=>c.classList.remove('active'));
+    }
+  }
+}
+function onChange(e){
+  if(e.target.id==='in-race-date'){ state.onboardDraft.raceDate = e.target.value; }
+  if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; }
+  if(e.target.id==='in-recent-time'){ state.onboardDraft.recentTime = e.target.value; }
+  if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; }
+}
+
+boot();
+})();
+</script>
+</body>
+</html>
