@@ -519,6 +519,7 @@ function defaultDraft(){
     raceKey:'half', raceDistanceKm:21.0975, raceDate:'', currentWeeklyMi: 20,
     units:'mi', recentDistanceKey:'5k', recentTime:'', goalTime:'',
     longDow:0, speedDow:3, strengthDows:[1,4],
+    restDays: clamp(7 - runsPerWeekFor(unitToKm(20,'mi')), 1, 4),
   };
 }
 
@@ -540,7 +541,7 @@ function submitOnboarding(){
     recentTimeSec: recentSec,
     goalTimeSec: goalSec,
     longDow: d.longDow, speedDow: d.speedDow, strengthDows: d.strengthDows,
-    runsPerWeek: null, strengthPerWeek: 2,
+    runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: 2,
   };
   const plan = generatePlan(setup);
   state.name = d.name.trim();
@@ -582,14 +583,22 @@ function raceLabel(setup){
   return fmtDist(setup.raceDistanceKm, setup.units||'mi',1);
 }
 
+function dowGridHtml(name, selected, multi, act){
+  return DOW_LABELS.map((l,i)=>`<button class="dow-opt ${ (multi? selected.includes(i): selected===i) ?'sel':''}" data-act="${act}" data-name="${name}" data-i="${i}" data-multi="${multi?1:0}">${l}</button>`).join('');
+}
+function restDaysChipsHtml(restDays, act){
+  return [1,2,3,4].map(n=>`<button class="chip ${restDays===n?'active':''}" data-act="${act}" data-n="${n}">${n}</button>`).join('');
+}
+
 /* ============================= render: onboarding ============================= */
 function renderOnboarding(){
   const d = state.onboardDraft;
   const presetChips = RACE_PRESETS.map(r=>`<button class="chip ${d.raceKey===r.key?'active':''}" data-act="pick-race" data-key="${r.key}">${r.label}</button>`).join('');
   const unitChips = ['mi','km'].map(u=>`<button class="chip ${d.units===u?'active':''}" data-act="pick-unit" data-u="${u}">${u==='mi'?'Miles':'Kilometers'}</button>`).join('');
   const recentChips = RACE_PRESETS.slice(0,5).map(r=>`<button class="chip ${d.recentDistanceKey===r.key?'active':''}" data-act="pick-recent" data-key="${r.key}">${r.label}</button>`).join('');
-  const dowGrid = (name, selected, multi)=> DOW_LABELS.map((l,i)=>`<button class="dow-opt ${ (multi? selected.includes(i): selected===i) ?'sel':''}" data-act="pick-dow" data-name="${name}" data-i="${i}" data-multi="${multi?1:0}">${l}</button>`).join('');
+  const dowGrid = (name, selected, multi)=> dowGridHtml(name, selected, multi, 'pick-dow');
   const weeksToRace = d.raceDate ? Math.max(1,Math.ceil((parseDate(d.raceDate)-todayDate())/86400000/7)) : null;
+  const runDaysPerWeek = clamp(7 - d.restDays, 3, 6);
 
   return `
   <div class="topbar">
@@ -642,6 +651,11 @@ function renderOnboarding(){
     </div>
 
     <div class="section-title">Weekly rhythm</div>
+    <div class="field">
+      <label class="field-label">Rest days per week</label>
+      <div class="chip-select">${restDaysChipsHtml(d.restDays, 'pick-restdays')}</div>
+      <div class="hint">${runDaysPerWeek} running day${runDaysPerWeek===1?'':'s'} per week (long run, speed/tempo, and easy runs).</div>
+    </div>
     <div class="field">
       <label class="field-label">Long run day</label>
       <div class="dow-grid">${dowGrid('longDow', d.longDow, false)}</div>
@@ -909,6 +923,7 @@ function modalEditDay(){
 function modalEditSetup(){
   const d = state.modal.draft;
   const presetChips = RACE_PRESETS.map(r=>`<button class="chip ${d.raceKey===r.key?'active':''}" data-act="es-pick-race" data-key="${r.key}">${r.label}</button>`).join('');
+  const runDaysPerWeek = clamp(7 - d.restDays, 3, 6);
   return modalShell('Edit inputs & regenerate', `
     <div class="field"><label class="field-label">Race distance</label><div class="chip-select" style="margin-bottom:8px;">${presetChips}</div>
       <input class="input" type="number" step="0.1" min="1" id="es-custom-dist" placeholder="Custom distance (${d.units})" value="${d.raceKey==='custom'?round1(kmToUnit(d.raceDistanceKm,d.units)):''}">
@@ -917,6 +932,26 @@ function modalEditSetup(){
     <div class="field"><label class="field-label">Current weekly mileage (${d.units})</label><input class="input" type="number" min="0" id="es-weekly" value="${round1(kmToUnit(d.currentWeeklyKm,d.units))}"></div>
     <div class="field"><label class="field-label">Recent race time (h:mm:ss)</label><input class="input" type="text" id="es-recent-time" value="${d.recentTimeStr||''}" placeholder="e.g. 24:30"></div>
     <div class="field"><label class="field-label">Goal time (optional)</label><input class="input" type="text" id="es-goal-time" value="${d.goalTimeStr||''}"></div>
+
+    <div class="section-title" style="margin-top:16px;">Weekly rhythm</div>
+    <div class="field">
+      <label class="field-label">Rest days per week</label>
+      <div class="chip-select">${restDaysChipsHtml(d.restDays, 'es-pick-restdays')}</div>
+      <div class="hint">${runDaysPerWeek} running day${runDaysPerWeek===1?'':'s'} per week (long run, speed/tempo, and easy runs).</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Long run day</label>
+      <div class="dow-grid">${dowGridHtml('longDow', d.longDow, false, 'es-pick-dow')}</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Speed / tempo day</label>
+      <div class="dow-grid">${dowGridHtml('speedDow', d.speedDow, false, 'es-pick-dow')}</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Strength days</label>
+      <div class="dow-grid">${dowGridHtml('strengthDows', d.strengthDows, true, 'es-pick-dow')}</div>
+    </div>
+
     <button class="btn btn-primary btn-block" data-act="regenerate-plan" style="padding:13px;">Regenerate plan</button>
   `);
 }
@@ -959,6 +994,7 @@ function onClick(e){
   }
   if(act==='pick-unit'){ state.onboardDraft.units = el.dataset.u; render(); return; }
   if(act==='pick-recent'){ state.onboardDraft.recentDistanceKey = el.dataset.key; render(); return; }
+  if(act==='pick-restdays'){ state.onboardDraft.restDays = Number(el.dataset.n); render(); return; }
   if(act==='pick-dow'){
     const name = el.dataset.name, i = Number(el.dataset.i), multi = el.dataset.multi==='1';
     if(multi){
@@ -1048,13 +1084,27 @@ function onClick(e){
       currentWeeklyKm:s.currentWeeklyKm,
       recentTimeStr: s.recentTimeSec? secToClock(s.recentTimeSec):'',
       goalTimeStr: s.goalTimeSec? secToClock(s.goalTimeSec):'',
-      longDow:s.longDow, speedDow:s.speedDow, strengthDows:s.strengthDows,
+      longDow:s.longDow, speedDow:s.speedDow, strengthDows:[...s.strengthDows],
+      restDays: clamp(7 - (s.runsPerWeek || runsPerWeekFor(s.currentWeeklyKm)), 1, 4),
     }};
     render(); return;
   }
   if(act==='es-pick-race'){
     const preset = RACE_PRESETS.find(r=>r.key===el.dataset.key);
     state.modal.draft.raceKey = preset.key; state.modal.draft.raceDistanceKm = preset.km;
+    render(); return;
+  }
+  if(act==='es-pick-restdays'){ state.modal.draft.restDays = Number(el.dataset.n); render(); return; }
+  if(act==='es-pick-dow'){
+    const name = el.dataset.name, i = Number(el.dataset.i), multi = el.dataset.multi==='1';
+    const draft = state.modal.draft;
+    if(multi){
+      const arr = draft[name];
+      const idx = arr.indexOf(i);
+      if(idx===-1) arr.push(i); else arr.splice(idx,1);
+    } else {
+      draft[name] = i;
+    }
     render(); return;
   }
   if(act==='regenerate-plan'){
@@ -1066,7 +1116,9 @@ function onClick(e){
     const setup = {...state.setup, raceKey:d.raceKey, raceDistanceKm:d.raceDistanceKm, raceDate:d.raceDate,
       currentWeeklyKm:d.currentWeeklyKm,
       recentTimeSec: parseDurationToSec(document.getElementById('es-recent-time').value) || state.setup.recentTimeSec,
-      goalTimeSec: parseDurationToSec(document.getElementById('es-goal-time').value)};
+      goalTimeSec: parseDurationToSec(document.getElementById('es-goal-time').value),
+      longDow:d.longDow, speedDow:d.speedDow, strengthDows:d.strengthDows,
+      runsPerWeek: clamp(7 - d.restDays, 3, 6)};
     const plan = generatePlan(setup);
     Store.setSetup(setup); Store.setPlan(plan);
     state.setup = setup; state.plan = plan;
