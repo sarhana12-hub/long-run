@@ -271,7 +271,42 @@ function interp(anchors, x){
   }
   return anchors[anchors.length-1][1];
 }
-function riegel(t1,d1,d2){ return t1*Math.pow(d2/d1,1.06); }
+/* Jack Daniels' VDOT model — two published equations tie one fitness number (VDOT) to
+   every training pace:
+     VO2 (ml/kg/min) sustained at velocity v (m/min):  VO2 = -4.60 + 0.182258v + 0.000104v^2
+     %VO2max sustainable racing for t minutes:          %max(t) = 0.8 + 0.1894393e^(-0.012778t)
+                                                                      + 0.2989558e^(-0.1932605t)
+   VDOT = VO2(race velocity) / %max(race time). Everything below is a straight application of
+   those two equations — no flat percentage guesses. */
+function vo2FromVelocity(vMetersPerMin){ return -4.60 + 0.182258*vMetersPerMin + 0.000104*vMetersPerMin*vMetersPerMin; }
+function velocityFromVO2(vo2){
+  const a=0.000104, b=0.182258, c=-(4.60+vo2);
+  return (-b + Math.sqrt(b*b - 4*a*c)) / (2*a); // meters per minute
+}
+function pctMaxForDurationMin(tMin){ return 0.8 + 0.1894393*Math.exp(-0.012778*tMin) + 0.2989558*Math.exp(-0.1932605*tMin); }
+function vdotFromRace(distanceKm, timeSec){
+  const tMin = timeSec/60;
+  const v = (distanceKm*1000)/tMin;
+  return vo2FromVelocity(v) / pctMaxForDurationMin(tMin);
+}
+function paceSecPerKmFromVdotPct(vdot, pct){
+  const v = velocityFromVO2(vdot*pct); // m/min
+  return (1000/v)*60; // sec/km
+}
+// The time it'd take to race `distanceKm` at this VDOT — solved by fixed-point iteration
+// since %max depends on the very time being solved for (a handful of iterations converges,
+// the %max(t) curve is smooth and well-behaved over realistic race durations).
+function predictedTimeMinFromVdot(vdot, distanceKm){
+  let tMin = distanceKm*4.5;
+  for(let i=0;i<8;i++){
+    const v = velocityFromVO2(vdot*pctMaxForDurationMin(tMin));
+    tMin = (distanceKm*1000)/v;
+  }
+  return tMin;
+}
+function predictedPaceSecPerKmFromVdot(vdot, distanceKm){
+  return (predictedTimeMinFromVdot(vdot, distanceKm)*60)/distanceKm;
+}
 
 function parseDurationToSec(str){
   if(!str) return null;
@@ -370,28 +405,38 @@ function scheduleWarnings(week){
   return warnings;
 }
 
-function basePredicted5kSec(setup){
+function baseVdot(setup){
   if(setup.recentDistanceKm && setup.recentTimeSec){
-    return riegel(setup.recentTimeSec, setup.recentDistanceKm, 5);
+    return vdotFromRace(setup.recentDistanceKm, setup.recentTimeSec);
   }
+  // No recent race given: fall back to a rough 5K-equivalent time by weekly mileage
+  // tier, then convert that into the same VDOT currency as everything else.
   const tierPace = interp([[10,7.5*60],[30,6.6*60],[50,5.9*60],[80,5.3*60]], setup.currentWeeklyKm||20);
-  return tierPace*5;
+  return vdotFromRace(5, tierPace*5);
 }
-// Easy/tempo/interval are flat multiples of 5K-equivalent pace, cross-checked against
-// Jack Daniels' VDOT tables (e.g. VDOT 43: easy ~9:15-9:50/mi, tempo ~7:38-7:43/mi,
-// interval ~7:00-7:05/mi — this table reproduces all three within a few sec/mi).
-// Long run pace is NOT a flat multiple of 5K pace: it's anchored to the Riegel-predicted
-// marathon-equivalent pace plus a small cushion, matching how modern coached plans
-// (Runna-style) treat the long run as aerobically purposeful rather than just "easy effort" —
-// a flat 33%-off-5K-pace long run runs meaningfully slower than that convention.
-const PACE_MULTIPLIERS = { easyPerKm:1.30, tempoPerKm:1.07, intervalPerKm:0.97 };
+// Every training pace comes from the SAME vdot number, so easy/tempo/interval/long-run
+// paces stay correctly related to each other for any fitness level — not four separate
+// formulas that can drift apart. %VO2max targets are Daniels' own definitions of each pace,
+// not guessed constants: Threshold = the pace sustainable for ~60 minutes of racing,
+// Interval = ~11 minutes (both run through the same %max(t) curve above), Easy = his
+// textbook reference point (59-74% range; 70% is the standard single-value pick), and
+// Marathon = %max at THIS runner's own predicted marathon time — solved from their vdot,
+// so a fast marathoner's M-pace sits closer to threshold than a slower marathoner's, the
+// way Daniels' published tables actually behave (not one fixed percent for everyone).
+const EASY_PCT = 0.70;
+const THRESHOLD_PCT = pctMaxForDurationMin(60);
+const INTERVAL_PCT = 0.975;
 const LONG_VS_MARATHON = 1.03;
-function paceZonesFromPredicted5k(predicted5kSec){
-  const p5kPerKm = predicted5kSec/5;
-  const marathonPerKm = riegel(predicted5kSec, 5, 42.195)/42.195;
-  const zones = { marathonPerKm, longPerKm: marathonPerKm*LONG_VS_MARATHON };
-  for(const key in PACE_MULTIPLIERS) zones[key] = p5kPerKm*PACE_MULTIPLIERS[key];
-  return zones;
+function paceZonesFromVdot(vdot){
+  const marathonPct = pctMaxForDurationMin(predictedTimeMinFromVdot(vdot, 42.195));
+  const marathonPerKm = paceSecPerKmFromVdotPct(vdot, marathonPct);
+  return {
+    easyPerKm: paceSecPerKmFromVdotPct(vdot, EASY_PCT),
+    tempoPerKm: paceSecPerKmFromVdotPct(vdot, THRESHOLD_PCT),
+    intervalPerKm: paceSecPerKmFromVdotPct(vdot, INTERVAL_PCT),
+    marathonPerKm,
+    longPerKm: marathonPerKm*LONG_VS_MARATHON,
+  };
 }
 
 /* Recalibration: blend the deterministic fitness projection with real performance
@@ -407,41 +452,49 @@ function findPlanDay(plan, date){
   }
   return null;
 }
+// Which %VO2max a logged pace should be inverted through, keyed by the same paceKey
+// buildWorkoutMeta assigns to that workout type (overunder shares tempo's key already).
+const RECALIBRATION_PCT = { tempoPerKm: THRESHOLD_PCT, intervalPerKm: INTERVAL_PCT };
+function impliedVdotFromPace(actualPaceSecPerKm, pct){
+  const vMetersPerMin = 60000/actualPaceSecPerKm;
+  return vo2FromVelocity(vMetersPerMin)/pct;
+}
 function computeRecalibration(plan, logs){
   const matches = [];
   for(const log of logs){
     const day = findPlanDay(plan, log.date);
-    if(day && RECALIBRATION_TYPES.includes(day.type) && day.paceKey && PACE_MULTIPLIERS[day.paceKey] && log.distanceKm>0){
+    const pct = day && RECALIBRATION_TYPES.includes(day.type) ? RECALIBRATION_PCT[day.paceKey] : null;
+    if(pct && log.distanceKm>0){
       const actualPaceSecPerKm = log.durationSec/log.distanceKm;
-      const impliedPredicted5k = (actualPaceSecPerKm/PACE_MULTIPLIERS[day.paceKey])*5;
-      matches.push({date:log.date, impliedPredicted5k});
+      const impliedVdot = impliedVdotFromPace(actualPaceSecPerKm, pct);
+      matches.push({date:log.date, impliedVdot});
     }
   }
   if(!matches.length) return null;
   matches.sort((a,b)=> a.date<b.date?1:-1);
   const recent = matches.slice(0,3);
-  const perfImplied5k = recent.reduce((s,m)=>s+m.impliedPredicted5k,0)/recent.length;
+  const perfImpliedVdot = recent.reduce((s,m)=>s+m.impliedVdot,0)/recent.length;
   const weight = recent.length===1?0.25:recent.length===2?0.35:0.45;
-  return {perfImplied5k, weight, count:recent.length};
+  return {perfImpliedVdot, weight, count:recent.length};
 }
 function getWeekPaces(plan, week, logs){
-  if(plan.startPredicted5kSec==null){
-    return week.paces || plan.paces; // plans saved before recalibration existed
+  if(plan.startVdot==null){
+    return week.paces || plan.paces; // plans saved before the vdot model existed
   }
   const frac = week.weekIndex>=plan.buildWeeksCount ? 1 : clamp(week.weekIndex/plan.rampWeeks, 0, 1);
-  const baseline5k = plan.startPredicted5kSec + (plan.endPredicted5kSec-plan.startPredicted5kSec)*frac;
+  const baselineVdot = plan.startVdot + (plan.endVdot-plan.startVdot)*frac;
   const weekStartDate = parseDate(week.weekStart);
   const isPastWeek = addDays(weekStartDate,6) < todayDate();
 
-  let effective5k = baseline5k;
-  let effectiveEnd5k = plan.endPredicted5kSec;
+  let effectiveVdot = baselineVdot;
+  let effectiveEndVdot = plan.endVdot;
   const recal = isPastWeek ? null : computeRecalibration(plan, logs);
   if(recal){
-    effective5k = baseline5k*(1-recal.weight) + recal.perfImplied5k*recal.weight;
-    effectiveEnd5k = plan.endPredicted5kSec*(1-recal.weight) + recal.perfImplied5k*recal.weight;
+    effectiveVdot = baselineVdot*(1-recal.weight) + recal.perfImpliedVdot*recal.weight;
+    effectiveEndVdot = plan.endVdot*(1-recal.weight) + recal.perfImpliedVdot*recal.weight;
   }
-  const zones = paceZonesFromPredicted5k(effective5k);
-  zones.racePerKm = plan.goalRacePerKm!=null ? plan.goalRacePerKm : riegel(effectiveEnd5k,5,plan.raceDistanceKm)/plan.raceDistanceKm;
+  const zones = paceZonesFromVdot(effectiveVdot);
+  zones.racePerKm = plan.goalRacePerKm!=null ? plan.goalRacePerKm : predictedPaceSecPerKmFromVdot(effectiveEndVdot, plan.raceDistanceKm);
   return zones;
 }
 
@@ -606,15 +659,17 @@ function generatePlan(setup){
   // Pace progression: training paces ramp from current fitness (start) toward a
   // fitter projection (end) across base/build/peak, then hold flat through taper —
   // tapering makes you fresher, not fitter, so peak-week paces carry through.
-  const startPredicted5k = basePredicted5kSec(setup);
-  let endPredicted5k;
+  const startVdot = baseVdot(setup);
+  let endVdot;
   if(setup.goalTimeSec && raceKm){
-    endPredicted5k = Math.min(riegel(setup.goalTimeSec, raceKm, 5), startPredicted5k);
+    // A goal implies a vdot; fitness can't regress just because the goal is modest, so
+    // end-of-plan vdot is never allowed to fall below where the runner already is.
+    endVdot = Math.max(vdotFromRace(raceKm, setup.goalTimeSec), startVdot);
   } else {
     const improvementFrac = clamp(buildWeeksCount*0.006, 0, 0.08);
-    endPredicted5k = startPredicted5k*(1-improvementFrac);
+    endVdot = startVdot*(1+improvementFrac);
   }
-  const racePerKm = (setup.goalTimeSec && raceKm) ? setup.goalTimeSec/raceKm : riegel(endPredicted5k,5,raceKm)/raceKm;
+  const racePerKm = (setup.goalTimeSec && raceKm) ? setup.goalTimeSec/raceKm : predictedPaceSecPerKmFromVdot(endVdot, raceKm);
   const rampWeeks = Math.max(buildWeeksCount-1, 1);
 
   const longDow = setup.longDow ?? 0;
@@ -634,8 +689,8 @@ function generatePlan(setup){
     const longKm = isRaceWeek ? Math.min(achievablePeakLongKm*0.3, weeklyKm*0.3) : Math.min(rampedLongKm, weeklyKm*0.5);
 
     const frac = w>=buildWeeksCount ? 1 : clamp(w/rampWeeks, 0, 1);
-    const weekPredicted5k = startPredicted5k + (endPredicted5k-startPredicted5k)*frac;
-    const weekPaces = paceZonesFromPredicted5k(weekPredicted5k);
+    const weekVdot = startVdot + (endVdot-startVdot)*frac;
+    const weekPaces = paceZonesFromVdot(weekVdot);
     weekPaces.racePerKm = racePerKm;
 
     const days = [];
@@ -737,7 +792,7 @@ function generatePlan(setup){
 
   return {
     generatedAt:new Date().toISOString(), raceDate:setup.raceDate, raceDistanceKm:raceKm, totalWeeks,
-    startPredicted5kSec:startPredicted5k, endPredicted5kSec:endPredicted5k, buildWeeksCount, rampWeeks,
+    startVdot, endVdot, buildWeeksCount, rampWeeks,
     goalRacePerKm: (setup.goalTimeSec && raceKm) ? setup.goalTimeSec/raceKm : null,
     paces:weeks[0].paces, weeks,
   };
@@ -1369,7 +1424,7 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
   }
 
   const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', race:'race-day runs'};
-  const eligible = RECALIBRATION_TYPES.includes(day.type) && day.paceKey && PACE_MULTIPLIERS[day.paceKey];
+  const eligible = RECALIBRATION_TYPES.includes(day.type) && day.paceKey && RECALIBRATION_PCT[day.paceKey];
   let impactLine;
   if(!eligible){
     const noun = NONELIGIBLE_NOUNS[day.type];
