@@ -307,9 +307,20 @@ function runsPerWeekFor(currentKm){
 // coaching guideline, vs. any specific day-of-week), and strength lands on the recovery
 // day right after the long run and right after the speed day. Anyone can still move
 // things around afterward with the day-swap feature.
-function deriveScheduleFromLongDow(longDow){
+function deriveScheduleFromLongDow(longDow, strengthPerWeek){
   const speedDow = (longDow+3) % 7;
-  const strengthDows = [(longDow+1)%7, (longDow+4)%7];
+  if(strengthPerWeek==null) strengthPerWeek = 2;
+  // Prefer the day right after the long run, then the day right after the speed day —
+  // both pair strength with a recovery day rather than a hard one. If more are wanted,
+  // fill in from whatever's left, skipping the day immediately before either hard day.
+  const idealOrder = [(longDow+1)%7, (speedDow+1)%7];
+  const badDows = new Set([longDow, speedDow, (longDow+6)%7, (speedDow+6)%7]);
+  const strengthDows = [];
+  idealOrder.forEach(dw=>{ if(strengthDows.length<strengthPerWeek && !strengthDows.includes(dw)) strengthDows.push(dw); });
+  for(let offset=0; offset<7 && strengthDows.length<strengthPerWeek; offset++){
+    const dw = (longDow+offset)%7;
+    if(!strengthDows.includes(dw) && !badDows.has(dw)) strengthDows.push(dw);
+  }
   return { speedDow, strengthDows };
 }
 
@@ -778,7 +789,7 @@ function defaultDraft(){
     longDow:0,
     restDays: clamp(7 - runsPerWeekFor(unitToKm(20,'mi')), 1, 4),
     maxLongRunMi: '', maxWeeklyMi: '',
-    longRunEmphasis: 'balanced', speedEmphasis: 'balanced',
+    longRunEmphasis: 'balanced', speedEmphasis: 'balanced', strengthPerWeek: 2,
   };
 }
 const LONG_DISTANCE_CAP_THRESHOLD_KM = 21.0975; // half marathon and up get optional long-run/volume caps
@@ -800,8 +811,8 @@ function submitOnboarding(){
     recentDistanceKm: recentPreset? recentPreset.km : null,
     recentTimeSec: recentSec,
     goalTimeSec: goalSec,
-    longDow: d.longDow, ...deriveScheduleFromLongDow(d.longDow),
-    runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: 2,
+    longDow: d.longDow, ...deriveScheduleFromLongDow(d.longDow, d.strengthPerWeek),
+    runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: d.strengthPerWeek,
     maxLongRunKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxLongRunMi) ? unitToKm(Number(d.maxLongRunMi), d.units) : null,
     maxWeeklyKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxWeeklyMi) ? unitToKm(Number(d.maxWeeklyMi), d.units) : null,
     longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis,
@@ -855,6 +866,9 @@ function restDaysChipsHtml(restDays, act){
 const EMPHASIS_LEVELS = [{key:'low', label:'Less'}, {key:'balanced', label:'Balanced'}, {key:'high', label:'More'}];
 function emphasisChipsHtml(value, act){
   return EMPHASIS_LEVELS.map(l=>`<button class="chip ${value===l.key?'active':''}" data-act="${act}" data-key="${l.key}">${l.label}</button>`).join('');
+}
+function strengthCountChipsHtml(value, act){
+  return [0,1,2,3].map(n=>`<button class="chip ${value===n?'active':''}" data-act="${act}" data-n="${n}">${n===0?'None':n}</button>`).join('');
 }
 
 /* ============================= render: onboarding ============================= */
@@ -942,6 +956,11 @@ function renderOnboarding(){
       <label class="field-label">Speed work emphasis</label>
       <div class="chip-select">${emphasisChipsHtml(d.speedEmphasis, 'pick-speed-emphasis')}</div>
       <div class="hint">More adds a second quality session most weeks; less saves speed work for closer to race day.</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Strength days per week</label>
+      <div class="chip-select">${strengthCountChipsHtml(d.strengthPerWeek, 'pick-strength-count')}</div>
+      <div class="hint">Placed the day after your long run and/or speed day, so it pairs with recovery instead of adding to a hard day.</div>
     </div>
 
     <div class="section-title">Weekly rhythm</div>
@@ -1339,6 +1358,10 @@ function modalEditSetup(){
       <label class="field-label">Speed work emphasis</label>
       <div class="chip-select">${emphasisChipsHtml(d.speedEmphasis, 'es-pick-speed-emphasis')}</div>
     </div>
+    <div class="field">
+      <label class="field-label">Strength days per week</label>
+      <div class="chip-select">${strengthCountChipsHtml(d.strengthPerWeek, 'es-pick-strength-count')}</div>
+    </div>
 
     <div class="section-title" style="margin-top:16px;">Weekly rhythm</div>
     <div class="field">
@@ -1397,6 +1420,7 @@ function onClick(e){
   if(act==='pick-restdays'){ state.onboardDraft.restDays = Number(el.dataset.n); render(); return; }
   if(act==='pick-long-emphasis'){ state.onboardDraft.longRunEmphasis = el.dataset.key; render(); return; }
   if(act==='pick-speed-emphasis'){ state.onboardDraft.speedEmphasis = el.dataset.key; render(); return; }
+  if(act==='pick-strength-count'){ state.onboardDraft.strengthPerWeek = Number(el.dataset.n); render(); return; }
   if(act==='pick-dow'){
     const name = el.dataset.name, i = Number(el.dataset.i), multi = el.dataset.multi==='1';
     if(multi){
@@ -1505,6 +1529,7 @@ function onClick(e){
       maxLongRunMi: s.maxLongRunKm ? round1(kmToUnit(s.maxLongRunKm,s.units)) : '',
       maxWeeklyMi: s.maxWeeklyKm ? round1(kmToUnit(s.maxWeeklyKm,s.units)) : '',
       longRunEmphasis: s.longRunEmphasis || 'balanced', speedEmphasis: s.speedEmphasis || 'balanced',
+      strengthPerWeek: s.strengthPerWeek==null ? 2 : s.strengthPerWeek,
     }};
     render(); return;
   }
@@ -1517,6 +1542,7 @@ function onClick(e){
   if(act==='es-pick-restdays'){ state.modal.draft.restDays = Number(el.dataset.n); render(); return; }
   if(act==='es-pick-long-emphasis'){ state.modal.draft.longRunEmphasis = el.dataset.key; render(); return; }
   if(act==='es-pick-speed-emphasis'){ state.modal.draft.speedEmphasis = el.dataset.key; render(); return; }
+  if(act==='es-pick-strength-count'){ state.modal.draft.strengthPerWeek = Number(el.dataset.n); render(); return; }
   if(act==='es-pick-dow'){
     const name = el.dataset.name, i = Number(el.dataset.i), multi = el.dataset.multi==='1';
     const draft = state.modal.draft;
@@ -1543,8 +1569,8 @@ function onClick(e){
       recentDistanceKm: recentPreset ? recentPreset.km : null,
       recentTimeSec: parseDurationToSec(document.getElementById('es-recent-time').value) || state.setup.recentTimeSec,
       goalTimeSec: parseDurationToSec(document.getElementById('es-goal-time').value),
-      longDow:d.longDow, ...deriveScheduleFromLongDow(d.longDow),
-      runsPerWeek: clamp(7 - d.restDays, 3, 6),
+      longDow:d.longDow, ...deriveScheduleFromLongDow(d.longDow, d.strengthPerWeek),
+      runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: d.strengthPerWeek,
       maxLongRunKm: (maxLongEl && maxLongEl.value) ? unitToKm(Number(maxLongEl.value), d.units) : null,
       maxWeeklyKm: (maxWeeklyEl && maxWeeklyEl.value) ? unitToKm(Number(maxWeeklyEl.value), d.units) : null,
       longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis};
