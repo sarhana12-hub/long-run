@@ -877,6 +877,11 @@ function showLiveToast(msg){
   clearTimeout(el._hideTimer);
   el._hideTimer = setTimeout(()=>{ el.style.display = 'none'; }, 2200);
 }
+// How long a pace-hint field waits for a pause in typing before computing/showing the
+// derived pace — avoids flashing a nonsense pace off a duration that's still mid-type.
+const PACE_HINT_DEBOUNCE_MS = 700;
+let recentPaceHintTimer = null;
+let lrPaceHintTimer = null;
 
 /* ============================= bootstrap ============================= */
 function boot(){
@@ -1907,8 +1912,18 @@ function onInput(e){
     const formatted = formatDurationDigits(e.target.value);
     e.target.value = formatted;
     state.onboardDraft.recentTime = formatted;
+    // Debounced: a partial value like "2:23" mid-type into "22:30" parses as a real
+    // (wrong) duration, so showing the derived pace/animal on every keystroke flashes
+    // nonsense. Wait for a short pause in typing before computing it for real.
     const hintEl = document.getElementById('recent-pace-hint');
-    if(hintEl) hintEl.textContent = recentPaceHint(state.onboardDraft);
+    if(hintEl){
+      hintEl.textContent = 'Enter a finish time to see your pace per mile.';
+      clearTimeout(recentPaceHintTimer);
+      recentPaceHintTimer = setTimeout(()=>{
+        const el2 = document.getElementById('recent-pace-hint');
+        if(el2) el2.textContent = recentPaceHint(state.onboardDraft);
+      }, PACE_HINT_DEBOUNCE_MS);
+    }
   }
   if(state.modal && state.modal.type==='log-run'){
     const d = state.modal.data;
@@ -1921,7 +1936,14 @@ function onInput(e){
     if(e.target.id==='lr-notes'){ d.notes = e.target.value; }
     if(e.target.id==='lr-time' || e.target.id==='lr-dist'){
       const hintEl = document.getElementById('lr-pace-hint');
-      if(hintEl) hintEl.textContent = logPaceHint(d, state.setup.units);
+      if(hintEl){
+        hintEl.textContent = 'Enter distance and time to see your pace per mile.';
+        clearTimeout(lrPaceHintTimer);
+        lrPaceHintTimer = setTimeout(()=>{
+          const el2 = document.getElementById('lr-pace-hint');
+          if(el2) el2.textContent = logPaceHint(d, state.setup.units);
+        }, PACE_HINT_DEBOUNCE_MS);
+      }
     }
   }
 }
