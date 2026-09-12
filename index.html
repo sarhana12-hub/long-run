@@ -393,14 +393,33 @@ function buildWorkoutMeta(day, raceDistanceKm){
 function renderWorkoutText(day, weekPaces, unit, fmt){
   if(!day.descBase) return '';
   let text = day.descBase;
-  if(day.paceKey && weekPaces && weekPaces[day.paceKey]!=null) text += ` @ ${paceOrSpeedStr(weekPaces[day.paceKey], unit, fmt)}`;
+  if(day.paceKey){
+    const p = day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : (weekPaces && weekPaces[day.paceKey]);
+    if(p!=null) text += ` @ ${paceOrSpeedStr(p, unit, fmt)}`;
+  }
   if(day.paceKey2 && weekPaces && weekPaces[day.paceKey2]!=null) text += ` (${day.desc2} @ ${paceOrSpeedStr(weekPaces[day.paceKey2], unit, fmt)})`;
   return text;
 }
 function dayDisplayText(day, weekPaces, unit, fmt){
-  if(day.notesOverride!=null) return day.notesOverride;
   if(day.descBase==null && day.notes!=null) return day.notes; // plans saved before this update
   return renderWorkoutText(day, weekPaces, unit, fmt);
+}
+function paceInputValue(effectiveSecPerKm, unit, fmt){
+  if(effectiveSecPerKm==null) return '';
+  const secPerUnit = unit==='mi' ? effectiveSecPerKm*KM_PER_MI : effectiveSecPerKm;
+  if(fmt==='speed') return (3600/secPerUnit).toFixed(1);
+  return secToClock(secPerUnit);
+}
+function parsePaceInput(val, unit, fmt){
+  if(fmt==='speed'){
+    const mph = Number(val);
+    if(!mph || mph<=0) return null;
+    const secPerUnit = 3600/mph;
+    return unit==='mi' ? secPerUnit/KM_PER_MI : secPerUnit;
+  }
+  const secPerUnit = parseDurationToSec(val);
+  if(secPerUnit==null) return null;
+  return unit==='mi' ? secPerUnit/KM_PER_MI : secPerUnit;
 }
 
 function generatePlan(setup){
@@ -1031,18 +1050,35 @@ function modalLogRun(){
 }
 
 function modalEditDay(){
-  const {weekIndex, dayIndex} = state.modal;
-  const day = state.plan.weeks[weekIndex].days[dayIndex];
+  const {weekIndex, dayIndex, draft} = state.modal;
   const week = state.plan.weeks[weekIndex];
-  const unit = state.setup.units;
-  const typeOpts = Object.keys(TYPE_META).map(t=>`<option value="${t}" ${day.type===t?'selected':''}>${TYPE_META[t].label}</option>`).join('');
+  const day = week.days[dayIndex];
+  const unit = state.setup.units, fmt = state.paceFormat;
+  const typeOpts = Object.keys(TYPE_META).map(t=>`<option value="${t}" ${draft.type===t?'selected':''}>${TYPE_META[t].label}</option>`).join('');
+  const weekPaces = getWeekPaces(state.plan, week, state.logs);
+  const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength}, state.plan.raceDistanceKm);
+  const previewDay = {...meta, paceOverrideSecPerKm: draft.paceOverrideSecPerKm};
+  const description = renderWorkoutText(previewDay, weekPaces, unit, fmt) || 'No planned distance for this day.';
+  const recommendedSecPerKm = meta.paceKey ? weekPaces[meta.paceKey] : null;
+  const effectiveSecPerKm = draft.paceOverrideSecPerKm!=null ? draft.paceOverrideSecPerKm : recommendedSecPerKm;
+  const speedUnitLabel = unit==='mi' ? 'mph' : 'km/h';
+
   return modalShell(`Edit ${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}`, `
     <div class="field"><label class="field-label">Workout type</label><select class="input" id="ed-type">${typeOpts}</select></div>
-    <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" step="0.1" min="0" id="ed-km" value="${round1(kmToUnit(day.km,unit))}"></div>
-    <div class="field"><label class="field-label">Notes</label><textarea class="input" id="ed-notes" rows="3">${esc(dayDisplayText(day, getWeekPaces(state.plan, week, state.logs), unit, state.paceFormat))}</textarea></div>
+    <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" step="0.1" min="0" id="ed-km" value="${round1(kmToUnit(draft.km,unit))}"></div>
+    <div class="field">
+      <label class="field-label">Today's run</label>
+      <div class="input" style="color:var(--ink-soft); background:var(--surface-2);">${esc(description)}</div>
+    </div>
+    ${meta.paceKey ? `
+    <div class="field">
+      <label class="field-label">Target ${fmt==='speed'?`speed (${speedUnitLabel})`:'pace'}</label>
+      <input class="input" type="${fmt==='speed'?'number':'text'}" ${fmt==='speed'?'step="0.1" min="0"':''} id="ed-pace" value="${paceInputValue(effectiveSecPerKm, unit, fmt)}" placeholder="${fmt==='speed'?'e.g. 7.1':'e.g. 8:30'}">
+      <div class="hint">Recommended: ${recommendedSecPerKm!=null?paceOrSpeedStr(recommendedSecPerKm,unit,fmt):'—'}${draft.paceOverrideSecPerKm!=null?' · <a class="link-btn" data-act="reset-day-pace" style="cursor:pointer;">Reset to recommended</a>':''}</div>
+    </div>` : ''}
     <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
       <label class="field-label" style="margin:0;">Add strength session</label>
-      <input type="checkbox" id="ed-strength" ${day.strength?'checked':''} style="width:20px; height:20px;">
+      <input type="checkbox" id="ed-strength" ${draft.strength?'checked':''} style="width:20px; height:20px;">
     </div>
     <div class="row" style="margin-top:6px;">
       <button class="btn" data-act="start-move" data-di="${dayIndex}">${ICONS.move} Swap with another day</button>
@@ -1162,7 +1198,15 @@ function onClick(e){
 
   if(act==='open-day'){
     const di = Number(el.dataset.i);
-    state.modal={type:'edit-day', weekIndex:state.currentWeekIndex, dayIndex:di};
+    const day = state.plan.weeks[state.currentWeekIndex].days[di];
+    state.modal={type:'edit-day', weekIndex:state.currentWeekIndex, dayIndex:di, draft:{
+      type: day.type, km: day.km, strength: day.strength,
+      paceOverrideSecPerKm: day.paceOverrideSecPerKm ?? null,
+    }};
+    render(); return;
+  }
+  if(act==='reset-day-pace'){
+    state.modal.draft.paceOverrideSecPerKm = null;
     render(); return;
   }
   if(act==='move-target'){
@@ -1188,13 +1232,10 @@ function onClick(e){
   }
   if(act==='save-day'){
     const wi = Number(el.dataset.wi), di = Number(el.dataset.di);
-    const unit = state.setup.units;
-    const type = document.getElementById('ed-type').value;
-    const km = unitToKm(Number(document.getElementById('ed-km').value)||0, unit);
-    const notes = document.getElementById('ed-notes').value;
-    const strength = document.getElementById('ed-strength').checked;
+    const draft = state.modal.draft;
     const day = state.plan.weeks[wi].days[di];
-    state.plan.weeks[wi].days[di] = {...day, type, km:round1(km), label:TYPE_META[type].label, notesOverride:notes, strength};
+    const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength}, state.plan.raceDistanceKm);
+    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta};
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     Store.setPlan(state.plan);
@@ -1290,13 +1331,17 @@ function onChange(e){
   if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; }
   if(e.target.id==='in-recent-time'){ state.onboardDraft.recentTime = e.target.value; }
   if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; }
-  if(e.target.id==='ed-type' && state.modal && state.modal.type==='edit-day'){
-    const week = state.plan.weeks[state.modal.weekIndex];
+  if(state.modal && state.modal.type==='edit-day'){
+    const draft = state.modal.draft;
     const unit = state.setup.units;
-    const kmVal = unitToKm(Number(document.getElementById('ed-km').value)||0, unit);
-    const strengthVal = document.getElementById('ed-strength').checked;
-    const meta = buildWorkoutMeta({type:e.target.value, km:kmVal, strength:strengthVal}, state.plan.raceDistanceKm);
-    document.getElementById('ed-notes').value = renderWorkoutText(meta, getWeekPaces(state.plan, week, state.logs), unit, state.paceFormat);
+    if(e.target.id==='ed-type'){ draft.type = e.target.value; render(); return; }
+    if(e.target.id==='ed-km'){ draft.km = unitToKm(Number(e.target.value)||0, unit); render(); return; }
+    if(e.target.id==='ed-strength'){ draft.strength = e.target.checked; render(); return; }
+    if(e.target.id==='ed-pace'){
+      const secPerKm = parsePaceInput(e.target.value, unit, state.paceFormat);
+      if(secPerKm!=null) draft.paceOverrideSecPerKm = secPerKm;
+      render(); return;
+    }
   }
 }
 
