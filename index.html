@@ -862,6 +862,21 @@ const state = {
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function showToast(msg){ state.toast = msg; render(); setTimeout(()=>{ state.toast=null; render(); }, 2200); }
+// A toast that bypasses render() entirely — for use while a text field is being live-typed
+// into, where a normal showToast()'s render() would steal focus mid-keystroke.
+function showLiveToast(msg){
+  let el = document.getElementById('live-toast');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'live-toast';
+    el.className = 'toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(()=>{ el.style.display = 'none'; }, 2200);
+}
 
 /* ============================= bootstrap ============================= */
 function boot(){
@@ -1039,12 +1054,44 @@ function formatDurationDigits(raw){
   const hhLen = digits.length-4;
   return digits.slice(0,hhLen)+':'+digits.slice(hhLen,hhLen+2)+':'+digits.slice(hhLen+2);
 }
+// Approximate typical running speeds (mph), roughly ordered slow to fast — not lab-precise,
+// just plausible fun-fact territory. Several entries cluster in the 4-9mph band since that's
+// where most recreational race paces (7-15 min/mi) actually land.
+const ANIMAL_PACES_MPH = [
+  {name:'a garden snail', mph:0.03},
+  {name:'a giant tortoise', mph:0.2},
+  {name:'a hedgehog', mph:4},
+  {name:'a beaver', mph:5},
+  {name:'an opossum', mph:6},
+  {name:'a skunk', mph:7},
+  {name:'a groundhog', mph:8},
+  {name:'a chicken', mph:9},
+  {name:'a domestic pig', mph:11},
+  {name:'a squirrel', mph:12},
+  {name:'a wild turkey', mph:15},
+  {name:'a raccoon', mph:15},
+  {name:'a black bear', mph:25},
+  {name:'an elephant', mph:25},
+  {name:'a giraffe', mph:32},
+  {name:'a greyhound', mph:45},
+  {name:'a cheetah', mph:70},
+];
+// Picks from among the closest few matches (not always the single nearest) so entering a
+// similar pace twice doesn't always name the same animal.
+function animalPaceComparison(mph){
+  if(!mph || mph<=0) return '';
+  const closest = ANIMAL_PACES_MPH.map(a=>({...a, diff:Math.abs(a.mph-mph)})).sort((a,b)=>a.diff-b.diff);
+  const pool = closest.slice(0, Math.min(3, closest.length));
+  const pick = pool[Math.floor(Math.random()*pool.length)];
+  return `about the running pace of ${pick.name}`;
+}
 function recentPaceHint(d){
   const preset = RACE_PRESETS.find(r=>r.key===d.recentDistanceKey);
   const sec = parseDurationToSec(d.recentTime);
   if(!preset || !sec) return 'Enter a finish time to see your pace per mile.';
   const secPerKm = sec/preset.km;
-  return `That's about ${paceStr(secPerKm,'mi')} pace.`;
+  const mph = 3600/(secPerKm*KM_PER_MI);
+  return `That's about ${paceStr(secPerKm,'mi')} pace — ${animalPaceComparison(mph)}.`;
 }
 
 function renderOnboardStep2(d){
@@ -1829,7 +1876,11 @@ function onClick(e){
 }
 
 function onInput(e){
-  if(e.target.id==='in-name'){ state.onboardDraft.name = e.target.value; }
+  if(e.target.id==='in-name'){
+    state.onboardDraft.name = e.target.value;
+    const n = e.target.value.trim().toLowerCase();
+    if(n==='lexi' || n==='lexi willis') showLiveToast("That's a hot girl name 💋");
+  }
   if(e.target.id==='in-custom-dist'){
     const v = Number(e.target.value);
     if(v>0){
