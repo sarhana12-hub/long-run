@@ -291,11 +291,17 @@ const WORKOUT_PURPOSE = {
 };
 const BUILD_ROTATION = ['tempo','hills','fartlek'];
 const PEAK_ROTATION_SHORT = ['intervals','hills','fartlek','tempo'];
-const PEAK_ROTATION_LONG = ['tempo','overunder','intervals'];
-// Hilly-course variants: roughly double hill-repeat frequency in the same rotation
-// mechanism, rather than a separate code path. PEAK_ROTATION_LONG normally has no hills
-// at all (marathon/half peak work leans tempo/overunder/intervals) - a hilly long-course
-// race specifically needs peak-phase hill work too, so this variant adds it in.
+// Hills used to be entirely absent from long-race peak work (marathon/half leaning
+// tempo/overunder/intervals only) - hill training builds running economy and power that
+// transfers to flat racing too, at lower injury risk than flat-ground speedwork, so even a
+// flat-course plan should still see it occasionally. Kept to 1-of-4 here deliberately - the
+// same minority share PEAK_ROTATION_SHORT already uses - so it stays a supplement, not the
+// dominant quality stimulus crowding out race-specific tempo/interval work, especially for
+// runners with fewer running days a week whose single weekly quality slot matters more.
+const PEAK_ROTATION_LONG = ['tempo','hills','overunder','intervals'];
+// Hilly-course variants: meaningfully higher hill-repeat frequency in the same rotation
+// mechanism, rather than a separate code path - here hills legitimately ARE a dominant,
+// race-specific stimulus, not just a supplement.
 const BUILD_ROTATION_HILLY = ['hills','tempo','hills','fartlek'];
 const PEAK_ROTATION_SHORT_HILLY = ['hills','intervals','fartlek','hills','tempo'];
 const PEAK_ROTATION_LONG_HILLY = ['hills','tempo','overunder','hills','intervals'];
@@ -607,8 +613,9 @@ function renderWorkoutText(day, weekPaces, unit, fmt){
     if(p!=null) text += ` @ ${paceOrSpeedStr(p, unit, fmt)}`;
   }
   if(day.paceKey2 && weekPaces && weekPaces[day.paceKey2]!=null) text += ` (${day.desc2} @ ${paceOrSpeedStr(weekPaces[day.paceKey2], unit, fmt)})`;
-  if(day.strides) text += ' + strides (6 × 20s relaxed, full recovery)';
+  if(day.strides) text += day.hillStrides ? ' + hill strides (6 × 10s hard effort uphill, walk back down to recover)' : ' + strides (6 × 20s relaxed, full recovery)';
   if(day.terrain==='hilly') text += ' — rolling hills, run by effort not pace';
+  else if(day.terrain==='suggested') text += ' — seek out rolling terrain if you can, it still builds strength and economy';
   return text;
 }
 function dayDisplayText(day, weekPaces, unit, fmt){
@@ -832,16 +839,21 @@ function generatePlan(setup){
     if(aerobicIdx!=null) stridesIdxs.push(aerobicIdx);
     stridesEligible.forEach(i=>{ if(stridesIdxs.length<2 && !stridesIdxs.includes(i)) stridesIdxs.push(i); });
 
-    // Hilly courses need race-specific terrain practice, not just race-specific pace -
-    // the long run (the session closest in character to race day) always gets it, plus
-    // whichever easy day is already the longer "aerobic" one, so genuine recovery days
-    // stay flat and easy. Pace targets are untouched - hill terrain makes pace an
-    // unreliable target, so this surfaces as a description note (effort over pace)
-    // rather than a pace adjustment.
-    days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run', terrain: isHilly?'hilly':null};
+    // A workout doesn't have to be a dedicated hill session to build hill fitness - the
+    // long run and the week's longer "aerobic" easy run always carry a terrain note (the
+    // session closest in character to race day, plus the easy day already emphasized).
+    // Hilly-course plans get it as required race-specific prep ("run by effort not pace");
+    // every other plan still gets it as an optional strength/economy suggestion, since
+    // hill running benefits flat-course runners too - just phrased as "if you can" rather
+    // than a requirement. Pace targets are untouched either way - hill terrain makes pace
+    // an unreliable target, so this is a description note, not a pace adjustment. The
+    // aerobic day's strides (already the up-to-two-a-week flat kind) upgrade to hill
+    // strides for the same reason: a lower-commitment way to get a genuine power stimulus
+    // without needing a full dedicated hill-repeats session.
+    days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run', terrain: isHilly?'hilly':'suggested'};
     if(wantsSpeed){ days[speedIdx] = {...days[speedIdx], type:speedType, km:speedKm, label:TYPE_META[speedType].label}; }
     if(secondSpeedIdx!==-1){ days[secondSpeedIdx] = {...days[secondSpeedIdx], type:secondSpeedType, km:secondSpeedKm, label:TYPE_META[secondSpeedType].label}; }
-    easyIdxs.forEach(i=>{ days[i] = {...days[i], type:'easy', km:easyKmFor(i), label:easyLabelFor(i), easyRole:easyRoleFor(i), strides:stridesIdxs.includes(i), terrain: (isHilly && i===aerobicIdx) ? 'hilly' : null}; });
+    easyIdxs.forEach(i=>{ days[i] = {...days[i], type:'easy', km:easyKmFor(i), label:easyLabelFor(i), easyRole:easyRoleFor(i), strides:stridesIdxs.includes(i), hillStrides: i===aerobicIdx && stridesIdxs.includes(i), terrain: i===aerobicIdx ? (isHilly?'hilly':'suggested') : null}; });
 
     let strengthLeft = setup.strengthPerWeek==null?2:setup.strengthPerWeek;
     strengthDows.forEach(dw=>{
