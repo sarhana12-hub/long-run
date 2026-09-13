@@ -875,6 +875,7 @@ const Store = {
     const logs = this.getLogs().filter(l=>l.id!==id);
     this._set('lr_logs', logs);
   },
+  setLogs(logs){ this._set('lr_logs', logs); },
   getMilestonesShown(){ return this._get('lr_milestones', {halfway:false, arrived:false, firstRun:false, weeksHit:[]}); },
   setMilestonesShown(v){ this._set('lr_milestones', v); },
   getStravaAuth(){ return this._get('lr_strava_auth', null); },
@@ -1862,6 +1863,16 @@ function renderSettingsTab(){
       <button class="btn btn-block" data-act="open-edit-setup">Edit inputs & regenerate plan</button>
     </div>
 
+    <div class="section-title">Backup</div>
+    <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
+      <div class="hint">Save a copy of your plan inputs and logged runs, in case an app update ever means starting fresh on this device. Import restores them — your plan is rebuilt from the same inputs, and your logged runs come back with it.</div>
+      <div class="row">
+        <button class="btn btn-block" data-act="export-data">Export data</button>
+        <button class="btn btn-block" data-act="import-data">Import data</button>
+      </div>
+      <input type="file" id="import-file-input" accept="application/json,.json" style="display:none;">
+    </div>
+
     <div class="section-title">Danger zone</div>
     <div class="card" style="padding:14px 16px;">
       <button class="btn btn-danger btn-block" data-act="confirm-reset">Start over (erase this device's data)</button>
@@ -1878,6 +1889,7 @@ function renderModal(){
   if(m.type==='edit-day') return modalEditDay();
   if(m.type==='edit-setup') return modalEditSetup();
   if(m.type==='confirm-reset') return modalConfirmReset();
+  if(m.type==='confirm-import') return modalConfirmImport(m.data);
   if(m.type==='stat-detail') return renderStatDetailModal(m.stat);
   if(m.type==='milestone') return modalMilestone(m.data);
   return '';
@@ -2310,6 +2322,90 @@ function modalConfirmReset(){
   `);
 }
 
+function modalConfirmImport(data){
+  const raceLine = `${raceLabel(data.setup)} · ${niceDateFull(parseDate(data.setup.raceDate))}`;
+  const runCount = data.logs.length;
+  const currentRunCount = state.logs.length;
+  const replaceLine = currentRunCount>0
+    ? `This replaces your current plan and ${currentRunCount} logged run${currentRunCount===1?'':'s'} on this device.`
+    : `This rebuilds your plan from the backup and restores its logged runs.`;
+  return modalShell('Import backup?', `
+    <div class="hint" style="margin-bottom:4px;">Backup from ${esc(niceDateFull(new Date(data.exportedAt)))}</div>
+    <div class="settings-row" style="border-bottom:none;">
+      <div><div class="lbl">${esc(raceLine)}</div><div class="sub">${runCount} logged run${runCount===1?'':'s'} in this backup</div></div>
+    </div>
+    <div class="hint" style="margin:14px 0 18px;">${replaceLine} This can't be undone.</div>
+    <div class="row"><button class="btn btn-block" data-act="close-modal">Cancel</button><button class="btn btn-primary btn-block" data-act="do-import-backup">Import backup</button></div>
+  `);
+}
+
+/* ============================= backup / restore ============================= */
+// Exports everything needed to pick back up on a fresh install: the onboarding inputs
+// (to rebuild the plan, since the plan itself is a derived, regeneratable artifact) plus
+// every logged run and small bits of profile state. Deliberately NOT the generated plan
+// object itself - regenerating from setup means an import always rebuilds against the
+// app's current plan-generation logic rather than replaying a possibly-outdated one.
+function exportBackupData(){
+  const payload = {
+    schema: 'peak-backup-v1',
+    exportedAt: new Date().toISOString(),
+    name: state.name,
+    paceFormat: state.paceFormat,
+    setup: state.setup,
+    logs: state.logs,
+    milestonesShown: state.milestonesShown,
+  };
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `peak-backup-${fmtDate(todayDate())}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function handleImportFile(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed;
+    try{ parsed = JSON.parse(reader.result); }
+    catch(e){ showToast('That file is not valid backup data'); return; }
+    if(!parsed || !parsed.setup || !parsed.setup.raceDate || !parsed.setup.units || !Array.isArray(parsed.logs)){
+      showToast('That file is not a Peak backup'); return;
+    }
+    state.modal = {type:'confirm-import', data:parsed};
+    render();
+  };
+  reader.onerror = () => showToast("Couldn't read that file");
+  reader.readAsText(file);
+}
+
+function doImportBackup(data){
+  const plan = generatePlan(data.setup);
+  state.name = data.name || '';
+  state.paceFormat = data.paceFormat || 'pace';
+  state.setup = data.setup;
+  state.plan = plan;
+  state.logs = data.logs;
+  state.milestonesShown = data.milestonesShown || {halfway:false, arrived:false, firstRun:false, weeksHit:[]};
+  Store.setName(state.name);
+  Store.setPaceFormat(state.paceFormat);
+  Store.setSetup(state.setup);
+  Store.setPlan(state.plan);
+  Store.setLogs(state.logs);
+  Store.setMilestonesShown(state.milestonesShown);
+  const today = todayDate();
+  const idx = plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
+  state.currentWeekIndex = idx===-1?0:idx;
+  state.view = 'app'; state.tab = 'plan';
+  state.modal = null;
+  showToast('Backup imported');
+  window.scrollTo(0,0);
+}
+
 /* ============================= events ============================= */
 function bindGlobal(){
   const app = document.getElementById('app');
@@ -2565,6 +2661,10 @@ function onClick(e){
     render(); window.scrollTo(0,0); return;
   }
   if(act==='close-modal'){ state.modal=null; state.moveFrom=null; render(); return; }
+
+  if(act==='export-data'){ exportBackupData(); return; }
+  if(act==='import-data'){ document.getElementById('import-file-input').click(); return; }
+  if(act==='do-import-backup'){ doImportBackup(state.modal.data); return; }
 }
 
 function onInput(e){
@@ -2620,6 +2720,12 @@ function onInput(e){
   }
 }
 function onChange(e){
+  if(e.target.id==='import-file-input'){
+    const file = e.target.files[0];
+    e.target.value = '';
+    if(file) handleImportFile(file);
+    return;
+  }
   if(e.target.id==='in-race-date'){ state.onboardDraft.raceDate = e.target.value; render(); return; }
   if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; }
   if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; }
