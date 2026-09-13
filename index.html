@@ -861,7 +861,7 @@ const Store = {
     const logs = this.getLogs().filter(l=>l.id!==id);
     this._set('lr_logs', logs);
   },
-  getMilestonesShown(){ return this._get('lr_milestones', {halfway:false, arrived:false}); },
+  getMilestonesShown(){ return this._get('lr_milestones', {halfway:false, arrived:false, firstRun:false, weeksHit:[]}); },
   setMilestonesShown(v){ this._set('lr_milestones', v); },
   resetAll(){
     localStorage.removeItem('lr_name');
@@ -903,7 +903,7 @@ const state = {
   onboardDraft:null,
   onboardStep:1,
   toast:null,
-  milestonesShown:{halfway:false, arrived:false},
+  milestonesShown:{halfway:false, arrived:false, firstRun:false, weeksHit:[]},
 };
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -1467,6 +1467,67 @@ function checkAndTriggerMilestones(newLog){
     }};
     return true;
   }
+  return false;
+}
+
+// Badge-tier celebrations (frequent, small — the badge-ring icon, not a hero illustration).
+// Unlike the summit milestones these can recur across a single plan (a new week hit, a new
+// tempo PR), with two exceptions that are naturally one-shot: "first run logged" can only
+// ever be true once, and each individual week can only be credited for hitting its target
+// once (tracked by weekStart date in shown.weeksHit).
+function checkAndTriggerBadges(newLog){
+  const shown = state.milestonesShown;
+  const unit = state.setup.units;
+
+  if(!shown.firstRun && state.logs.length===1){
+    shown.firstRun = true;
+    Store.setMilestonesShown(shown);
+    state.modal = {type:'milestone', data:{
+      title:'First run logged',
+      message:"You've started tracking. Every run from here builds toward the plan."
+    }};
+    return true;
+  }
+
+  // "Completed week" means the week's date range has fully passed — not the week in
+  // progress, even if this week's mileage already happens to be on target.
+  const week = state.plan.weeks.find(w=>{
+    const ws = parseDate(w.weekStart);
+    return parseDate(newLog.date) >= ws && parseDate(newLog.date) < addDays(ws,7);
+  });
+  if(week && !shown.weeksHit.includes(week.weekStart) && todayDate() >= addDays(parseDate(week.weekStart),7)){
+    const actual = weekActualKm(week);
+    if(actual >= week.targetKm){
+      shown.weeksHit.push(week.weekStart);
+      Store.setMilestonesShown(shown);
+      state.modal = {type:'milestone', data:{
+        title:'Week fully hit',
+        message:`You logged ${fmtDist(actual,unit,1)} against a ${fmtDist(week.targetKm,unit,1)} target for the week of ${niceDate(parseDate(week.weekStart))}.`
+      }};
+      return true;
+    }
+  }
+
+  // A "new fastest" requires an earlier tempo run to beat — the very first one ever
+  // logged has nothing to compare against yet, so it's excluded rather than trivially
+  // counted as a PR.
+  const day = week ? week.days.find(d=>d.date===newLog.date) : null;
+  if(day && day.type==='tempo' && day.paceKey){
+    const tempoRuns = paceRunsForType('tempo');
+    const todayRun = tempoRuns.find(r=>r.date===newLog.date);
+    const priorRuns = tempoRuns.filter(r=>r.date!==newLog.date);
+    if(todayRun && priorRuns.length){
+      const bestPriorSecPerKm = Math.min(...priorRuns.map(r=>r.actualPaceSecPerKm));
+      if(todayRun.actualPaceSecPerKm < bestPriorSecPerKm){
+        state.modal = {type:'milestone', data:{
+          title:'New fastest tempo run',
+          message:`You ran today's tempo effort at ${paceOrSpeedStr(todayRun.actualPaceSecPerKm,unit,state.paceFormat)} — your best yet.`
+        }};
+        return true;
+      }
+    }
+  }
+
   return false;
 }
 
@@ -2135,7 +2196,7 @@ function onClick(e){
     const item = Store.addLog(logData);
     state.logs = [item, ...state.logs];
     state.modal = null;
-    const milestoneFired = checkAndTriggerMilestones(item);
+    const milestoneFired = checkAndTriggerMilestones(item) || checkAndTriggerBadges(item);
     if(milestoneFired) render(); else showToast('Run logged');
     return;
   }
@@ -2299,7 +2360,7 @@ function onClick(e){
   if(act==='do-reset'){
     Store.resetAll();
     state.name=''; state.setup=null; state.plan=null; state.logs=[]; state.modal=null;
-    state.milestonesShown = {halfway:false, arrived:false};
+    state.milestonesShown = {halfway:false, arrived:false, firstRun:false, weeksHit:[]};
     state.view='onboarding'; state.onboardDraft = defaultDraft(); state.onboardStep = 1;
     render(); window.scrollTo(0,0); return;
   }
