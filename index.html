@@ -273,9 +273,14 @@ const TYPE_META = {
   hills:{label:'Hill Repeats', bg:'--z-hill-bg', fg:'--z-hill'},
   fartlek:{label:'Fartlek', bg:'--z-hill-bg', fg:'--z-hill'},
   overunder:{label:'Over/Unders', bg:'--z-tempo-bg', fg:'--z-tempo'},
+  progression:{label:'Progression Run', bg:'--z-tempo-bg', fg:'--z-tempo'},
   race:{label:'Race Day', bg:'--z-race-bg', fg:'--z-race'},
 };
-const QUALITY_TYPES = ['long','tempo','intervals','hills','fartlek','overunder'];
+const QUALITY_TYPES = ['long','tempo','intervals','hills','fartlek','overunder','progression'];
+// Types that can carry the "add strides" add-on, in the edit modal - matches which types
+// generatePlan's easyIdxs.forEach can assign strides to (easy days, plus the fartlek/
+// progression variety picks drawn from that same pool).
+const STRIDES_ELIGIBLE_TYPES = ['easy','fartlek','progression'];
 // Plain-language training purpose + target effort per workout type, shown in the
 // read-only day detail view so "why does this run exist" is answered without opening edit.
 const WORKOUT_PURPOSE = {
@@ -287,10 +292,11 @@ const WORKOUT_PURPOSE = {
   hills: {purpose:'Builds power, strength, and running form through resisted uphill effort.', effort:'Hard push uphill, easy jog back down to recover.'},
   fartlek: {purpose:'Blends speed and endurance with unstructured surges of faster running.', effort:'Alternates moderately hard surges with easy jogging in between.'},
   overunder: {purpose:'Trains your body to clear lactate at race-relevant pace by riding just above and below threshold.', effort:'Alternates comfortably hard and hard, back and forth.'},
+  progression: {purpose:'Trains pace control under fatigue — starting comfortable and finishing strong, rather than starting fast and fading.', effort:'Starts easy and gradually quickens; how hard the finish gets depends on the day — check the target pace above.'},
   race: {purpose:'This is race day — execute your goal-pace strategy.', effort:'Your target race effort.'},
 };
-const BUILD_ROTATION = ['tempo','hills','fartlek'];
-const PEAK_ROTATION_SHORT = ['intervals','hills','fartlek','tempo'];
+const BUILD_ROTATION = ['tempo','hills','fartlek','progression'];
+const PEAK_ROTATION_SHORT = ['intervals','hills','fartlek','tempo','progression'];
 // Hills used to be entirely absent from long-race peak work (marathon/half leaning
 // tempo/overunder/intervals only) - hill training builds running economy and power that
 // transfers to flat racing too, at lower injury risk than flat-ground speedwork, so even a
@@ -298,13 +304,16 @@ const PEAK_ROTATION_SHORT = ['intervals','hills','fartlek','tempo'];
 // same minority share PEAK_ROTATION_SHORT already uses - so it stays a supplement, not the
 // dominant quality stimulus crowding out race-specific tempo/interval work, especially for
 // runners with fewer running days a week whose single weekly quality slot matters more.
-const PEAK_ROTATION_LONG = ['tempo','hills','overunder','intervals'];
+// Progression runs (start easy, finish at tempo effort) are a classic marathon/half
+// workout - genuine race-pace-adjacent quality, not just variety for its own sake - so
+// they're added to every rotation below as one more share, same as hills was.
+const PEAK_ROTATION_LONG = ['tempo','hills','overunder','intervals','progression'];
 // Hilly-course variants: meaningfully higher hill-repeat frequency in the same rotation
 // mechanism, rather than a separate code path - here hills legitimately ARE a dominant,
 // race-specific stimulus, not just a supplement.
-const BUILD_ROTATION_HILLY = ['hills','tempo','hills','fartlek'];
-const PEAK_ROTATION_SHORT_HILLY = ['hills','intervals','fartlek','hills','tempo'];
-const PEAK_ROTATION_LONG_HILLY = ['hills','tempo','overunder','hills','intervals'];
+const BUILD_ROTATION_HILLY = ['hills','tempo','hills','fartlek','progression'];
+const PEAK_ROTATION_SHORT_HILLY = ['hills','intervals','fartlek','hills','tempo','progression'];
+const PEAK_ROTATION_LONG_HILLY = ['hills','tempo','overunder','hills','intervals','progression'];
 const LONG_EMPHASIS_PARAMS = {
   low:      { peakScale:0.85, fractionScale:0.80 },
   balanced: { peakScale:1.00, fractionScale:1.00 },
@@ -509,8 +518,11 @@ function paceZonesFromVdot(vdot){
 /* Recalibration: blend the deterministic fitness projection with real performance
    from recently logged tempo/interval/over-under runs (the only workout types with
    a controlled, comparable target pace — easy/long/hills/fartlek are intentionally
-   loose or terrain-dependent and aren't a clean fitness signal). Only ever adjusts
-   the current week onward; past weeks keep the paces that were actually prescribed. */
+   loose or terrain-dependent and aren't a clean fitness signal). Progression runs are
+   excluded for the same reason despite finishing at tempo effort: paceKey reflects the
+   easy majority of the run, not the harder finish, so there's no single clean number to
+   compare against. Only ever adjusts the current week onward; past weeks keep the paces
+   that were actually prescribed. */
 const RECALIBRATION_TYPES = ['tempo','intervals','overunder'];
 function findPlanDay(plan, date){
   for(const week of plan.weeks){
@@ -644,6 +656,17 @@ function buildWorkoutMeta(day, raceDistanceKm){
     case 'overunder':{
       const cycles = clamp(Math.round(day.km/1.2), 4, 7);
       return {descBase:`Over/unders — ${cycles} × (2 min above / 1 min below) around tempo pace`, paceKey:'tempoPerKm', paceKey2:null};
+    }
+    case 'progression':{
+      // Two flavors, same type: a genuine quality session (build/peak rotations, finishes
+      // at tempo effort) vs. a base-phase-safe variety pick (finishes only at marathon-ish
+      // steady effort, never crossing into true quality intensity) - day.progressionEasy
+      // distinguishes them. Either way most of the run sits at paceKey (easy, the baseline
+      // majority), with paceKey2 the notable harder finish - same pattern the long run's
+      // "last quarter" already uses.
+      return day.progressionEasy
+        ? {descBase:'Progression — start at an easy jog, gradually quicken through the second half, staying comfortable the whole way', paceKey:'easyPerKm', paceKey2:'marathonPerKm', desc2:'finish'}
+        : {descBase:'Progression — start easy, gradually quicken over the back half to finish at tempo effort', paceKey:'easyPerKm', paceKey2:'tempoPerKm', desc2:'finish'};
     }
     case 'race': return {descBase:'Goal pace effort', paceKey:'racePerKm'};
     case 'rest': return day.strength ? {descBase:'Rest day — mobility & light stretching', paceKey:null} : {descBase:'Full rest — recovery day', paceKey:null};
@@ -890,13 +913,17 @@ function generatePlan(setup){
 
     // Base phase never gets quality work (speedAllowedPhases excludes 'base' entirely, by
     // design) — but for higher-frequency runners that leaves most of the week as
-    // undifferentiated "Easy Run"s. Fartlek is safe variety there, not a hidden hard
-    // session: it runs at the same easyPerKm pace as a plain easy run (see
-    // buildWorkoutMeta), just broken into surges rather than steady. Only one of the
-    // "generic" easy days (never the recovery jog or the aerobic day) becomes a fartlek,
-    // and only every other base week, so it reads as a change of pace rather than a habit.
+    // undifferentiated "Easy Run"s. Fartlek and an easy-flavored progression run are both
+    // safe variety there, not a hidden hard session: fartlek runs at the same easyPerKm
+    // pace as a plain easy run throughout, and the easy-flavor progression only builds as
+    // far as marathon-ish steady effort, never into true quality intensity (see
+    // buildWorkoutMeta). Only one of the "generic" easy days (never the recovery jog or the
+    // aerobic day) gets a variety pick, and only every other base week, alternating between
+    // the two so it reads as a change of pace rather than a habit.
     const genericEasyIdxs = easyIdxs.filter(i=>i!==recoveryIdx && i!==aerobicIdx);
-    const fartlekIdx = (phase==='base' && w%2===0 && genericEasyIdxs.length>=1) ? genericEasyIdxs[0] : null;
+    const varietyEligible = phase==='base' && w%2===0 && genericEasyIdxs.length>=1;
+    const varietyIdx = varietyEligible ? genericEasyIdxs[0] : null;
+    const varietyType = varietyEligible ? (Math.floor(w/2)%2===0 ? 'fartlek' : 'progression') : null;
 
     // Strides (short relaxed accelerations) go on up to two easy days a week — skipping the
     // recovery jog right after the long run, which should stay fully easy.
@@ -919,7 +946,20 @@ function generatePlan(setup){
     days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run', terrain: isHilly?'hilly':'suggested'};
     if(wantsSpeed){ days[speedIdx] = {...days[speedIdx], type:speedType, km:speedKm, label:TYPE_META[speedType].label}; }
     if(secondSpeedIdx!==-1){ days[secondSpeedIdx] = {...days[secondSpeedIdx], type:secondSpeedType, km:secondSpeedKm, label:TYPE_META[secondSpeedType].label}; }
-    easyIdxs.forEach(i=>{ const isFartlek = i===fartlekIdx; days[i] = {...days[i], type: isFartlek?'fartlek':'easy', km:easyKmFor(i), label: isFartlek?TYPE_META.fartlek.label:easyLabelFor(i), easyRole:easyRoleFor(i), strides:stridesIdxs.includes(i), hillStrides: i===aerobicIdx && stridesIdxs.includes(i), terrain: i===aerobicIdx ? (isHilly?'hilly':'suggested') : null}; });
+    easyIdxs.forEach(i=>{
+      const isVariety = i===varietyIdx;
+      days[i] = {
+        ...days[i],
+        type: isVariety ? varietyType : 'easy',
+        km: easyKmFor(i),
+        label: isVariety ? TYPE_META[varietyType].label : easyLabelFor(i),
+        easyRole: easyRoleFor(i),
+        strides: stridesIdxs.includes(i),
+        hillStrides: i===aerobicIdx && stridesIdxs.includes(i),
+        terrain: i===aerobicIdx ? (isHilly?'hilly':'suggested') : null,
+        progressionEasy: isVariety && varietyType==='progression',
+      };
+    });
 
     let strengthLeft = setup.strengthPerWeek==null?2:setup.strengthPerWeek;
     strengthDows.forEach(dw=>{
@@ -2815,7 +2855,7 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
 
   const paceCompareLine = paceDeltaLine(actualPaceSecPerKm, plannedPaceSecPerKm, unit, fmt);
 
-  const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', race:'race-day runs'};
+  const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs', race:'race-day runs'};
   const eligible = RECALIBRATION_TYPES.includes(day.type) && day.paceKey && RECALIBRATION_PCT[day.paceKey];
   let impactLine;
   if(!eligible){
@@ -2890,7 +2930,7 @@ function modalEditDay(){
   const matchedLogs = state.logs.filter(l=>l.date===day.date);
   const typeOpts = Object.keys(TYPE_META).map(t=>`<option value="${t}" ${draft.type===t?'selected':''}>${TYPE_META[t].label}</option>`).join('');
   const weekPaces = getWeekPaces(state.plan, week, state.logs);
-  const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole}, state.plan.raceDistanceKm);
+  const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy:draft.progressionEasy}, state.plan.raceDistanceKm);
   const previewDay = {...meta, paceOverrideSecPerKm: draft.paceOverrideSecPerKm, strides:draft.strides};
   const description = renderWorkoutText(previewDay, weekPaces, unit, fmt) || 'No planned distance for this day.';
   const recommendedSecPerKm = meta.paceKey ? weekPaces[meta.paceKey] : null;
@@ -2917,10 +2957,15 @@ function modalEditDay(){
       <label class="field-label" style="margin:0;">Add strength session</label>
       <input type="checkbox" id="ed-strength" ${draft.strength?'checked':''} style="width:20px; height:20px;">
     </div>
-    ${draft.type==='easy' ? `
+    ${STRIDES_ELIGIBLE_TYPES.includes(draft.type) ? `
     <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
       <label class="field-label" style="margin:0;">Add strides</label>
       <input type="checkbox" id="ed-strides" ${draft.strides?'checked':''} style="width:20px; height:20px;">
+    </div>` : ''}
+    ${draft.type==='progression' ? `
+    <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
+      <label class="field-label" style="margin:0;">Keep it easy (finish at steady effort, not tempo)</label>
+      <input type="checkbox" id="ed-progression-easy" ${draft.progressionEasy?'checked':''} style="width:20px; height:20px;">
     </div>` : ''}
     ${previewWarnings.length ? `<div class="banner" style="margin:0 0 16px;">${ICONS.bolt}<span>${previewWarnings.map(w=>esc(w)).join('<br>')}</span></div>` : ''}
     <div class="row" style="margin-top:6px;">
@@ -3150,7 +3195,7 @@ function onClick(e){
     const day = state.plan.weeks[weekIndex].days[dayIndex];
     state.modal={type:'edit-day', weekIndex, dayIndex, draft:{
       type: day.type, km: day.km, strength: day.strength, strides: !!day.strides, easyRole: day.easyRole ?? null,
-      paceOverrideSecPerKm: day.paceOverrideSecPerKm ?? null,
+      paceOverrideSecPerKm: day.paceOverrideSecPerKm ?? null, progressionEasy: !!day.progressionEasy,
     }};
     render(); return;
   }
@@ -3189,9 +3234,10 @@ function onClick(e){
     const wi = Number(el.dataset.wi), di = Number(el.dataset.di);
     const draft = state.modal.draft;
     const day = state.plan.weeks[wi].days[di];
-    const strides = draft.type==='easy' && !!draft.strides;
-    const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole}, state.plan.raceDistanceKm);
-    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta};
+    const strides = STRIDES_ELIGIBLE_TYPES.includes(draft.type) && !!draft.strides;
+    const progressionEasy = draft.type==='progression' && !!draft.progressionEasy;
+    const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy}, state.plan.raceDistanceKm);
+    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta};
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     Store.setPlan(state.plan);
@@ -3319,6 +3365,7 @@ function onChange(e){
     if(e.target.id==='ed-km'){ draft.km = unitToKm(Number(e.target.value)||0, unit); render(); return; }
     if(e.target.id==='ed-strength'){ draft.strength = e.target.checked; render(); return; }
     if(e.target.id==='ed-strides'){ draft.strides = e.target.checked; render(); return; }
+    if(e.target.id==='ed-progression-easy'){ draft.progressionEasy = e.target.checked; render(); return; }
     if(e.target.id==='ed-pace'){
       const secPerKm = parsePaceInput(e.target.value, unit, state.paceFormat);
       if(secPerKm!=null) draft.paceOverrideSecPerKm = secPerKm;
