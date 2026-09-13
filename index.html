@@ -1485,26 +1485,45 @@ function paceRunColor(run){
   if(Math.abs(deltaSecPerKm)<PACE_ON_TARGET_SEC_PER_KM) return 'var(--muted)';
   return deltaSecPerKm>=0 ? 'var(--z-tempo)' : 'var(--accent-strong)';
 }
+// Same pace formatting as paceOrSpeedStr, minus the /mi or /km suffix — the unit is
+// already implied by context, and every character counts in a tiny chart label.
+function compactPaceLabel(secPerKm, unit, fmt){
+  const secPerUnit = unit==='mi' ? secPerKm*KM_PER_MI : secPerKm;
+  return fmt==='speed' ? (3600/secPerUnit).toFixed(1) : secToClock(secPerUnit);
+}
 // A small line chart of pace delta over time — up (green) is faster than that day's
 // target, down (amber) is slower, the dashed center line is on pace. Plotting each run
 // individually (rather than one blended average) is the point: it shows whether recent
-// runs are trending toward target, not just where the average happens to land.
+// runs are trending toward target, not just where the average happens to land. Each
+// point is labeled with its own date and pace, colored the same as the dot, alternating
+// above/below by index so neighboring labels don't stack on top of each other.
 function paceSparklineSvg(runs){
-  const W = 280, H = 56, PAD_X = 8, PAD_Y = 9;
+  const W = 280, H = 108, PAD_X = 10;
+  const CENTER_Y = 54, USABLE_H = 22, LABEL_OFFSET = 15;
+  const unit = state.setup.units, fmt = state.paceFormat;
   const n = runs.length;
-  const usableH = H/2 - PAD_Y;
   const pts = runs.map((r,i)=>{
     const x = n===1 ? W/2 : PAD_X + (i/(n-1))*(W-PAD_X*2);
     const deltaFrac = clamp((r.actualPaceSecPerKm-r.plannedPaceSecPerKm)/r.plannedPaceSecPerKm, -PACE_TREND_CAP_FRAC, PACE_TREND_CAP_FRAC);
-    const y = H/2 + (deltaFrac/PACE_TREND_CAP_FRAC)*usableH;
-    return {x, y, color:paceRunColor(r)};
+    const y = CENTER_Y + (deltaFrac/PACE_TREND_CAP_FRAC)*USABLE_H;
+    return {x, y, color:paceRunColor(r), run:r};
   });
   const pathD = pts.map((p,i)=> `${i===0?'M':'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
   const dots = pts.map(p=> `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.2" style="fill:${p.color};"/>`).join('');
+  const labels = pts.map((p,i)=>{
+    const above = i%2===0;
+    const ty = above ? p.y-LABEL_OFFSET : p.y+LABEL_OFFSET+7;
+    const anchor = i===0 ? 'start' : (i===n-1 ? 'end' : 'middle');
+    const dt = parseDate(p.run.date);
+    const dateStr = `${dt.getMonth()+1}/${dt.getDate()}`;
+    const paceLabel = compactPaceLabel(p.run.actualPaceSecPerKm, unit, fmt);
+    return `<text x="${p.x.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${anchor}" style="font-size:8.5px; font-family:var(--font-body); fill:${p.color};">${esc(dateStr)} ${esc(paceLabel)}</text>`;
+  }).join('');
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block; overflow:visible;">
-    <line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" style="stroke:var(--line); stroke-width:1; stroke-dasharray:3,3;"/>
+    <line x1="0" y1="${CENTER_Y}" x2="${W}" y2="${CENTER_Y}" style="stroke:var(--line); stroke-width:1; stroke-dasharray:3,3;"/>
     <path d="${pathD}" style="fill:none; stroke:var(--ink-soft); stroke-width:1.5;"/>
     ${dots}
+    ${labels}
   </svg>`;
 }
 function paceTrackerRowHtml(type, label){
