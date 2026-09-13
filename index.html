@@ -1646,27 +1646,69 @@ function renderModal(){
   return '';
 }
 
-// The "show your work" behind each Progress stat tile — the exact numerator and
-// denominator that produced the number on the tile, in plain terms.
+// A big number with a small caption under it — the building block for the stat detail
+// graphics below (numbers first, not sentences).
+function statNumberHtml(value, label, opts){
+  opts = opts || {};
+  const size = opts.size || 26;
+  const color = opts.color || 'var(--ink)';
+  return `<div style="text-align:center;">
+    <div class="mono" style="font-size:${size}px; font-weight:800; color:${color}; line-height:1.1;">${value}</div>
+    <div class="hint" style="margin-top:3px;">${label}</div>
+  </div>`;
+}
+// Two input numbers side by side with "vs" between them.
+function statCompareRowHtml(leftVal, leftLabel, rightVal, rightLabel, connector){
+  return `<div style="display:flex; align-items:center; justify-content:center; gap:16px;">
+    ${statNumberHtml(leftVal, leftLabel)}
+    <div style="font-size:13px; color:var(--muted); font-weight:700;">${connector||'vs'}</div>
+    ${statNumberHtml(rightVal, rightLabel)}
+  </div>`;
+}
+// The derived result, set off below the comparison with a divider so it visually reads
+// as "= this" rather than a third unrelated number.
+function statResultHtml(value, label, color){
+  return `<div style="text-align:center; margin-top:18px; padding-top:16px; border-top:1px solid var(--line-soft);">
+    ${statNumberHtml(value, label, {size:32, color})}
+  </div>`;
+}
+
+// The "show your work" behind each Progress stat tile — the exact numbers that produced
+// the tile, as a graphic (big numbers + small captions) rather than a sentence.
 function renderStatDetailModal(statKey){
   const s = computeProgressStats();
   const unit = s.unit;
-  const field = (body)=>`<div class="field"><div class="input" style="height:auto; color:var(--ink-soft);">${body}</div></div>`;
-  let title, body;
+  let title, content, footnote = '';
   if(statKey==='total-logged'){
     title = 'Total logged';
-    body = field(`You've logged ${s.totalLoggedCount} run${s.totalLoggedCount===1?'':'s'}, totaling ${fmtDist(s.totalLoggedKm,unit,1)}. Every logged run counts here, any workout type, any date.`);
+    content = statCompareRowHtml(
+      fmtDist(s.totalLoggedKm,unit,1), 'miles logged',
+      s.totalLoggedCount, `run${s.totalLoggedCount===1?'':'s'} logged`, 'in'
+    );
+    footnote = 'Every logged run counts here — any workout type, any date.';
   } else if(statKey==='training-miles'){
     title = 'Training miles logged';
-    body = field(`${fmtDist(s.totalLoggedKm,unit,1)} logged ÷ ${fmtDist(s.totalPlanTrainingKm,unit,0)} total training mileage across your whole plan = ${s.pctPlanMilesLogged}%. Race day itself isn't counted — that's the event, not training.`);
+    content = statCompareRowHtml(
+      fmtDist(s.totalLoggedKm,unit,1), 'logged',
+      fmtDist(s.totalPlanTrainingKm,unit,0), 'total plan training'
+    ) + statResultHtml(`${s.pctPlanMilesLogged}%`, 'of training miles logged', 'var(--accent-strong)');
+    footnote = "Race day itself isn't counted — that's the event, not training.";
   } else if(statKey==='adherence'){
     title = 'Plan adherence';
-    body = field(`${s.completedPlannedRuns} of ${s.plannedRunDatesToDateCount} scheduled training day${s.plannedRunDatesToDateCount===1?'':'s'} so far ${s.plannedRunDatesToDateCount===1?'has':'have'} a logged run = ${s.adherence}%. Only counts days on or before today that the plan actually called for a run — rest days and days still to come aren't part of it.`);
+    content = statCompareRowHtml(
+      s.completedPlannedRuns, 'days completed',
+      s.plannedRunDatesToDateCount, 'days scheduled'
+    ) + statResultHtml(`${s.adherence}%`, 'plan adherence', 'var(--accent-strong)');
+    footnote = 'Only counts days on or before today that the plan actually scheduled a run.';
   } else {
     title = s.mileageStatusLabel==='behind plan' ? 'Behind plan' : s.mileageStatusLabel==='ahead of plan' ? 'Ahead of plan' : 'On plan';
-    body = field(`Your plan calls for ${fmtDist(s.plannedToDateKm,unit,1)} by today; you've logged ${fmtDist(s.loggedKmToDate,unit,1)} so far — that's ${fmtDist(Math.abs(s.mileageDeltaKm),unit,1)} ${s.mileageStatusLabel}.`);
+    const resultColor = s.mileageStatusLabel==='behind plan' ? 'var(--z-tempo)' : (s.mileageStatusLabel==='ahead of plan' ? 'var(--accent-strong)' : 'var(--muted)');
+    content = statCompareRowHtml(
+      fmtDist(s.plannedToDateKm,unit,1), 'planned to date',
+      fmtDist(s.loggedKmToDate,unit,1), 'logged to date'
+    ) + statResultHtml(fmtDist(Math.abs(s.mileageDeltaKm),unit,1), s.mileageStatusLabel, resultColor);
   }
-  return modalShell(title, body);
+  return modalShell(title, `${content}${footnote?`<div class="hint" style="text-align:center; margin-top:16px;">${footnote}</div>`:''}`);
 }
 
 function modalShell(title, innerHtml, headerButtonHtml){
