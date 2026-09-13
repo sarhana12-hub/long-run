@@ -673,11 +673,20 @@ function buildWorkoutMeta(day, raceDistanceKm){
     case 'intervals':{
       const repM = raceDistanceKm<=10 ? 800 : 1000;
       const reps = Math.max(4, Math.round((day.km*1000)/(repM*1.4)));
-      return {descBase:`${reps} × ${repM}m intervals, jog ${Math.round(repM*0.5)}m recovery`, paceKey:'intervalPerKm'};
+      // Reps × (hard rep + recovery jog) rarely consumes the whole prescribed distance
+      // exactly - easyRemainderKm is whatever's left, so the description can say so
+      // explicitly instead of leaving it unaccounted for. See renderWorkoutText.
+      const structuredKm = reps*repM*1.5/1000;
+      return {descBase:`${reps} × ${repM}m intervals, jog ${Math.round(repM*0.5)}m recovery`, paceKey:'intervalPerKm', easyRemainderKm: Math.max(0, day.km-structuredKm)};
     }
     case 'hills':{
+      // Capped at 12 reps deliberately (more than that isn't a realistic single hill
+      // session) - so for a longer prescribed distance, most of day.km is genuinely NOT
+      // covered by the reps themselves. easyRemainderKm names that leftover distance
+      // explicitly rather than leaving the runner to guess what fills out the rest.
       const reps = clamp(Math.round(day.km/0.3), 6, 12);
-      return {descBase:`${reps} hill reps — 60–90s hard uphill effort, jog back down to recover`, paceKey:null};
+      const structuredKm = reps*0.3;
+      return {descBase:`${reps} hill reps — 60–90s hard uphill effort, jog back down to recover`, paceKey:null, easyRemainderKm: Math.max(0, day.km-structuredKm)};
     }
     case 'fartlek':{
       const surges = clamp(Math.round(day.km/1.5), 4, 8);
@@ -685,7 +694,8 @@ function buildWorkoutMeta(day, raceDistanceKm){
     }
     case 'overunder':{
       const cycles = clamp(Math.round(day.km/1.2), 4, 7);
-      return {descBase:`Over/unders — ${cycles} × (2 min above / 1 min below) around tempo pace`, paceKey:'tempoPerKm', paceKey2:null};
+      const structuredKm = cycles*1.2;
+      return {descBase:`Over/unders — ${cycles} × (2 min above / 1 min below) around tempo pace`, paceKey:'tempoPerKm', paceKey2:null, easyRemainderKm: Math.max(0, day.km-structuredKm)};
     }
     case 'progression':{
       // Two flavors, same type: a genuine quality session (build/peak rotations, finishes
@@ -701,7 +711,8 @@ function buildWorkoutMeta(day, raceDistanceKm){
     case 'cruise':{
       const repM = raceDistanceKm<=10 ? 1000 : 1600;
       const reps = clamp(Math.round((day.km*1000)/(repM*1.15)), 3, 6);
-      return {descBase:`Cruise intervals — ${reps} × ${repM}m at threshold pace, jog 60–90s recovery`, paceKey:'tempoPerKm'};
+      const structuredKm = reps*repM*1.15/1000;
+      return {descBase:`Cruise intervals — ${reps} × ${repM}m at threshold pace, jog 60–90s recovery`, paceKey:'tempoPerKm', easyRemainderKm: Math.max(0, day.km-structuredKm)};
     }
     case 'racepace': return {descBase:'Continuous, goal race effort — rehearses exactly what race day should feel like', paceKey:'racePerKm'};
     case 'race': return {descBase:'Goal pace effort', paceKey:'racePerKm'};
@@ -712,6 +723,16 @@ function buildWorkoutMeta(day, raceDistanceKm){
   }
 }
 
+// Reps/cycles-based workouts (hills, intervals, cruise, over/unders) don't always add up
+// to the day's full prescribed distance - see the easyRemainderKm comments in
+// buildWorkoutMeta. Rather than leaving that gap unexplained, name it as its own easy-pace
+// clause with a real distance and pace, same threshold (~0.1mi) either render function uses
+// to skip noise from rounding.
+function easyRemainderClause(day, weekPaces, unit, fmt){
+  if(!(day.easyRemainderKm>0.15)) return null;
+  const pace = weekPaces && weekPaces.easyPerKm;
+  return `${fmtDist(day.easyRemainderKm, unit)} easy running${pace!=null?` @ ${paceOrSpeedStr(pace,unit,fmt)}`:''} to round out the total distance`;
+}
 function renderWorkoutText(day, weekPaces, unit, fmt){
   if(!day.descBase) return '';
   let text = day.descBase;
@@ -720,6 +741,8 @@ function renderWorkoutText(day, weekPaces, unit, fmt){
     if(p!=null) text += ` @ ${paceOrSpeedStr(p, unit, fmt)}`;
   }
   if(day.paceKey2 && weekPaces && weekPaces[day.paceKey2]!=null) text += ` (${day.desc2} @ ${paceOrSpeedStr(weekPaces[day.paceKey2], unit, fmt)})`;
+  const remainderClause = easyRemainderClause(day, weekPaces, unit, fmt);
+  if(remainderClause) text += ` + ${remainderClause}`;
   if(day.strides) text += day.hillStrides ? ' + hill strides (6 × 10s hard effort uphill, walk back down to recover)' : ' + strides (6 × 20s relaxed, full recovery)';
   if(day.terrain==='hilly') text += ' — rolling hills, run by effort not pace';
   else if(day.terrain==='suggested') text += ' — seek out rolling terrain if you can, it still builds strength and economy';
@@ -748,6 +771,8 @@ function workoutPartsFor(day, weekPaces, unit, fmt){
     const label = day.desc2.charAt(0).toUpperCase()+day.desc2.slice(1);
     parts.push(`${label} @ ${paceOrSpeedStr(weekPaces[day.paceKey2], unit, fmt)}`);
   }
+  const remainderClause = easyRemainderClause(day, weekPaces, unit, fmt);
+  if(remainderClause) parts.push(remainderClause.charAt(0).toUpperCase()+remainderClause.slice(1));
   if(day.strides) parts.push(day.hillStrides ? 'Finish with hill strides — 6 × 10s hard effort uphill, walk back down to recover' : 'Finish with strides — 6 × 20s relaxed, full recovery');
   if(day.terrain==='hilly') parts.push('Course: rolling hills — run by effort, not pace');
   else if(day.terrain==='suggested') parts.push('Course: seek out rolling terrain if you can — still builds strength and economy');
