@@ -274,9 +274,11 @@ const TYPE_META = {
   fartlek:{label:'Fartlek', bg:'--z-hill-bg', fg:'--z-hill'},
   overunder:{label:'Over/Unders', bg:'--z-tempo-bg', fg:'--z-tempo'},
   progression:{label:'Progression Run', bg:'--z-tempo-bg', fg:'--z-tempo'},
+  cruise:{label:'Cruise Intervals', bg:'--z-tempo-bg', fg:'--z-tempo'},
+  racepace:{label:'Race Pace', bg:'--z-race-bg', fg:'--z-race'},
   race:{label:'Race Day', bg:'--z-race-bg', fg:'--z-race'},
 };
-const QUALITY_TYPES = ['long','tempo','intervals','hills','fartlek','overunder','progression'];
+const QUALITY_TYPES = ['long','tempo','intervals','hills','fartlek','overunder','progression','cruise','racepace'];
 // Types that can carry the "add strides" add-on, in the edit modal - matches which types
 // generatePlan's easyIdxs.forEach can assign strides to (easy days, plus the fartlek/
 // progression variety picks drawn from that same pool).
@@ -284,7 +286,7 @@ const STRIDES_ELIGIBLE_TYPES = ['easy','fartlek','progression'];
 // Plain-language training purpose + target effort per workout type, shown in the
 // read-only day detail view so "why does this run exist" is answered without opening edit.
 const WORKOUT_PURPOSE = {
-  rest: {purpose:'Lets your body absorb the training and rebuild stronger.', effort:'None — or light mobility if paired with strength.'},
+  rest: {purpose:'Lets your body absorb the training and rebuild stronger.', effort:'None — full rest is best, but easy cross-training (bike, swim, elliptical) is fine if you want to stay active. Keep it light either way.'},
   easy: {purpose:'Builds aerobic endurance and recovery capacity without piling on fatigue.', effort:'Conversational — you should be able to hold a conversation the whole way.'},
   long: {purpose:'Extends your endurance and trains your body to use fat efficiently over long time on your feet.', effort:'Steady and aerobic — comfortably sustainable, not a grind.'},
   tempo: {purpose:'Raises your lactate threshold — the pace you can hold before fatigue piles up fast.', effort:'Comfortably hard — sustainable with focus, not a sprint.'},
@@ -293,10 +295,15 @@ const WORKOUT_PURPOSE = {
   fartlek: {purpose:'Blends speed and endurance with unstructured surges of faster running.', effort:'Alternates moderately hard surges with easy jogging in between.'},
   overunder: {purpose:'Trains your body to clear lactate at race-relevant pace by riding just above and below threshold.', effort:'Alternates comfortably hard and hard, back and forth.'},
   progression: {purpose:'Trains pace control under fatigue — starting comfortable and finishing strong, rather than starting fast and fading.', effort:'Starts easy and gradually quickens; how hard the finish gets depends on the day — check the target pace above.'},
+  cruise: {purpose:'Builds threshold volume in manageable chunks — same lactate-clearing benefit as tempo, easier to hold pace accurately over repeated reps than one continuous effort.', effort:'Comfortably hard, same as tempo — short jog recoveries keep the pace honest without fully resetting.'},
+  racepace: {purpose:'Rehearses your actual goal pace and race-day rhythm before race day arrives.', effort:'Your goal race effort — not harder, not easier.'},
   race: {purpose:'This is race day — execute your goal-pace strategy.', effort:'Your target race effort.'},
 };
-const BUILD_ROTATION = ['tempo','hills','fartlek','progression'];
-const PEAK_ROTATION_SHORT = ['intervals','hills','fartlek','tempo','progression'];
+// Cruise intervals (repeated reps at threshold pace with short jog recovery, vs. one
+// continuous tempo effort) build the same threshold fitness as tempo but are usable at
+// any race distance/phase, so they're added everywhere tempo already is.
+const BUILD_ROTATION = ['tempo','hills','fartlek','progression','cruise'];
+const PEAK_ROTATION_SHORT = ['intervals','hills','fartlek','tempo','progression','cruise'];
 // Hills used to be entirely absent from long-race peak work (marathon/half leaning
 // tempo/overunder/intervals only) - hill training builds running economy and power that
 // transfers to flat racing too, at lower injury risk than flat-ground speedwork, so even a
@@ -307,13 +314,17 @@ const PEAK_ROTATION_SHORT = ['intervals','hills','fartlek','tempo','progression'
 // Progression runs (start easy, finish at tempo effort) are a classic marathon/half
 // workout - genuine race-pace-adjacent quality, not just variety for its own sake - so
 // they're added to every rotation below as one more share, same as hills was.
-const PEAK_ROTATION_LONG = ['tempo','hills','overunder','intervals','progression'];
+// Race-pace runs (continuous effort at the plan's actual goal pace, rehearsing race day
+// itself) only go in the LONG peak rotations - raceKm<=10 already routes to the SHORT
+// rotations above, and 5K/10K goal pace is too fast to hold as an extended continuous
+// rehearsal the way half/marathon (and 15K/10mi) pace can be.
+const PEAK_ROTATION_LONG = ['tempo','hills','overunder','intervals','progression','cruise','racepace'];
 // Hilly-course variants: meaningfully higher hill-repeat frequency in the same rotation
 // mechanism, rather than a separate code path - here hills legitimately ARE a dominant,
 // race-specific stimulus, not just a supplement.
-const BUILD_ROTATION_HILLY = ['hills','tempo','hills','fartlek','progression'];
-const PEAK_ROTATION_SHORT_HILLY = ['hills','intervals','fartlek','hills','tempo','progression'];
-const PEAK_ROTATION_LONG_HILLY = ['hills','tempo','overunder','hills','intervals','progression'];
+const BUILD_ROTATION_HILLY = ['hills','tempo','hills','fartlek','progression','cruise'];
+const PEAK_ROTATION_SHORT_HILLY = ['hills','intervals','fartlek','hills','tempo','progression','cruise'];
+const PEAK_ROTATION_LONG_HILLY = ['hills','tempo','overunder','hills','intervals','progression','cruise','racepace'];
 const LONG_EMPHASIS_PARAMS = {
   low:      { peakScale:0.85, fractionScale:0.80 },
   balanced: { peakScale:1.00, fractionScale:1.00 },
@@ -516,14 +527,18 @@ function paceZonesFromVdot(vdot){
 }
 
 /* Recalibration: blend the deterministic fitness projection with real performance
-   from recently logged tempo/interval/over-under runs (the only workout types with
-   a controlled, comparable target pace — easy/long/hills/fartlek are intentionally
-   loose or terrain-dependent and aren't a clean fitness signal). Progression runs are
-   excluded for the same reason despite finishing at tempo effort: paceKey reflects the
+   from recently logged tempo/interval/over-under/cruise runs (the only workout types
+   with a controlled, comparable target pace — easy/long/hills/fartlek are intentionally
+   loose or terrain-dependent and aren't a clean fitness signal). Cruise intervals target
+   the same tempoPerKm as continuous tempo, so they're just as clean a threshold signal.
+   Progression runs are excluded despite finishing at tempo effort: paceKey reflects the
    easy majority of the run, not the harder finish, so there's no single clean number to
-   compare against. Only ever adjusts the current week onward; past weeks keep the paces
-   that were actually prescribed. */
-const RECALIBRATION_TYPES = ['tempo','intervals','overunder'];
+   compare against. Race-pace runs are excluded too, for a different reason: unlike
+   tempo/interval pace, race pace has no single fixed %VO2max to invert through — the
+   effort a given pace represents shifts with race distance/duration, which this system
+   isn't set up to account for per-day. Only ever adjusts the current week onward; past
+   weeks keep the paces that were actually prescribed. */
+const RECALIBRATION_TYPES = ['tempo','intervals','overunder','cruise'];
 function findPlanDay(plan, date){
   for(const week of plan.weeks){
     const day = week.days.find(d=>d.date===date);
@@ -668,8 +683,16 @@ function buildWorkoutMeta(day, raceDistanceKm){
         ? {descBase:'Progression — start at an easy jog, gradually quicken through the second half, staying comfortable the whole way', paceKey:'easyPerKm', paceKey2:'marathonPerKm', desc2:'finish'}
         : {descBase:'Progression — start easy, gradually quicken over the back half to finish at tempo effort', paceKey:'easyPerKm', paceKey2:'tempoPerKm', desc2:'finish'};
     }
+    case 'cruise':{
+      const repM = raceDistanceKm<=10 ? 1000 : 1600;
+      const reps = clamp(Math.round((day.km*1000)/(repM*1.15)), 3, 6);
+      return {descBase:`Cruise intervals — ${reps} × ${repM}m at threshold pace, jog 60–90s recovery`, paceKey:'tempoPerKm'};
+    }
+    case 'racepace': return {descBase:'Continuous, goal race effort — rehearses exactly what race day should feel like', paceKey:'racePerKm'};
     case 'race': return {descBase:'Goal pace effort', paceKey:'racePerKm'};
-    case 'rest': return day.strength ? {descBase:'Rest day — mobility & light stretching', paceKey:null} : {descBase:'Full rest — recovery day', paceKey:null};
+    case 'rest': return day.strength
+      ? {descBase:'Rest day — mobility & light stretching, or easy cross-training instead if you prefer', paceKey:null}
+      : {descBase:'Full rest — recovery day, or easy cross-training (bike, swim, elliptical) if you want to stay active', paceKey:null};
     default: return {descBase:'', paceKey:null};
   }
 }
@@ -2855,7 +2878,7 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
 
   const paceCompareLine = paceDeltaLine(actualPaceSecPerKm, plannedPaceSecPerKm, unit, fmt);
 
-  const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs', race:'race-day runs'};
+  const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs', racepace:'race-pace runs', race:'race-day runs'};
   const eligible = RECALIBRATION_TYPES.includes(day.type) && day.paceKey && RECALIBRATION_PCT[day.paceKey];
   let impactLine;
   if(!eligible){
