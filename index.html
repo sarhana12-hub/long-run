@@ -1696,8 +1696,8 @@ function renderStatDetailModal(statKey){
   } else if(statKey==='adherence'){
     title = 'Plan adherence';
     content = statCompareRowHtml(
-      s.completedPlannedRuns, 'days completed',
-      s.plannedRunDatesToDateCount, 'days scheduled'
+      s.completedPlannedRuns, 'days with a run completed',
+      s.plannedRunDatesToDateCount, 'days with a run scheduled'
     ) + statResultHtml(`${s.adherence}%`, 'plan adherence', 'var(--accent-strong)');
     footnote = 'Only counts days on or before today that the plan actually scheduled a run.';
   } else {
