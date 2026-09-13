@@ -1390,6 +1390,11 @@ function renderProgressTab(){
   const plannedToDateKm = plannedToDateWeeks.reduce((s,w)=>{
     return s + w.days.filter(d=>parseDate(d.date)<=todayDate()).reduce((s2,d)=>s2+d.km,0);
   },0);
+  // Positive means behind (planned more than you've logged); negative means you've
+  // logged more than the plan called for so far — genuinely possible (extra volume, or
+  // catching up after a missed week) and worth showing as "ahead", not just floored at 0.
+  const mileageDeltaKm = plannedToDateKm - loggedKmToDate;
+  const mileageStatusLabel = mileageDeltaKm > 0.1 ? 'behind plan' : (mileageDeltaKm < -0.1 ? 'ahead of plan' : 'on plan');
   // "Runs completed" is the fraction of already-past planned run days that have at
   // least one log against that specific date — not a raw log-entry count, which would
   // double-count a day logged in two pieces and would also count logs against future or
@@ -1440,7 +1445,7 @@ function renderProgressTab(){
     <div class="card stat-tile"><div class="v">${fmtDist(totalLoggedKm,unit,0)}</div><div class="l">total logged</div></div>
     <div class="card stat-tile"><div class="v">${pctPlanMilesLogged}%</div><div class="l">training miles logged</div></div>
     <div class="card stat-tile"><div class="v">${adherence}%</div><div class="l">plan adherence</div></div>
-    <div class="card stat-tile"><div class="v">${fmtDist(Math.max(0,plannedToDateKm-loggedKmToDate),unit,0)}</div><div class="l">behind plan</div></div>
+    <div class="card stat-tile"><div class="v">${fmtDist(Math.abs(mileageDeltaKm),unit,0)}</div><div class="l">${mileageStatusLabel}</div></div>
   </div>
   <div class="section-title" style="padding:0 20px;">Weekly mileage — planned vs. actual</div>
   <div class="card chart-card">
