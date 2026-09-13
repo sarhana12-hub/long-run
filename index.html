@@ -1085,8 +1085,10 @@ function renderOnboardStep1(d){
 
     <div class="section-title">Race day</div>
     <div class="field">
-      <label class="field-label">Date</label>
-      <input class="input" type="date" id="in-race-date" value="${d.raceDate}">
+      <div style="position:relative;">
+        <input class="input" type="date" id="in-race-date" value="${d.raceDate}">
+        ${!d.raceDate ? `<div style="position:absolute; inset:0; display:flex; align-items:center; padding-left:13px; background:var(--surface-2); color:var(--muted); border-radius:11px; pointer-events:none;">Enter date of race here</div>` : ''}
+      </div>
       ${weeksToRace? `<div class="hint">${weeksToRace} week${weeksToRace===1?'':'s'} from today.</div>`:''}
     </div>
   `;
@@ -2043,7 +2045,7 @@ function onInput(e){
   }
 }
 function onChange(e){
-  if(e.target.id==='in-race-date'){ state.onboardDraft.raceDate = e.target.value; }
+  if(e.target.id==='in-race-date'){ state.onboardDraft.raceDate = e.target.value; render(); return; }
   if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; }
   if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; }
   if(e.target.id==='in-max-long'){ state.onboardDraft.maxLongRunMi = e.target.value; }
