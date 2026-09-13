@@ -729,6 +729,30 @@ function dayDisplayText(day, weekPaces, unit, fmt){
   if(day.descBase==null && day.notes!=null) return day.notes; // plans saved before this update
   return renderWorkoutText(day, weekPaces, unit, fmt);
 }
+// Same underlying pieces as renderWorkoutText, but as separate items instead of one run-on
+// sentence - for a multi-part workout (e.g. an aerobic run with strides and a terrain note
+// tacked on), a single dense paragraph makes it hard to tell what's part of the day's
+// distance and what's an add-on tacked onto the end. Used only in the read-only day detail
+// view; the compact Plan-tab day card keeps the single-line renderWorkoutText version,
+// where a multi-line list would blow up the at-a-glance weekly layout.
+function workoutPartsFor(day, weekPaces, unit, fmt){
+  if(!day.descBase) return [];
+  const parts = [];
+  let main = day.descBase;
+  if(day.paceKey){
+    const p = day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : (weekPaces && weekPaces[day.paceKey]);
+    if(p!=null) main += ` @ ${paceOrSpeedStr(p, unit, fmt)}`;
+  }
+  parts.push(main);
+  if(day.paceKey2 && weekPaces && weekPaces[day.paceKey2]!=null){
+    const label = day.desc2.charAt(0).toUpperCase()+day.desc2.slice(1);
+    parts.push(`${label} @ ${paceOrSpeedStr(weekPaces[day.paceKey2], unit, fmt)}`);
+  }
+  if(day.strides) parts.push(day.hillStrides ? 'Finish with hill strides — 6 × 10s hard effort uphill, walk back down to recover' : 'Finish with strides — 6 × 20s relaxed, full recovery');
+  if(day.terrain==='hilly') parts.push('Course: rolling hills — run by effort, not pace');
+  else if(day.terrain==='suggested') parts.push('Course: seek out rolling terrain if you can — still builds strength and economy');
+  return parts;
+}
 function paceInputValue(effectiveSecPerKm, unit, fmt){
   if(effectiveSecPerKm==null) return '';
   const secPerUnit = unit==='mi' ? effectiveSecPerKm*KM_PER_MI : effectiveSecPerKm;
@@ -2949,7 +2973,7 @@ function renderDayDetail(){
   const matchedLogs = state.logs.filter(l=>l.date===day.date);
   const meta = TYPE_META[day.type];
   const weekPaces = getWeekPaces(state.plan, week, state.logs);
-  const description = dayDisplayText(day, weekPaces, unit, fmt);
+  const descriptionParts = (day.descBase==null && day.notes!=null) ? [day.notes] : workoutPartsFor(day, weekPaces, unit, fmt);
   const purpose = WORKOUT_PURPOSE[day.type];
   const strengthFocusNote = day.strengthFocus==='upper'
     ? (isLegDemandingDay(day)
@@ -2964,7 +2988,9 @@ function renderDayDetail(){
       ${day.km>0?`<span class="mono" style="font-size:15px; font-weight:700;">${fmtDist(day.km,unit)}</span>`:''}
       ${day.strength?`<span class="strength-badge">+ Strength${day.strengthFocus==='upper'?' (upper/core)':''}</span>`:''}
     </div>
-    ${description ? `<div style="font-size:14.5px; color:var(--ink-soft); margin-bottom:16px;">${esc(description)}</div>` : ''}
+    ${descriptionParts.length>1
+      ? `<ul style="font-size:14.5px; color:var(--ink-soft); margin:0 0 16px; padding-left:20px; line-height:1.5;">${descriptionParts.map(p=>`<li style="margin-bottom:4px;">${esc(p)}</li>`).join('')}</ul>`
+      : descriptionParts.length===1 ? `<div style="font-size:14.5px; color:var(--ink-soft); margin-bottom:16px;">${esc(descriptionParts[0])}</div>` : ''}
     ${strengthFocusNote ? `<div class="hint" style="margin:-10px 0 16px;">${esc(strengthFocusNote)}</div>` : ''}
     ${matchedLogs.map(log=>renderLoggedComparisonHtml(day, log, state.plan, week, state.logs, unit, fmt)).join('')}
     ${purpose ? `
