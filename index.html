@@ -188,7 +188,10 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .chart-rows{display:flex; align-items:flex-end; gap:6px; height:168px; padding-top:8px;}
 .chart-col{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:6px; height:100%; position:relative;}
 .bar-label{font-size:9px; font-weight:700; white-space:nowrap;}
-.bar-track{width:100%; max-width:26px; height:130px; border-radius:6px; background:var(--surface-2); display:flex; align-items:flex-end; overflow:hidden; position:relative;}
+/* Matches the surrounding card's own background (not --surface-2) so the unfilled
+   headroom above a below-max week's planned bar reads as empty space, not a third,
+   unlabeled color — the chart only ever means to show two series: planned and logged. */
+.bar-track{width:100%; max-width:26px; height:130px; border-radius:6px; background:var(--surface); display:flex; align-items:flex-end; overflow:hidden; position:relative;}
 .bar-planned{width:100%; background:var(--line); border-radius:6px 6px 0 0;}
 .bar-actual{position:absolute; bottom:0; left:0; width:100%; background:var(--accent-strong); border-radius:6px 6px 0 0;}
 .chart-col .wl{font-size:9.5px; color:var(--muted); font-weight:700;}
