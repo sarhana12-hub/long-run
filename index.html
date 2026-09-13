@@ -181,7 +181,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 
 /* ---------- progress ---------- */
 .stat-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; padding:0 18px;}
-.stat-tile{padding:14px 12px;}
+.stat-tile{padding:14px 12px; display:block; width:100%; text-align:left;}
 .stat-tile .v{font-family:var(--font-mono); font-weight:800; font-size:20px;}
 .stat-tile .l{font-size:11px; color:var(--muted); margin-top:2px;}
 .chart-card{margin:0 18px; padding:18px 16px 8px;}
@@ -1377,11 +1377,12 @@ function logsInWeek(week){
   return state.logs.filter(l=>{ const d=parseDate(l.date); return d>=ws && d<we; });
 }
 
-function renderProgressTab(){
+// All four Progress stat-tile numbers in one place, so the tiles themselves and their
+// tap-to-see-the-math detail views can never drift apart from computing things twice.
+function computeProgressStats(){
   const plan = state.plan, unit = state.setup.units;
-  const raceDate = parseDate(plan.raceDate);
-  const daysToRace = daysBetween(todayDate(), raceDate);
   const totalLoggedKm = state.logs.reduce((s,l)=>s+l.distanceKm,0);
+  const totalLoggedCount = state.logs.length;
   // Scoped to logs dated today or earlier — otherwise a run logged ahead of schedule (or
   // just entered against the wrong date) silently erases "behind plan", since it would
   // count toward miles done without the corresponding day having actually happened yet.
@@ -1409,6 +1410,19 @@ function renderProgressTab(){
   // have you actually logged. Race day itself isn't "training" so it's excluded.
   const totalPlanTrainingKm = plan.weeks.reduce((s,w)=> s + w.days.filter(d=>d.type!=='race').reduce((s2,d)=>s2+d.km,0), 0);
   const pctPlanMilesLogged = totalPlanTrainingKm>0 ? Math.round(100*Math.min(1, totalLoggedKm/totalPlanTrainingKm)) : 0;
+  return {
+    unit, totalLoggedKm, totalLoggedCount,
+    loggedKmToDate, plannedToDateKm, mileageDeltaKm, mileageStatusLabel,
+    plannedRunDatesToDateCount: plannedRunDatesToDate.length, completedPlannedRuns, adherence,
+    totalPlanTrainingKm, pctPlanMilesLogged,
+  };
+}
+
+function renderProgressTab(){
+  const plan = state.plan, unit = state.setup.units;
+  const raceDate = parseDate(plan.raceDate);
+  const daysToRace = daysBetween(todayDate(), raceDate);
+  const stats = computeProgressStats();
 
   const chartWeeks = plan.weeks.filter(w=>parseDate(w.weekStart)<=addDays(todayDate(),7)).slice(-8);
   const maxKm = Math.max(1, ...chartWeeks.map(w=>Math.max(w.targetKm, weekActualKm(w))));
@@ -1442,10 +1456,10 @@ function renderProgressTab(){
     <div class="hint" style="margin-bottom:16px;">${daysToRace>=0? daysToRace+' days until '+raceLabel(state.setup) : 'Race day has passed — nice work.'}</div>
   </div>
   <div class="stat-grid" style="margin-bottom:16px;">
-    <div class="card stat-tile"><div class="v">${fmtDist(totalLoggedKm,unit,0)}</div><div class="l">total logged</div></div>
-    <div class="card stat-tile"><div class="v">${pctPlanMilesLogged}%</div><div class="l">training miles logged</div></div>
-    <div class="card stat-tile"><div class="v">${adherence}%</div><div class="l">plan adherence</div></div>
-    <div class="card stat-tile"><div class="v">${fmtDist(Math.abs(mileageDeltaKm),unit,0)}</div><div class="l">${mileageStatusLabel}</div></div>
+    <button class="card stat-tile" data-act="open-stat-detail" data-stat="total-logged"><div class="v">${fmtDist(stats.totalLoggedKm,unit,0)}</div><div class="l">total logged</div></button>
+    <button class="card stat-tile" data-act="open-stat-detail" data-stat="training-miles"><div class="v">${stats.pctPlanMilesLogged}%</div><div class="l">training miles logged</div></button>
+    <button class="card stat-tile" data-act="open-stat-detail" data-stat="adherence"><div class="v">${stats.adherence}%</div><div class="l">plan adherence</div></button>
+    <button class="card stat-tile" data-act="open-stat-detail" data-stat="mileage-delta"><div class="v">${fmtDist(Math.abs(stats.mileageDeltaKm),unit,0)}</div><div class="l">${stats.mileageStatusLabel}</div></button>
   </div>
   <div class="section-title" style="padding:0 20px;">Weekly mileage — planned vs. actual</div>
   <div class="card chart-card">
@@ -1626,7 +1640,31 @@ function renderModal(){
   if(m.type==='edit-day') return modalEditDay();
   if(m.type==='edit-setup') return modalEditSetup();
   if(m.type==='confirm-reset') return modalConfirmReset();
+  if(m.type==='stat-detail') return renderStatDetailModal(m.stat);
   return '';
+}
+
+// The "show your work" behind each Progress stat tile — the exact numerator and
+// denominator that produced the number on the tile, in plain terms.
+function renderStatDetailModal(statKey){
+  const s = computeProgressStats();
+  const unit = s.unit;
+  const field = (body)=>`<div class="field"><div class="input" style="height:auto; color:var(--ink-soft);">${body}</div></div>`;
+  let title, body;
+  if(statKey==='total-logged'){
+    title = 'Total logged';
+    body = field(`You've logged ${s.totalLoggedCount} run${s.totalLoggedCount===1?'':'s'}, totaling ${fmtDist(s.totalLoggedKm,unit,1)}. Every logged run counts here, any workout type, any date.`);
+  } else if(statKey==='training-miles'){
+    title = 'Training miles logged';
+    body = field(`${fmtDist(s.totalLoggedKm,unit,1)} logged ÷ ${fmtDist(s.totalPlanTrainingKm,unit,0)} total training mileage across your whole plan = ${s.pctPlanMilesLogged}%. Race day itself isn't counted — that's the event, not training.`);
+  } else if(statKey==='adherence'){
+    title = 'Plan adherence';
+    body = field(`${s.completedPlannedRuns} of ${s.plannedRunDatesToDateCount} scheduled training day${s.plannedRunDatesToDateCount===1?'':'s'} so far ${s.plannedRunDatesToDateCount===1?'has':'have'} a logged run = ${s.adherence}%. Only counts days on or before today that the plan actually called for a run — rest days and days still to come aren't part of it.`);
+  } else {
+    title = s.mileageStatusLabel==='behind plan' ? 'Behind plan' : s.mileageStatusLabel==='ahead of plan' ? 'Ahead of plan' : 'On plan';
+    body = field(`Your plan calls for ${fmtDist(s.plannedToDateKm,unit,1)} by today; you've logged ${fmtDist(s.loggedKmToDate,unit,1)} so far — that's ${fmtDist(Math.abs(s.mileageDeltaKm),unit,1)} ${s.mileageStatusLabel}.`);
+  }
+  return modalShell(title, body);
 }
 
 function modalShell(title, innerHtml, headerButtonHtml){
@@ -1992,6 +2030,10 @@ function onClick(e){
     const found = planDayIndexForDate(el.dataset.date);
     if(!found){ showToast("That date isn't in your current plan"); return; }
     state.modal={type:'day-detail', weekIndex:found.weekIndex, dayIndex:found.dayIndex};
+    render(); return;
+  }
+  if(act==='open-stat-detail'){
+    state.modal={type:'stat-detail', stat: el.dataset.stat};
     render(); return;
   }
 
