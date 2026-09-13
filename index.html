@@ -1386,9 +1386,15 @@ function renderProgressTab(){
   const plannedToDateKm = plannedToDateWeeks.reduce((s,w)=>{
     return s + w.days.filter(d=>parseDate(d.date)<=todayDate()).reduce((s2,d)=>s2+d.km,0);
   },0);
-  const plannedRunsToDate = plannedToDateWeeks.reduce((s,w)=> s + w.days.filter(d=>parseDate(d.date)<=todayDate() && d.km>0).length, 0);
-  const loggedRunsToDate = state.logs.length;
-  const adherence = plannedRunsToDate>0 ? Math.round(100*Math.min(1,loggedRunsToDate/plannedRunsToDate)) : 0;
+  // "Runs completed" is the fraction of already-past planned run days that have at
+  // least one log against that specific date — not a raw log-entry count, which would
+  // double-count a day logged in two pieces and would also count logs against future or
+  // rest days that were never part of what "completed so far" should be measuring.
+  const plannedRunDatesToDate = [];
+  plannedToDateWeeks.forEach(w=>w.days.forEach(d=>{ if(parseDate(d.date)<=todayDate() && d.km>0) plannedRunDatesToDate.push(d.date); }));
+  const loggedDates = new Set(state.logs.map(l=>l.date));
+  const completedPlannedRuns = plannedRunDatesToDate.filter(date=>loggedDates.has(date)).length;
+  const adherence = plannedRunDatesToDate.length>0 ? Math.round(100*completedPlannedRuns/plannedRunDatesToDate.length) : 0;
 
   const chartWeeks = plan.weeks.filter(w=>parseDate(w.weekStart)<=addDays(todayDate(),7)).slice(-8);
   const maxKm = Math.max(1, ...chartWeeks.map(w=>Math.max(w.targetKm, weekActualKm(w))));
