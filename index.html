@@ -279,6 +279,13 @@ const TYPE_META = {
   race:{label:'Race Day', bg:'--z-race-bg', fg:'--z-race'},
 };
 const QUALITY_TYPES = ['long','tempo','intervals','hills','fartlek','overunder','progression','cruise','racepace'];
+// A day worth protecting from added leg fatigue: the long run, or a QUALITY_TYPES day
+// that isn't actually a base-phase variety pick. day.easyVariety marks fartlek/progression
+// days placed by the base-phase variety mechanism (generatePlan's easyIdxs.forEach) -
+// those are intensity-neutral by design (see the fartlek/progression buildWorkoutMeta
+// cases), not a real hard effort, so they're excluded here even though their bare `type`
+// is in QUALITY_TYPES.
+function isLegDemandingDay(day){ return day.type==='long' || (QUALITY_TYPES.includes(day.type) && !day.easyVariety); }
 // Types that can carry the "add strides" add-on, in the edit modal - matches which types
 // generatePlan's easyIdxs.forEach can assign strides to (easy days, plus the fartlek/
 // progression variety picks drawn from that same pool).
@@ -459,11 +466,19 @@ function circularDayDist(a,b){ const diff=Math.abs(a-b); return Math.min(diff,7-
 /* Flags — never blocks — spacing that runs against common coaching guidance: hard
    efforts (the long run and any quality workout) less than 48h apart, and strength
    sessions landing the day before a hard effort (or stacked onto one) rather than
-   paired with recovery. Users can rearrange freely; this just keeps them informed. */
+   paired with recovery. Live-preview only, inside the edit-day modal (see
+   modalEditDay's previewWarnings) - warns about a conflict the USER is about to create
+   by rearranging days, not about the plan's own generated schedule. The generator
+   can't fully avoid every such conflict on its own (the base-phase variety pick's
+   weekday varies week to week, while strength days are fixed once at onboarding), so
+   surfacing this as a standing banner on an auto-generated week reads as the app
+   criticizing its own output - see isLegDemandingDay/strengthFocus instead, which
+   neutralizes the actual concern (leg fatigue before a hard effort) at generation time
+   rather than just flagging it. */
 function scheduleWarnings(week){
   const warnings = [];
   const longDay = week.days.find(d=>d.type==='long');
-  const qualityDays = week.days.filter(d=>QUALITY_TYPES.includes(d.type) && d.type!=='long');
+  const qualityDays = week.days.filter(d=>QUALITY_TYPES.includes(d.type) && d.type!=='long' && !d.easyVariety);
   const hardDays = longDay ? [longDay, ...qualityDays] : qualityDays;
 
   if(longDay){
@@ -981,6 +996,9 @@ function generatePlan(setup){
         hillStrides: i===aerobicIdx && stridesIdxs.includes(i),
         terrain: i===aerobicIdx ? (isHilly?'hilly':'suggested') : null,
         progressionEasy: isVariety && varietyType==='progression',
+        // Marks this fartlek/progression pick as the intensity-neutral base-phase variety
+        // choice, not a genuine quality session - see isLegDemandingDay().
+        easyVariety: isVariety,
       };
     });
 
@@ -988,7 +1006,15 @@ function generatePlan(setup){
     strengthDows.forEach(dw=>{
       if(strengthLeft<=0) return;
       const idx = days.findIndex(x=>x.dow===dw && !QUALITY_TYPES.includes(x.type));
-      if(idx!==-1){ days[idx].strength = true; strengthLeft--; }
+      if(idx!==-1){
+        days[idx].strength = true;
+        // Can't always avoid landing next to a leg-demanding day (strengthDows is fixed
+        // once at onboarding, but the base-phase variety pick's weekday shifts week to
+        // week) - so instead of just avoiding it, tell the runner to keep legs light
+        // when it happens, which neutralizes the actual concern either way.
+        if(isLegDemandingDay(days[idx]) || isLegDemandingDay(days[(idx+1)%7])) days[idx].strengthFocus = 'upper';
+        strengthLeft--;
+      }
     });
 
     if(isRaceWeek){
@@ -1065,7 +1091,11 @@ function buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, str
   strengthDows.forEach(dw=>{
     if(strengthLeft<=0) return;
     const idx = days.findIndex(x=>x.dow===dw && !QUALITY_TYPES.includes(x.type));
-    if(idx!==-1){ days[idx].strength = true; strengthLeft--; }
+    if(idx!==-1){
+      days[idx].strength = true;
+      if(isLegDemandingDay(days[idx]) || isLegDemandingDay(days[(idx+1)%7])) days[idx].strengthFocus = 'upper';
+      strengthLeft--;
+    }
   });
 
   return days;
@@ -1121,7 +1151,8 @@ function generateSpeedPlan(setup){
   // day fully 48h clear of all three isn't always possible - same tension the "high"
   // speed-emphasis race plans already accept. Prefer the day right after a hard day
   // (pairs with its own recovery, the ideal placement) before falling back to whatever's
-  // least-bad; the schedule-warnings banner still honestly flags anything left over.
+  // least-bad; buildGeneralWeekDays' strengthFocus still catches anything left over and
+  // marks it upper body/core instead of leaving it as an unaddressed conflict.
   const idealOrder = hardDows.map(h=>(h+1)%7);
   const badDows = new Set([...hardDows, ...hardDows.map(h=>(h+6)%7)]);
   const strengthDows = [];
@@ -2096,7 +2127,6 @@ function renderPlanTab(week, plan){
   const unit = state.setup.units;
   const fmt = state.paceFormat;
   const weekPaces = getWeekPaces(plan, week, state.logs);
-  const warnings = scheduleWarnings(week);
   const raceDate = parseDate(plan.raceDate);
   const weekStartDate = parseDate(week.weekStart);
   const daysToRaceForWeek = daysBetween(weekStartDate, raceDate);
@@ -2122,7 +2152,7 @@ function renderPlanTab(week, plan){
       <div class="day-main">
         <div class="day-top">
           <span class="pill" style="background:var(--${meta.bg}); color:var(--${meta.fg})">${day.label}</span>
-          ${day.strength?`<span class="strength-badge">+ Strength</span>`:''}
+          ${day.strength?`<span class="strength-badge">+ Strength${day.strengthFocus==='upper'?' (upper/core)':''}</span>`:''}
           ${day.terrain==='hilly'?`<span class="strength-badge" style="color:var(--z-hill); background:var(--z-hill-bg);">⛰ Hilly</span>`:''}
         </div>
         <div class="day-desc">${esc(dayDisplayText(day, weekPaces, unit, fmt))}</div>
@@ -2136,7 +2166,6 @@ function renderPlanTab(week, plan){
 
   return `
   ${state.moveFrom!=null && state.moveFrom.weekIndex===state.currentWeekIndex ? `<div class="banner">${ICONS.move}<span>Choose a day to swap with "${week.days[state.moveFrom.dayIndex].label}". <a class="link-btn" data-act="cancel-move" style="color:inherit">Cancel</a></span></div>`:''}
-  ${warnings.length ? `<div class="banner">${ICONS.bolt}<span>${warnings.map(w=>esc(w)).join('<br>')}</span></div>` : ''}
   <div class="week-strip">${strip}</div>
   <div class="week-header">
     <div>
@@ -2922,15 +2951,21 @@ function renderDayDetail(){
   const weekPaces = getWeekPaces(state.plan, week, state.logs);
   const description = dayDisplayText(day, weekPaces, unit, fmt);
   const purpose = WORKOUT_PURPOSE[day.type];
+  const strengthFocusNote = day.strengthFocus==='upper'
+    ? (isLegDemandingDay(day)
+      ? `Upper body/core focus today — this day already carries a demanding run, so keep legs light.`
+      : `Upper body/core focus — keeps legs fresh for ${week.days[(dayIndex+1)%7].label} (${DOW_LABELS[week.days[(dayIndex+1)%7].dow]}).`)
+    : null;
   const editBtn = `<button class="btn" data-act="open-day-edit" style="position:absolute; top:14px; right:62px; padding:9px 16px; font-size:13.5px;">Edit</button>`;
 
   return modalShell(`${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}`, `
     <div style="display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
       <span class="pill" style="background:var(--${meta.bg}); color:var(--${meta.fg}); font-size:13px; padding:6px 14px;">${day.label}</span>
       ${day.km>0?`<span class="mono" style="font-size:15px; font-weight:700;">${fmtDist(day.km,unit)}</span>`:''}
-      ${day.strength?`<span class="strength-badge">+ Strength</span>`:''}
+      ${day.strength?`<span class="strength-badge">+ Strength${day.strengthFocus==='upper'?' (upper/core)':''}</span>`:''}
     </div>
     ${description ? `<div style="font-size:14.5px; color:var(--ink-soft); margin-bottom:16px;">${esc(description)}</div>` : ''}
+    ${strengthFocusNote ? `<div class="hint" style="margin:-10px 0 16px;">${esc(strengthFocusNote)}</div>` : ''}
     ${matchedLogs.map(log=>renderLoggedComparisonHtml(day, log, state.plan, week, state.logs, unit, fmt)).join('')}
     ${purpose ? `
     <div class="field">
