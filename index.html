@@ -238,6 +238,14 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 
 /* ============================= constants ============================= */
 const KM_PER_MI = 1.609344;
+// Client secret never appears here — it lives only in the Cloudflare Worker's own
+// encrypted settings. The worker's sole job is the one step Strava requires off the
+// browser (exchanging a code/refresh token using that secret); everything else, this
+// app talks to Strava directly.
+const STRAVA_CLIENT_ID = '278972';
+const STRAVA_WORKER_URL = 'https://peakstravarelay.a-elsarhan.workers.dev';
+const STRAVA_REDIRECT_URI = 'https://sarhana12-hub.github.io/long-run/';
+const STRAVA_SCOPE = 'activity:read_all';
 const DOW_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const RACE_PRESETS = [
   {key:'5k', label:'5K', km:5},
@@ -863,12 +871,16 @@ const Store = {
   },
   getMilestonesShown(){ return this._get('lr_milestones', {halfway:false, arrived:false, firstRun:false, weeksHit:[]}); },
   setMilestonesShown(v){ this._set('lr_milestones', v); },
+  getStravaAuth(){ return this._get('lr_strava_auth', null); },
+  setStravaAuth(auth){ this._set('lr_strava_auth', auth); },
+  clearStravaAuth(){ localStorage.removeItem('lr_strava_auth'); },
   resetAll(){
     localStorage.removeItem('lr_name');
     localStorage.removeItem('lr_setup');
     localStorage.removeItem('lr_plan');
     localStorage.removeItem('lr_logs');
     localStorage.removeItem('lr_milestones');
+    localStorage.removeItem('lr_strava_auth');
   }
 };
 
@@ -904,6 +916,7 @@ const state = {
   onboardStep:1,
   toast:null,
   milestonesShown:{halfway:false, arrived:false, firstRun:false, weeksHit:[]},
+  stravaAuth:null,
 };
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -937,6 +950,7 @@ function boot(){
   const plan = Store.getPlan();
   state.logs = Store.getLogs();
   state.milestonesShown = Store.getMilestonesShown();
+  state.stravaAuth = Store.getStravaAuth();
   if(setup && plan){
     state.setup = setup; state.plan = plan;
     const today = todayDate();
@@ -949,6 +963,89 @@ function boot(){
     state.onboardStep = 1;
   }
   render();
+  handleStravaRedirect();
+}
+
+/* ============================= strava ============================= */
+function stravaConnectUrl(){
+  const params = new URLSearchParams({
+    client_id: STRAVA_CLIENT_ID,
+    redirect_uri: STRAVA_REDIRECT_URI,
+    response_type: 'code',
+    approval_prompt: 'auto',
+    scope: STRAVA_SCOPE,
+  });
+  return `https://www.strava.com/oauth/authorize?${params.toString()}`;
+}
+
+async function stravaTokenRequest(body){
+  const res = await fetch(STRAVA_WORKER_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(()=>null);
+  if(!res.ok || !data || !data.access_token) throw new Error((data && data.error) || 'Strava connection failed');
+  return {access_token:data.access_token, refresh_token:data.refresh_token, expires_at:data.expires_at};
+}
+
+// After Strava redirects back with ?code=..., exchange it via the worker and store the
+// result exactly like any other local data — nothing about a connected account lives
+// anywhere but this browser.
+async function handleStravaRedirect(){
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if(!code) return;
+  window.history.replaceState({}, '', window.location.origin + window.location.pathname);
+  try{
+    const auth = await stravaTokenRequest({action:'exchange', code});
+    state.stravaAuth = auth;
+    Store.setStravaAuth(auth);
+    showToast('Connected to Strava');
+  }catch(e){
+    showToast('Could not connect to Strava — try again');
+  }
+}
+
+// Returns a usable access token, silently refreshing first if the stored one has
+// expired (or is about to) - the only network round trip the user should ever notice
+// is the one this piggybacks on (opening the import list).
+async function ensureStravaToken(){
+  const auth = state.stravaAuth;
+  if(!auth) return null;
+  const nowSec = Math.floor(Date.now()/1000);
+  if(auth.expires_at && auth.expires_at > nowSec+60) return auth.access_token;
+  try{
+    const fresh = await stravaTokenRequest({action:'refresh', refresh_token:auth.refresh_token});
+    state.stravaAuth = fresh;
+    Store.setStravaAuth(fresh);
+    return fresh.access_token;
+  }catch(e){
+    return null;
+  }
+}
+
+// Recent running activities from Strava, mapped into this app's own log shape and
+// filtered to runs not already imported (by stravaId) so a picked run can't be
+// double-logged just by showing up in the list twice.
+async function fetchStravaRuns(){
+  const token = await ensureStravaToken();
+  if(!token) throw new Error('not-connected');
+  const res = await fetch('https://www.strava.com/api/v3/athlete/activities?per_page=15', {
+    headers:{ Authorization:`Bearer ${token}` },
+  });
+  if(!res.ok) throw new Error('strava-request-failed');
+  const activities = await res.json();
+  const importedIds = new Set(state.logs.map(l=>l.stravaId).filter(Boolean));
+  return activities
+    .filter(a => (a.type==='Run' || a.sport_type==='Run') && !importedIds.has(a.id))
+    .map(a => ({
+      id: a.id,
+      name: a.name,
+      date: a.start_date_local.slice(0,10), // local wall-clock date, no timezone math needed
+      distanceKm: a.distance/1000,
+      durationSec: a.moving_time,
+    }));
 }
 
 function defaultDraft(){
@@ -1438,6 +1535,16 @@ function computeProgressStats(){
   };
 }
 
+// Shared by manual entry and Strava import — both end up with the same log shape, so
+// both should go through the same save + milestone/badge check rather than duplicating it.
+function commitLogEntry(logData){
+  const item = Store.addLog(logData);
+  state.logs = [item, ...state.logs];
+  state.modal = null;
+  const milestoneFired = checkAndTriggerMilestones(item) || checkAndTriggerBadges(item);
+  if(milestoneFired) render(); else showToast('Run logged');
+}
+
 // Checks the two summit-tier milestones (50% of plan volume logged, race day reached)
 // against the run just saved. Each fires at most once per plan — the "already shown"
 // flags persist so re-opening the app or logging more runs afterward never repeats them.
@@ -1732,6 +1839,17 @@ function renderSettingsTab(){
       <div class="hint" style="padding:0 0 12px;">Training paces gradually get faster as your plan builds toward peak fitness, then hold steady through the taper.${recal ? ` Right now they're also adjusted based on your last ${recal.count} logged tempo/interval/over-under run${recal.count===1?'':'s'}.` : ''}</div>
     </div>
 
+    <div class="section-title">Strava</div>
+    <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
+      ${state.stravaAuth ? `
+        <div class="settings-row"><div><div class="lbl">Connected</div><div class="sub">Import a run's distance and time instead of typing them in.</div></div></div>
+        <button class="btn btn-block" data-act="disconnect-strava">Disconnect</button>
+      ` : `
+        <div class="hint">Connect your Strava account to import a run instead of typing it in — you can always enter runs manually too.</div>
+        <button class="btn btn-primary btn-block" data-act="connect-strava">Connect to Strava</button>
+      `}
+    </div>
+
     <div class="section-title">Plan controls</div>
     <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
       <div class="hint">Regenerating rebuilds every week of your plan from today's inputs. Your logged runs are kept — only the plan itself changes.</div>
@@ -1904,9 +2022,40 @@ function logPaceHint(d, unit){
 }
 
 function modalLogRun(){
+  const m = state.modal;
+  if(!m.data) m.data = {date:fmtDate(todayDate()), dist:'', time:'', notes:''};
+  if(!m.mode) m.mode = state.stravaAuth ? 'strava' : 'manual';
+
+  // Kicks off exactly once per modal open — switching modes back and forth afterward
+  // reuses the same fetched list rather than re-requesting it.
+  if(m.mode==='strava' && !m.strava){
+    m.strava = {loading:true, error:null, items:null};
+    fetchStravaRuns().then(items=>{
+      if(state.modal && state.modal.type==='log-run' && state.modal.strava){
+        state.modal.strava = {loading:false, error:null, items};
+        render();
+      }
+    }).catch(()=>{
+      if(state.modal && state.modal.type==='log-run' && state.modal.strava){
+        state.modal.strava = {loading:false, error:"Couldn't load your Strava runs.", items:null};
+        render();
+      }
+    });
+  }
+
+  const switcher = state.stravaAuth ? `
+    <div class="chip-select" style="margin-bottom:16px;">
+      <button class="chip ${m.mode==='strava'?'active':''}" data-act="log-mode-strava">From Strava</button>
+      <button class="chip ${m.mode==='manual'?'active':''}" data-act="log-mode-manual">Manual entry</button>
+    </div>` : '';
+
+  const body = m.mode==='strava' ? modalLogFromStravaHtml(m.strava) : modalLogManualHtml(m.data);
+  return modalShell('Log a run', switcher + body);
+}
+
+function modalLogManualHtml(d){
   const unit = state.setup.units;
-  const d = state.modal.data || (state.modal.data = {date:fmtDate(todayDate()), dist:'', time:'', notes:''});
-  return modalShell('Log a run', `
+  return `
     <div class="field"><label class="field-label">Date</label><input class="input" type="date" id="lr-date" value="${d.date}"></div>
     <div id="lr-planned">${plannedWorkoutHtml(d.date)}</div>
     <div class="row">
@@ -1916,7 +2065,32 @@ function modalLogRun(){
     <div class="hint" id="lr-pace-hint" style="margin-bottom:14px;">${logPaceHint(d, unit)}</div>
     <div class="field"><label class="field-label">Notes (optional)</label><input class="input" type="text" id="lr-notes" value="${esc(d.notes)}" placeholder="How did it feel?"></div>
     <button class="btn btn-primary btn-block" data-act="save-log" style="padding:13px;">Save run</button>
-  `);
+  `;
+}
+
+function modalLogFromStravaHtml(strava){
+  const unit = state.setup.units;
+  if(!strava || strava.loading){
+    return `<div class="hint" style="padding:24px 0; text-align:center;">Loading your recent Strava runs…</div>`;
+  }
+  if(strava.error){
+    return `<div class="hint" style="padding:6px 0 16px;">${esc(strava.error)}</div>
+      <button class="btn btn-block" data-act="log-mode-manual">Enter manually instead</button>`;
+  }
+  if(!strava.items.length){
+    return `<div class="hint" style="padding:6px 0 16px;">No new runs found on Strava — anything recent may already be imported.</div>
+      <button class="btn btn-block" data-act="log-mode-manual">Enter manually instead</button>`;
+  }
+  const rows = strava.items.map(a=>{
+    const paceSecPerKm = a.distanceKm>0 ? a.durationSec/a.distanceKm : null;
+    return `<div class="log-row" data-act="import-strava-activity" data-id="${a.id}">
+      <div class="log-date">${niceDate(parseDate(a.date))}</div>
+      <div class="log-mid"><div class="d">${fmtDist(a.distanceKm,unit)} · ${secToClock(a.durationSec)}</div>${a.name?`<div class="t">${esc(a.name)}</div>`:''}</div>
+      <div class="log-pace mono">${paceSecPerKm!=null?paceOrSpeedStr(paceSecPerKm,unit,state.paceFormat):''}</div>
+    </div>`;
+  }).join('');
+  return `<div style="border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin-bottom:14px;">${rows}</div>
+    <button class="btn btn-block" data-act="log-mode-manual">Enter manually instead</button>`;
 }
 
 // Shared "how does actual pace compare to planned" phrasing — used both for a single
@@ -2185,19 +2359,38 @@ function onClick(e){
   }
   if(act==='generate-plan'){ submitOnboarding(); return; }
 
-  if(act==='open-log'){ state.modal={type:'log-run', data:{date:fmtDate(todayDate()), dist:'', time:'', notes:''}}; render(); return; }
+  if(act==='open-log'){
+    state.modal = {
+      type:'log-run',
+      mode: state.stravaAuth ? 'strava' : 'manual',
+      data:{date:fmtDate(todayDate()), dist:'', time:'', notes:''},
+    };
+    render(); return;
+  }
+  if(act==='log-mode-manual'){ state.modal.mode='manual'; render(); return; }
+  if(act==='log-mode-strava'){ state.modal.mode='strava'; render(); return; }
+  if(act==='connect-strava'){ window.location.href = stravaConnectUrl(); return; }
+  if(act==='disconnect-strava'){
+    Store.clearStravaAuth();
+    state.stravaAuth = null;
+    showToast('Disconnected from Strava');
+    return;
+  }
   if(act==='save-log'){
     const unit = state.setup.units;
     const d = state.modal.data;
     const durSec = parseDurationToSec(d.time);
     const distV = Number(d.dist);
     if(!d.date || !distV || !durSec){ showToast('Enter date, distance and time'); return; }
-    const logData = {date:d.date, distanceKm:unitToKm(distV,unit), durationSec:durSec, notes:d.notes, createdAt:new Date().toISOString()};
-    const item = Store.addLog(logData);
-    state.logs = [item, ...state.logs];
-    state.modal = null;
-    const milestoneFired = checkAndTriggerMilestones(item) || checkAndTriggerBadges(item);
-    if(milestoneFired) render(); else showToast('Run logged');
+    commitLogEntry({date:d.date, distanceKm:unitToKm(distV,unit), durationSec:durSec, notes:d.notes, createdAt:new Date().toISOString()});
+    return;
+  }
+  if(act==='import-strava-activity'){
+    const id = Number(el.dataset.id);
+    const items = (state.modal.strava && state.modal.strava.items) || [];
+    const a = items.find(x=>x.id===id);
+    if(!a) return;
+    commitLogEntry({date:a.date, distanceKm:a.distanceKm, durationSec:a.durationSec, notes:a.name||'', createdAt:new Date().toISOString(), stravaId:a.id});
     return;
   }
   if(act==='delete-log'){
@@ -2361,6 +2554,7 @@ function onClick(e){
     Store.resetAll();
     state.name=''; state.setup=null; state.plan=null; state.logs=[]; state.modal=null;
     state.milestonesShown = {halfway:false, arrived:false, firstRun:false, weeksHit:[]};
+    state.stravaAuth = null;
     state.view='onboarding'; state.onboardDraft = defaultDraft(); state.onboardStep = 1;
     render(); window.scrollTo(0,0); return;
   }
