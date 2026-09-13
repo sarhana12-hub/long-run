@@ -1031,7 +1031,7 @@ function keepActiveWeekTabVisible(){
 function renderLoading(){
   return `<div class="center-screen">
     <div class="brand-mark" style="width:52px;height:52px;border-radius:16px;">${ICONS.peak.replace('width:17px','width:26px').replace('height:17px','height:26px')}</div>
-    <div style="color:var(--muted); font-size:13px; font-weight:600;">Loading Long Run…</div>
+    <div style="color:var(--muted); font-size:13px; font-weight:600;">Loading Peak…</div>
   </div>`;
 }
 
@@ -1258,7 +1258,7 @@ function renderOnboarding(){
 
   return `
   <div class="topbar">
-    <div class="brand"><div class="brand-mark">${ICONS.peak}</div><div class="brand-name">Long Run</div></div>
+    <div class="brand"><div class="brand-mark">${ICONS.peak}</div><div class="brand-name">Peak</div></div>
   </div>
   <div class="container">
     <div class="eyebrow" style="margin-top:6px;">Training plans, tailored to race day</div>
@@ -1287,7 +1287,7 @@ function renderApp(){
 
   return `
   <div class="topbar">
-    <div class="brand"><div class="brand-mark">${ICONS.peak}</div><div class="brand-name">Long Run</div></div>
+    <div class="brand"><div class="brand-mark">${ICONS.peak}</div><div class="brand-name">Peak</div></div>
     <div style="font-weight:700; font-size:13.5px; color:var(--muted);">${esc(state.name)}</div>
   </div>
   ${body}
