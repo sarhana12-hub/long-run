@@ -565,6 +565,40 @@ function getWeekPaces(plan, week, logs){
   return zones;
 }
 
+// Whichever week's date range contains today, or the nearest edge week if today falls
+// outside the plan entirely (before it starts, or after the last day already passed).
+function findWeekForToday(plan){
+  const today = todayDate();
+  const found = plan.weeks.find(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
+  if(found) return found;
+  return today < parseDate(plan.weeks[0].weekStart) ? plan.weeks[0] : plan.weeks[plan.weeks.length-1];
+}
+// The same baseline-plus-recalibration VDOT blend getWeekPaces() computes internally for
+// today's week specifically - exposed standalone (duplicated rather than refactored out of
+// getWeekPaces, to avoid touching that already-proven path for one extra caller) so Progress
+// can answer "what would I run right now" independent of training-pace display.
+function currentEffectiveVdot(plan, logs){
+  if(plan.startVdot==null) return null;
+  const week = findWeekForToday(plan);
+  const frac = week.weekIndex>=plan.buildWeeksCount ? 1 : clamp(week.weekIndex/plan.rampWeeks, 0, 1);
+  const baselineVdot = plan.startVdot + (plan.endVdot-plan.startVdot)*frac;
+  const isPastWeek = addDays(parseDate(week.weekStart),6) < todayDate();
+  const recal = isPastWeek ? null : computeRecalibration(plan, logs);
+  return recal ? baselineVdot*(1-recal.weight) + recal.perfImpliedVdot*recal.weight : baselineVdot;
+}
+// Fixed distances general (non-race) plans project against, since there's no single race
+// to headline the way a race plan has.
+const PROJECTION_DISTANCES = [
+  {key:'5k', label:'5K', km:5},
+  {key:'half', label:'Half Marathon', km:21.0975},
+  {key:'marathon', label:'Marathon', km:42.195},
+];
+function raceProjectionFor(vdot, km){
+  if(vdot==null) return null;
+  const paceSecPerKm = predictedPaceSecPerKmFromVdot(vdot, km);
+  return {timeSec: paceSecPerKm*km, paceSecPerKm};
+}
+
 /* Workout description is split from pace: descBase/paceKey are stored on the day,
    the pace string itself is rendered live so unit/mph-toggle and the week's
    progressively-faster paces always stay in sync without regenerating the plan. */
@@ -2053,11 +2087,25 @@ function computeProgressStats(){
   // have you actually logged. Race day itself isn't "training" so it's excluded.
   const totalPlanTrainingKm = plan.weeks.reduce((s,w)=> s + w.days.filter(d=>d.type!=='race').reduce((s2,d)=>s2+d.km,0), 0);
   const pctPlanMilesLogged = totalPlanTrainingKm>0 ? Math.round(100*Math.min(1, totalLoggedKm/totalPlanTrainingKm)) : 0;
+
+  // "What would I run right now" vs "what would I have run on day one" — current fitness
+  // compared to starting fitness, not the plan's own future goal (that's the existing
+  // "Goal race pace" elsewhere). Race plans headline their actual race distance; general
+  // plans have no single race, so they project three fixed reference distances instead.
+  const currentVdot = currentEffectiveVdot(plan, state.logs);
+  const raceProjection = (!isGeneralPlan(state.setup) && plan.startVdot!=null && currentVdot!=null)
+    ? { km: plan.raceDistanceKm, start: raceProjectionFor(plan.startVdot, plan.raceDistanceKm), current: raceProjectionFor(currentVdot, plan.raceDistanceKm) }
+    : null;
+  const generalProjections = (isGeneralPlan(state.setup) && plan.startVdot!=null && currentVdot!=null)
+    ? PROJECTION_DISTANCES.map(d=>({ ...d, start: raceProjectionFor(plan.startVdot, d.km), current: raceProjectionFor(currentVdot, d.km) }))
+    : null;
+
   return {
     unit, totalLoggedKm, totalLoggedCount,
     loggedKmToDate, plannedToDateKm, mileageDeltaKm, mileageStatusLabel,
     plannedRunDatesToDateCount: plannedRunDatesToDate.length, completedPlannedRuns, adherence,
     totalPlanTrainingKm, pctPlanMilesLogged,
+    raceProjection, generalProjections,
   };
 }
 
@@ -2168,6 +2216,44 @@ function checkAndTriggerBadges(newLog){
   return false;
 }
 
+// "X faster/slower than at the start" — shared phrasing for every current-vs-start
+// comparison below, both the race-plan tile and each general-plan distance row.
+function projectionDeltaText(startTimeSec, currentTimeSec){
+  const deltaSec = startTimeSec - currentTimeSec; // positive = current is the faster (lower) time
+  if(Math.abs(deltaSec) < 5) return 'about the same as at the start';
+  return `${secToClock(Math.abs(deltaSec))} ${deltaSec>0?'faster':'slower'} than at the start`;
+}
+// Race plans headline their one actual race distance as a tappable tile, matching the
+// existing 4-tile stat pattern; general plans show three fixed reference distances as
+// compact rows instead, since there's no single race to headline. Returns '' for legacy
+// plans saved before the vdot model existed (no startVdot to compare against).
+function renderRaceProjectionSection(stats, unit, fmt){
+  if(stats.raceProjection){
+    const p = stats.raceProjection;
+    return `
+    <div class="section-title" style="padding:0; margin-top:0;">Projected race performance</div>
+    <button class="card stat-tile" data-act="open-stat-detail" data-stat="race-projection" style="padding:16px; margin-bottom:16px;">
+      <div class="v">${secToClock(p.current.timeSec)}</div>
+      <div class="l">projected finish today (${paceOrSpeedStr(p.current.paceSecPerKm,unit,fmt)})</div>
+      <div class="hint" style="margin-top:6px;">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}</div>
+    </button>`;
+  }
+  if(stats.generalProjections){
+    const rows = stats.generalProjections.map(p=>`
+      <div class="settings-row" data-act="open-stat-detail" data-stat="general-projection-${p.key}" style="cursor:pointer;">
+        <div><div class="lbl">${p.label}</div><div class="sub">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}</div></div>
+        <div style="text-align:right;">
+          <div class="mono" style="font-weight:700;">${secToClock(p.current.timeSec)}</div>
+          <div class="hint" style="margin:0;">${paceOrSpeedStr(p.current.paceSecPerKm,unit,fmt)}</div>
+        </div>
+      </div>`).join('');
+    return `
+    <div class="section-title" style="padding:0; margin-top:0;">Projected race performance</div>
+    <div class="card" style="padding:0 16px; margin-bottom:16px;">${rows}</div>`;
+  }
+  return '';
+}
+
 function renderProgressTab(){
   const plan = state.plan, unit = state.setup.units;
   const raceDate = parseDate(plan.raceDate);
@@ -2207,6 +2293,7 @@ function renderProgressTab(){
     <div class="hint" style="margin-bottom:16px;">${plan.planKind
       ? (daysToRace>=0 ? `${planLabel(state.setup)} — ${daysToRace} day${daysToRace===1?'':'s'} left` : `${planLabel(state.setup)} — complete. Nice work.`)
       : (daysToRace>=0? daysToRace+' days until '+planLabel(state.setup) : 'Race day has passed — nice work.')}</div>
+    ${renderRaceProjectionSection(stats, unit, state.paceFormat)}
   </div>
   <div class="stat-grid" style="margin-bottom:16px;">
     <button class="card stat-tile" data-act="open-stat-detail" data-stat="total-logged"><div class="v">${fmtDist(stats.totalLoggedKm,unit,0)}</div><div class="l">total logged</div></button>
@@ -2497,13 +2584,21 @@ function renderStatDetailModal(statKey){
       s.plannedRunDatesToDateCount, 'days with a run scheduled'
     ) + statResultHtml(`${s.adherence}%`, 'plan adherence', 'var(--accent-strong)');
     footnote = 'Only counts days on or before today that the plan actually scheduled a run.';
-  } else {
+  } else if(statKey==='mileage-delta'){
     title = s.mileageStatusLabel==='behind plan' ? 'Behind plan' : s.mileageStatusLabel==='ahead of plan' ? 'Ahead of plan' : 'On plan';
     const resultColor = s.mileageStatusLabel==='behind plan' ? 'var(--z-tempo)' : (s.mileageStatusLabel==='ahead of plan' ? 'var(--accent-strong)' : 'var(--muted)');
     content = statCompareRowHtml(
       fmtDist(s.plannedToDateKm,unit,1), 'planned to date',
       fmtDist(s.loggedKmToDate,unit,1), 'logged to date'
     ) + statResultHtml(fmtDist(Math.abs(s.mileageDeltaKm),unit,1), s.mileageStatusLabel, resultColor);
+  } else if(statKey==='race-projection' || (statKey && statKey.startsWith('general-projection-'))){
+    const p = statKey==='race-projection' ? s.raceProjection : s.generalProjections.find(x=>statKey===`general-projection-${x.key}`);
+    title = statKey==='race-projection' ? 'Projected race performance' : `Projected ${p.label} performance`;
+    content = statCompareRowHtml(
+      secToClock(p.start.timeSec), 'at plan start',
+      secToClock(p.current.timeSec), 'today'
+    ) + statResultHtml(projectionDeltaText(p.start.timeSec, p.current.timeSec), 'change since you started', 'var(--accent-strong)');
+    footnote = `Pace: ${paceOrSpeedStr(p.start.paceSecPerKm,unit,state.paceFormat)} at the start vs ${paceOrSpeedStr(p.current.paceSecPerKm,unit,state.paceFormat)} today. Based on your training paces, not a specific logged race result.`;
   }
   return modalShell(title, `${content}${footnote?`<div class="hint" style="text-align:center; margin-top:16px;">${footnote}</div>`:''}`);
 }
