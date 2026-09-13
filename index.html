@@ -575,13 +575,39 @@ function impliedVdotFromPace(actualPaceSecPerKm, pct){
   const vMetersPerMin = 60000/actualPaceSecPerKm;
   return vo2FromVelocity(vMetersPerMin)/pct;
 }
+// Recalibration and the pace tracker compare a logged run's pace against its planned
+// per-km target - but for tempo/cruise/intervals/overunder, day.km now includes a
+// warm-up (and possibly cool-down) at easy pace (see WARMUP_ELIGIBLE_TYPES), so the
+// runner's one logged distance/time blends two very different paces together. Feeding
+// that blended average straight into a pure-quality-pace comparison would read as
+// slower than the runner's actual effort, understating fitness for no real reason. This
+// backs the warm-up/cool-down distance out first - using the week's own BASELINE easy
+// pace (not recalibrated, to avoid a circular dependency, since this feeds
+// computeRecalibration itself) to estimate how much of the logged time that portion
+// likely took - then returns the pace implied by whatever's left. Falls back to the
+// plain blended pace when there's no meaningful warm-up/cool-down to account for, or the
+// logged distance doesn't even cover it (e.g. the run was cut short).
+function qualityEffortPaceSecPerKm(day, totalDistanceKm, totalDurationSec, plan){
+  const blended = totalDurationSec/totalDistanceKm;
+  const easyPortionKm = (day.warmupKm||0) + (day.cooldownKm||0);
+  if(!(easyPortionKm>0.15) || !(totalDistanceKm>easyPortionKm) || plan.startVdot==null) return blended;
+  const week = plan.weeks.find(w=>w.days.some(d=>d.id===day.id));
+  if(!week) return blended;
+  const frac = week.weekIndex>=plan.buildWeeksCount ? 1 : clamp(week.weekIndex/plan.rampWeeks, 0, 1);
+  const baselineVdot = plan.startVdot + (plan.endVdot-plan.startVdot)*frac;
+  const easyPaceSecPerKm = paceZonesFromVdot(baselineVdot).easyPerKm;
+  const easyTimeSec = easyPortionKm*easyPaceSecPerKm;
+  const qualityDistanceKm = totalDistanceKm-easyPortionKm;
+  const qualityTimeSec = Math.max(0, totalDurationSec-easyTimeSec);
+  return qualityTimeSec/qualityDistanceKm;
+}
 function computeRecalibration(plan, logs){
   const matches = [];
   for(const log of logs){
     const day = findPlanDay(plan, log.date);
     const pct = day && RECALIBRATION_TYPES.includes(day.type) ? RECALIBRATION_PCT[day.paceKey] : null;
     if(pct && log.distanceKm>0){
-      const actualPaceSecPerKm = log.durationSec/log.distanceKm;
+      const actualPaceSecPerKm = qualityEffortPaceSecPerKm(day, log.distanceKm, log.durationSec, plan);
       const impliedVdot = impliedVdotFromPace(actualPaceSecPerKm, pct);
       matches.push({date:log.date, impliedVdot});
     }
@@ -2628,7 +2654,9 @@ function chartWeekLabel(week){
 // Every logged-vs-planned pace pairing for `type`, oldest first — the raw material for
 // the pace tracker's trend line. Only long/tempo (each with one clean, structured target
 // pace) are shown in the UI — easy/hills/fartlek are intentionally run by feel with no
-// single "right" pace, and rest/race aren't training-pace days at all.
+// single "right" pace, and rest/race aren't training-pace days at all. actualPaceSecPerKm
+// already backs out any warm-up/cool-down portion via qualityEffortPaceSecPerKm, so a
+// tempo day's trend point reflects the tempo effort itself, not a blend with easy miles.
 function paceRunsForType(type){
   const matches = [];
   for(const week of state.plan.weeks){
@@ -2645,7 +2673,8 @@ function paceRunsForType(type){
       const weekPaces = getWeekPaces(state.plan, week, state.logs);
       const plannedPaceSecPerKm = day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : weekPaces[day.paceKey];
       if(plannedPaceSecPerKm==null) continue;
-      matches.push({date:day.date, actualPaceSecPerKm: totalSec/totalKm, plannedPaceSecPerKm});
+      const actualPaceSecPerKm = qualityEffortPaceSecPerKm(day, totalKm, totalSec, state.plan);
+      matches.push({date:day.date, actualPaceSecPerKm, plannedPaceSecPerKm});
     }
   }
   matches.sort((a,b)=> a.date<b.date?-1:1);
@@ -3057,13 +3086,22 @@ function paceDeltaLine(actualPaceSecPerKm, plannedPaceSecPerKm, unit, fmt){
 function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
   const plannedKm = day.km;
   const plannedPaceSecPerKm = day.paceKey ? (day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : getWeekPaces(plan, week, logs)[day.paceKey]) : null;
+  // The pace shown next to duration is always the plain logged average (matches the
+  // distance/time the runner actually entered) - but for a day with a warm-up baked in,
+  // comparing THAT blended average directly against the pure quality-pace target would
+  // make the runner look slower than they were during the quality portion itself. The
+  // comparison line uses the warm-up-backed-out estimate instead, and says so explicitly
+  // so the two numbers on screen don't look like they're contradicting each other.
   const actualPaceSecPerKm = log.distanceKm>0 ? log.durationSec/log.distanceKm : null;
+  const totalEasyKm = (day.warmupKm||0) + (day.cooldownKm||0);
+  const warmupAdjusted = totalEasyKm>0.15 && log.distanceKm>totalEasyKm;
+  const comparisonPaceSecPerKm = warmupAdjusted ? qualityEffortPaceSecPerKm(day, log.distanceKm, log.durationSec, plan) : actualPaceSecPerKm;
 
   const distLine = plannedKm>0
     ? `${fmtDist(log.distanceKm,unit)} logged vs ${fmtDist(plannedKm,unit)} planned`
     : `${fmtDist(log.distanceKm,unit)} logged — nothing was planned this day`;
 
-  const paceCompareLine = paceDeltaLine(actualPaceSecPerKm, plannedPaceSecPerKm, unit, fmt);
+  const paceCompareLine = paceDeltaLine(comparisonPaceSecPerKm, plannedPaceSecPerKm, unit, fmt);
 
   const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs', racepace:'race-pace runs', race:'race-day runs'};
   const eligible = RECALIBRATION_TYPES.includes(day.type) && day.paceKey && RECALIBRATION_PCT[day.paceKey];
@@ -3089,7 +3127,7 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
       Logged
     </div>
     <div style="font-weight:700; font-size:14.5px;">${esc(distLine)}</div>
-    <div style="font-size:13px; color:var(--ink-soft); margin-top:2px;">${secToClock(log.durationSec)}${actualPaceSecPerKm!=null?' · '+paceOrSpeedStr(actualPaceSecPerKm,unit,fmt):''}${paceCompareLine?' · '+paceCompareLine:''}</div>
+    <div style="font-size:13px; color:var(--ink-soft); margin-top:2px;">${secToClock(log.durationSec)}${actualPaceSecPerKm!=null?' · '+paceOrSpeedStr(actualPaceSecPerKm,unit,fmt):''}${paceCompareLine?' · '+(warmupAdjusted?'excluding warm-up, ':'')+paceCompareLine:''}</div>
     <div class="hint" style="margin-top:8px; color:var(--ink-soft);">${impactLine}</div>
     <button class="btn btn-ghost btn-sm" data-act="delete-log" data-id="${log.id}" style="margin-top:10px; color:#C4432E;">Remove this log</button>
   </div>`;
