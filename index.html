@@ -2254,13 +2254,13 @@ function renderRaceProjectionSection(stats, unit, fmt){
       <div class="v">${secToClock(p.current.timeSec)}</div>
       <div class="l">projected finish today (${paceOrSpeedStr(p.current.paceSecPerKm,unit,fmt)})</div>
       <div class="hint" style="margin-top:6px;">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}</div>
-      ${p.goal ? `<div class="hint" style="margin-top:2px; color:var(--accent-strong);">On pace for ${secToClock(p.goal.timeSec)} if you complete the rest of the plan</div>` : ''}
+      ${p.goal ? `<div class="hint" style="margin-top:2px; color:var(--accent-strong);">On pace for ${secToClock(p.goal.timeSec)} (${paceOrSpeedStr(p.goal.paceSecPerKm,unit,fmt)}) if you complete the rest of the plan</div>` : ''}
     </button>`;
   }
   if(stats.generalProjections){
     const rows = stats.generalProjections.map(p=>`
       <div class="settings-row" data-act="open-stat-detail" data-stat="general-projection-${p.key}" style="cursor:pointer;">
-        <div><div class="lbl">${p.label}</div><div class="sub">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}${p.goal ? `<br>On pace for ${secToClock(p.goal.timeSec)} by plan's end` : ''}</div></div>
+        <div><div class="lbl">${p.label}</div><div class="sub">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}${p.goal ? `<br>On pace for ${secToClock(p.goal.timeSec)} (${paceOrSpeedStr(p.goal.paceSecPerKm,unit,fmt)}) by plan's end` : ''}</div></div>
         <div style="text-align:right;">
           <div class="mono" style="font-weight:700;">${secToClock(p.current.timeSec)}</div>
           <div class="hint" style="margin:0;">${paceOrSpeedStr(p.current.paceSecPerKm,unit,fmt)}</div>
