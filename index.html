@@ -1401,7 +1401,7 @@ function renderProgressTab(){
         <div class="bar-planned" style="height:${plannedPct}%"></div>
         <div class="bar-actual" style="height:${actualPct}%"></div>
       </div>
-      <div class="wl">${w.weekIndex+1}</div>
+      <div class="wl">${chartWeekLabel(w)}</div>
     </div>`;
   }).join('');
 
@@ -1431,6 +1431,11 @@ function renderProgressTab(){
     <div class="chart-rows">${bars}</div>
     <div class="legend"><span><i style="background:var(--line)"></i>Planned</span><span><i style="background:var(--accent-strong)"></i>Logged</span></div>
   </div>
+  <div class="section-title" style="padding:0 20px;">Pace tracker</div>
+  <div class="card" style="padding:6px 16px; margin:0 18px 24px;">
+    ${paceTrackerRowHtml('long','Long runs')}
+    ${paceTrackerRowHtml('tempo','Tempo runs')}
+  </div>
   <div class="section-title" style="padding:0 20px;">Recent runs</div>
   <div class="card" style="margin:0 18px 24px;">${logRows}</div>
   `;
@@ -1438,6 +1443,47 @@ function renderProgressTab(){
 
 function weekActualKm(week){
   return logsInWeek(week).reduce((s,l)=>s+l.distanceKm,0);
+}
+function chartWeekLabel(week){
+  const dt = parseDate(week.weekStart);
+  return `${dt.getMonth()+1}/${dt.getDate()}`;
+}
+
+// Aggregates logged-vs-planned pace across every day of `type` that's actually been
+// logged, for the pace tracker. Only long/tempo (each with one clean, structured target
+// pace) are shown in the UI — easy/hills/fartlek are intentionally run by feel with no
+// single "right" pace, and rest/race aren't training-pace days at all.
+function paceComparisonForType(type){
+  const matches = [];
+  for(const week of state.plan.weeks){
+    for(const day of week.days){
+      if(day.type!==type || !day.paceKey) continue;
+      const log = state.logs.find(l=>l.date===day.date);
+      if(!log || log.distanceKm<=0) continue;
+      const weekPaces = getWeekPaces(state.plan, week, state.logs);
+      const plannedPaceSecPerKm = day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : weekPaces[day.paceKey];
+      if(plannedPaceSecPerKm==null) continue;
+      matches.push({actualPaceSecPerKm: log.durationSec/log.distanceKm, plannedPaceSecPerKm});
+    }
+  }
+  if(!matches.length) return null;
+  const avgActual = matches.reduce((s,m)=>s+m.actualPaceSecPerKm,0)/matches.length;
+  const avgPlanned = matches.reduce((s,m)=>s+m.plannedPaceSecPerKm,0)/matches.length;
+  return {count:matches.length, avgActual, avgPlanned};
+}
+function paceTrackerRowHtml(type, label){
+  const unit = state.setup.units, fmt = state.paceFormat;
+  const cmp = paceComparisonForType(type);
+  if(!cmp){
+    return `<div class="settings-row"><div><div class="lbl">${label}</div><div class="sub">No logged ${label.toLowerCase()}s yet.</div></div></div>`;
+  }
+  const deltaLine = paceDeltaLine(cmp.avgActual, cmp.avgPlanned, unit, fmt);
+  return `<div class="settings-row">
+    <div>
+      <div class="lbl">${label}</div>
+      <div class="sub">Avg ${paceOrSpeedStr(cmp.avgActual,unit,fmt)} vs planned ${paceOrSpeedStr(cmp.avgPlanned,unit,fmt)} — ${deltaLine} · ${cmp.count} logged</div>
+    </div>
+  </div>`;
 }
 
 function renderSettingsTab(){
@@ -1560,6 +1606,21 @@ function modalLogRun(){
   `);
 }
 
+// Shared "how does actual pace compare to planned" phrasing — used both for a single
+// logged run and for the aggregated pace tracker in Progress.
+function paceDeltaLine(actualPaceSecPerKm, plannedPaceSecPerKm, unit, fmt){
+  if(plannedPaceSecPerKm==null || actualPaceSecPerKm==null) return '';
+  const deltaSecPerKm = actualPaceSecPerKm-plannedPaceSecPerKm;
+  const deltaDisplayPerUnit = unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm;
+  if(Math.abs(deltaDisplayPerUnit)<3) return 'right on target pace';
+  if(fmt==='speed'){
+    const actualSpeed = 3600/(unit==='mi'?actualPaceSecPerKm*KM_PER_MI:actualPaceSecPerKm);
+    const plannedSpeed = 3600/(unit==='mi'?plannedPaceSecPerKm*KM_PER_MI:plannedPaceSecPerKm);
+    return `${Math.abs(actualSpeed-plannedSpeed).toFixed(1)} ${unit==='mi'?'mph':'km/h'} ${actualSpeed<plannedSpeed?'slower':'faster'} than planned`;
+  }
+  return `${secToClock(Math.abs(deltaDisplayPerUnit))}/${unit} ${deltaDisplayPerUnit>0?'slower':'faster'} than planned`;
+}
+
 function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
   const plannedKm = day.km;
   const plannedPaceSecPerKm = day.paceKey ? (day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : getWeekPaces(plan, week, logs)[day.paceKey]) : null;
@@ -1569,20 +1630,7 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
     ? `${fmtDist(log.distanceKm,unit)} logged vs ${fmtDist(plannedKm,unit)} planned`
     : `${fmtDist(log.distanceKm,unit)} logged — nothing was planned this day`;
 
-  let paceCompareLine = '';
-  if(plannedPaceSecPerKm!=null && actualPaceSecPerKm!=null){
-    const deltaSecPerKm = actualPaceSecPerKm-plannedPaceSecPerKm;
-    const deltaDisplayPerUnit = unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm;
-    if(Math.abs(deltaDisplayPerUnit)<3){
-      paceCompareLine = 'right on target pace';
-    } else if(fmt==='speed'){
-      const actualSpeed = 3600/(unit==='mi'?actualPaceSecPerKm*KM_PER_MI:actualPaceSecPerKm);
-      const plannedSpeed = 3600/(unit==='mi'?plannedPaceSecPerKm*KM_PER_MI:plannedPaceSecPerKm);
-      paceCompareLine = `${Math.abs(actualSpeed-plannedSpeed).toFixed(1)} ${unit==='mi'?'mph':'km/h'} ${actualSpeed<plannedSpeed?'slower':'faster'} than planned`;
-    } else {
-      paceCompareLine = `${secToClock(Math.abs(deltaDisplayPerUnit))}/${unit} ${deltaDisplayPerUnit>0?'slower':'faster'} than planned`;
-    }
-  }
+  const paceCompareLine = paceDeltaLine(actualPaceSecPerKm, plannedPaceSecPerKm, unit, fmt);
 
   const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', race:'race-day runs'};
   const eligible = RECALIBRATION_TYPES.includes(day.type) && day.paceKey && RECALIBRATION_PCT[day.paceKey];
