@@ -180,7 +180,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .sheet-close svg{width:24px; height:24px;}
 
 /* ---------- progress ---------- */
-.stat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:0 18px;}
+.stat-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; padding:0 18px;}
 .stat-tile{padding:14px 12px;}
 .stat-tile .v{font-family:var(--font-mono); font-weight:800; font-size:20px;}
 .stat-tile .l{font-size:11px; color:var(--muted); margin-top:2px;}
@@ -1395,6 +1395,11 @@ function renderProgressTab(){
   const loggedDates = new Set(state.logs.map(l=>l.date));
   const completedPlannedRuns = plannedRunDatesToDate.filter(date=>loggedDates.has(date)).length;
   const adherence = plannedRunDatesToDate.length>0 ? Math.round(100*completedPlannedRuns/plannedRunDatesToDate.length) : 0;
+  // Separate from adherence (did you run on the days the plan called for): what fraction
+  // of the whole plan's training mileage — every week, not just the ones behind you —
+  // have you actually logged. Race day itself isn't "training" so it's excluded.
+  const totalPlanTrainingKm = plan.weeks.reduce((s,w)=> s + w.days.filter(d=>d.type!=='race').reduce((s2,d)=>s2+d.km,0), 0);
+  const pctPlanMilesLogged = totalPlanTrainingKm>0 ? Math.round(100*Math.min(1, totalLoggedKm/totalPlanTrainingKm)) : 0;
 
   const chartWeeks = plan.weeks.filter(w=>parseDate(w.weekStart)<=addDays(todayDate(),7)).slice(-8);
   const maxKm = Math.max(1, ...chartWeeks.map(w=>Math.max(w.targetKm, weekActualKm(w))));
@@ -1429,7 +1434,8 @@ function renderProgressTab(){
   </div>
   <div class="stat-grid" style="margin-bottom:16px;">
     <div class="card stat-tile"><div class="v">${fmtDist(totalLoggedKm,unit,0)}</div><div class="l">total logged</div></div>
-    <div class="card stat-tile"><div class="v">${adherence}%</div><div class="l">runs completed</div></div>
+    <div class="card stat-tile"><div class="v">${pctPlanMilesLogged}%</div><div class="l">training miles logged</div></div>
+    <div class="card stat-tile"><div class="v">${adherence}%</div><div class="l">plan adherence</div></div>
     <div class="card stat-tile"><div class="v">${fmtDist(Math.max(0,plannedToDateKm-totalLoggedKm),unit,0)}</div><div class="l">behind plan</div></div>
   </div>
   <div class="section-title" style="padding:0 20px;">Weekly mileage — planned vs. actual</div>
