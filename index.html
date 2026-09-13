@@ -586,6 +586,18 @@ function currentEffectiveVdot(plan, logs){
   const recal = isPastWeek ? null : computeRecalibration(plan, logs);
   return recal ? baselineVdot*(1-recal.weight) + recal.perfImpliedVdot*recal.weight : baselineVdot;
 }
+// The plan's own end-of-plan VDOT, recalibrated the same way currentEffectiveVdot() is -
+// "what this plan is on pace for by its final week, assuming you complete the rest of it."
+// Deliberately still folds in real logged performance (the same recalibration signal that
+// already adjusts the existing "Goal race pace" elsewhere) rather than a frozen day-one
+// number - "full adherence" means finishing out the plan, not ignoring how it's gone so far.
+function goalEffectiveVdot(plan, logs){
+  if(plan.startVdot==null) return null;
+  const week = findWeekForToday(plan);
+  const isPastWeek = addDays(parseDate(week.weekStart),6) < todayDate();
+  const recal = isPastWeek ? null : computeRecalibration(plan, logs);
+  return recal ? plan.endVdot*(1-recal.weight) + recal.perfImpliedVdot*recal.weight : plan.endVdot;
+}
 // Fixed distances general (non-race) plans project against, since there's no single race
 // to headline the way a race plan has.
 const PROJECTION_DISTANCES = [
@@ -2089,15 +2101,21 @@ function computeProgressStats(){
   const pctPlanMilesLogged = totalPlanTrainingKm>0 ? Math.round(100*Math.min(1, totalLoggedKm/totalPlanTrainingKm)) : 0;
 
   // "What would I run right now" vs "what would I have run on day one" — current fitness
-  // compared to starting fitness, not the plan's own future goal (that's the existing
-  // "Goal race pace" elsewhere). Race plans headline their actual race distance; general
-  // plans have no single race, so they project three fixed reference distances instead.
+  // compared to starting fitness, not the plan's own future goal. Race plans headline their
+  // actual race distance; general plans have no single race, so they project three fixed
+  // reference distances instead.
   const currentVdot = currentEffectiveVdot(plan, state.logs);
+  const goalVdot = goalEffectiveVdot(plan, state.logs);
+  // Only worth showing as a third number when it's actually different from the start - for
+  // Build Distance/Maintenance/Recovery, endVdot equals startVdot by design (those plans
+  // don't project a speed improvement, only race plans and Build Speed do), so this stays
+  // null there rather than repeating the same value a third time.
+  const hasGoal = goalVdot!=null && plan.startVdot!=null && Math.abs(goalVdot-plan.startVdot) > 0.05;
   const raceProjection = (!isGeneralPlan(state.setup) && plan.startVdot!=null && currentVdot!=null)
-    ? { km: plan.raceDistanceKm, start: raceProjectionFor(plan.startVdot, plan.raceDistanceKm), current: raceProjectionFor(currentVdot, plan.raceDistanceKm) }
+    ? { km: plan.raceDistanceKm, start: raceProjectionFor(plan.startVdot, plan.raceDistanceKm), current: raceProjectionFor(currentVdot, plan.raceDistanceKm), goal: hasGoal ? raceProjectionFor(goalVdot, plan.raceDistanceKm) : null }
     : null;
   const generalProjections = (isGeneralPlan(state.setup) && plan.startVdot!=null && currentVdot!=null)
-    ? PROJECTION_DISTANCES.map(d=>({ ...d, start: raceProjectionFor(plan.startVdot, d.km), current: raceProjectionFor(currentVdot, d.km) }))
+    ? PROJECTION_DISTANCES.map(d=>({ ...d, start: raceProjectionFor(plan.startVdot, d.km), current: raceProjectionFor(currentVdot, d.km), goal: hasGoal ? raceProjectionFor(goalVdot, d.km) : null }))
     : null;
 
   return {
@@ -2236,12 +2254,13 @@ function renderRaceProjectionSection(stats, unit, fmt){
       <div class="v">${secToClock(p.current.timeSec)}</div>
       <div class="l">projected finish today (${paceOrSpeedStr(p.current.paceSecPerKm,unit,fmt)})</div>
       <div class="hint" style="margin-top:6px;">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}</div>
+      ${p.goal ? `<div class="hint" style="margin-top:2px; color:var(--accent-strong);">On pace for ${secToClock(p.goal.timeSec)} if you complete the rest of the plan</div>` : ''}
     </button>`;
   }
   if(stats.generalProjections){
     const rows = stats.generalProjections.map(p=>`
       <div class="settings-row" data-act="open-stat-detail" data-stat="general-projection-${p.key}" style="cursor:pointer;">
-        <div><div class="lbl">${p.label}</div><div class="sub">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}</div></div>
+        <div><div class="lbl">${p.label}</div><div class="sub">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}${p.goal ? `<br>On pace for ${secToClock(p.goal.timeSec)} by plan's end` : ''}</div></div>
         <div style="text-align:right;">
           <div class="mono" style="font-weight:700;">${secToClock(p.current.timeSec)}</div>
           <div class="hint" style="margin:0;">${paceOrSpeedStr(p.current.paceSecPerKm,unit,fmt)}</div>
@@ -2598,6 +2617,10 @@ function renderStatDetailModal(statKey){
       secToClock(p.start.timeSec), 'at plan start',
       secToClock(p.current.timeSec), 'today'
     ) + statResultHtml(projectionDeltaText(p.start.timeSec, p.current.timeSec), 'change since you started', 'var(--accent-strong)');
+    if(p.goal){
+      content += `<div style="border-top:1px solid var(--line-soft); margin:18px 0 16px;"></div>` +
+        statNumberHtml(secToClock(p.goal.timeSec), `goal pace (${paceOrSpeedStr(p.goal.paceSecPerKm,unit,state.paceFormat)}) if you complete the rest of the plan`, {color:'var(--accent-strong)'});
+    }
     footnote = `Pace: ${paceOrSpeedStr(p.start.paceSecPerKm,unit,state.paceFormat)} at the start vs ${paceOrSpeedStr(p.current.paceSecPerKm,unit,state.paceFormat)} today. Based on your training paces, not a specific logged race result.`;
   }
   return modalShell(title, `${content}${footnote?`<div class="hint" style="text-align:center; margin-top:16px;">${footnote}</div>`:''}`);
