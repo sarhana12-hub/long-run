@@ -181,6 +181,8 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .sheet.milestone{ text-align:center; }
 .badge-ring{ width:84px; height:84px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; margin:0 auto 18px; }
 .badge-ring svg{ width:44px; height:44px; }
+.milestone-hero{ width:220px; margin:0 auto 18px; }
+.milestone-hero svg{ width:100%; height:auto; display:block; }
 .sheet-title.milestone{ font-family:var(--font-display); font-weight:800; font-size:22px; margin-bottom:8px; }
 .sheet-body{ font-size:14.5px; line-height:1.55; color:var(--ink-soft); margin-bottom:22px; }
 
@@ -859,11 +861,14 @@ const Store = {
     const logs = this.getLogs().filter(l=>l.id!==id);
     this._set('lr_logs', logs);
   },
+  getMilestonesShown(){ return this._get('lr_milestones', {halfway:false, arrived:false}); },
+  setMilestonesShown(v){ this._set('lr_milestones', v); },
   resetAll(){
     localStorage.removeItem('lr_name');
     localStorage.removeItem('lr_setup');
     localStorage.removeItem('lr_plan');
     localStorage.removeItem('lr_logs');
+    localStorage.removeItem('lr_milestones');
   }
 };
 
@@ -872,6 +877,8 @@ const ICONS = {
   route:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M6 15.5V13a4 4 0 0 1 4-4h4a4 4 0 0 0 4-4"/></svg>',
   peak:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19 L9 10 L11 13 L15 6 L21 19"/><path d="M15 6 L15 2"/><path d="M15 2 L18.5 3.2 L15 4.4"/></svg>',
   summitBadge:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M7.5 15.5 L12 8.5 L16.5 15.5"/><path d="M12 8.5 L12 5.2"/><path d="M12 5.2 L14.6 6.2 L12 7.2"/></svg>',
+  summitHalfway:'<svg viewBox="0 0 320 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Runner partway up a mountain trail, summit still ahead"><path d="M40,208 L120,109 L147,142 L200,65 L280,208 Z" fill="#C3F53A" stroke="#121A16" stroke-width="5" stroke-linejoin="round"/><path d="M95,125 L128,112 L138,130 L162,100 L183,75 L198,68" fill="none" stroke="#9BA79C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 10"/><path d="M58,206 L95,182 L78,162 L110,145 L95,125" fill="none" stroke="#121A16" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 10"/><g transform="translate(67.05,77.7) rotate(-8 13 22) scale(2.15)"><path d="M13,7 C12,10 10.5,11.5 11,14" fill="none" stroke="#121A16" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M11,14 C9,16.5 8,19.5 7,22.5" fill="none" stroke="#121A16" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M11,14 C13,17 15.5,17 16.5,20" fill="none" stroke="#121A16" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.5,20 L18.5,21.5" fill="none" stroke="#121A16" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.5,8.5 C10.3,9.6 9,11.8 8,13.5" fill="none" stroke="#121A16" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.5,8.5 C14.7,8.8 16.3,7.6 17.8,9.2" fill="none" stroke="#121A16" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M13,7 C12,10 10.5,11.5 11,14" fill="none" stroke="#F3F5F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M11,14 C9,16.5 8,19.5 7,22.5" fill="none" stroke="#F3F5F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M11,14 C13,17 15.5,17 16.5,20" fill="none" stroke="#F3F5F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.5,20 L18.5,21.5" fill="none" stroke="#F3F5F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.5,8.5 C10.3,9.6 9,11.8 8,13.5" fill="none" stroke="#F3F5F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.5,8.5 C14.7,8.8 16.3,7.6 17.8,9.2" fill="none" stroke="#F3F5F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="13" cy="4.5" r="2.6" fill="#F3F5F0" stroke="#121A16" stroke-width="1.6"/></g></svg>',
+  summitArrived:'<svg viewBox="0 0 320 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Runner celebrating at the mountain summit, flag planted"><path d="M40,208 L120,109 L147,142 L200,65 L280,208 Z" fill="#C3F53A" stroke="#121A16" stroke-width="5" stroke-linejoin="round"/><path d="M58,206 L95,182 L78,162 L110,145 L95,125 L128,112 L138,130 L162,100 L183,75 L198,68" fill="none" stroke="#121A16" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 10"/><g transform="translate(176.95,25.3) scale(1.85)"><path d="M13,7.2 L12.6,15" fill="none" stroke="#121A16" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6,15 L10.2,22.5" fill="none" stroke="#121A16" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6,15 L15,22.5" fill="none" stroke="#121A16" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M13,8.4 C11,6.2 9,3.4 6.8,1.6" fill="none" stroke="#121A16" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M13,8.4 C15,6.2 17,3.4 19.2,1.6" fill="none" stroke="#121A16" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M13,7.2 L12.6,15" fill="none" stroke="#F3F5F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6,15 L10.2,22.5" fill="none" stroke="#F3F5F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6,15 L15,22.5" fill="none" stroke="#F3F5F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13,8.4 C11,6.2 9,3.4 6.8,1.6" fill="none" stroke="#F3F5F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13,8.4 C15,6.2 17,3.4 19.2,1.6" fill="none" stroke="#F3F5F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="13" cy="4.5" r="2.6" fill="#F3F5F0" stroke="#121A16" stroke-width="1.6"/></g><g transform="translate(176.5,25.5) scale(1.5)"><path d="M23,27 L23,9" fill="none" stroke="#121A16" stroke-width="1.7" stroke-linecap="round"/><path d="M23,9 L30.5,12.3 L23,15.6 Z" fill="#F3F5F0" stroke="#121A16" stroke-width="1.5" stroke-linejoin="round"/></g></svg>',
   chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -896,6 +903,7 @@ const state = {
   onboardDraft:null,
   onboardStep:1,
   toast:null,
+  milestonesShown:{halfway:false, arrived:false},
 };
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -928,6 +936,7 @@ function boot(){
   const setup = Store.getSetup();
   const plan = Store.getPlan();
   state.logs = Store.getLogs();
+  state.milestonesShown = Store.getMilestonesShown();
   if(setup && plan){
     state.setup = setup; state.plan = plan;
     const today = todayDate();
@@ -1429,6 +1438,38 @@ function computeProgressStats(){
   };
 }
 
+// Checks the two summit-tier milestones (50% of plan volume logged, race day reached)
+// against the run just saved. Each fires at most once per plan — the "already shown"
+// flags persist so re-opening the app or logging more runs afterward never repeats them.
+// Race day takes priority over the halfway mark on the rare chance both would fire off
+// the same log (e.g. a big last-minute catch-up logged on race day itself).
+function checkAndTriggerMilestones(newLog){
+  const shown = state.milestonesShown;
+  const plan = state.plan;
+  if(!shown.arrived && plan && plan.raceDate && parseDate(newLog.date) >= parseDate(plan.raceDate)){
+    shown.arrived = true;
+    Store.setMilestonesShown(shown);
+    state.modal = {type:'milestone', data:{
+      hero: ICONS.summitArrived,
+      title:'You made it to race day',
+      message:"Every training week led here. However today went, you earned this."
+    }};
+    return true;
+  }
+  const stats = computeProgressStats();
+  if(!shown.halfway && stats.pctPlanMilesLogged >= 50){
+    shown.halfway = true;
+    Store.setMilestonesShown(shown);
+    state.modal = {type:'milestone', data:{
+      hero: ICONS.summitHalfway,
+      title:'Halfway up the mountain',
+      message:"You've logged half of this plan's training miles. The summit is closer than the trailhead now."
+    }};
+    return true;
+  }
+  return false;
+}
+
 function renderProgressTab(){
   const plan = state.plan, unit = state.setup.units;
   const raceDate = parseDate(plan.raceDate);
@@ -1653,16 +1694,23 @@ function renderModal(){
   if(m.type==='edit-setup') return modalEditSetup();
   if(m.type==='confirm-reset') return modalConfirmReset();
   if(m.type==='stat-detail') return renderStatDetailModal(m.stat);
-  if(m.type==='milestone') return modalMilestone(m.data.title, m.data.message);
+  if(m.type==='milestone') return modalMilestone(m.data);
   return '';
 }
 
-function modalMilestone(title, message){
+// Badge-tier celebrations (frequent, small) pass no `hero` and get the 84px badge-ring
+// with the line-icon summitBadge; summit-tier celebrations (rare, plan-defining) pass a
+// hero illustration shown larger in its place. Same sheet either way.
+function modalMilestone(data){
+  const { hero, title, message } = data;
+  const artHtml = hero
+    ? `<div class="milestone-hero">${hero}</div>`
+    : `<div class="badge-ring">${ICONS.summitBadge}</div>`;
   return `<div class="overlay" data-act="close-modal-overlay">
     <div class="sheet milestone" data-stop="1">
       <div class="sheet-handle"></div>
       <button class="sheet-close" data-act="close-modal">${ICONS.close}</button>
-      <div class="badge-ring">${ICONS.summitBadge}</div>
+      ${artHtml}
       <div class="sheet-title milestone">${esc(title)}</div>
       <div class="sheet-body">${esc(message)}</div>
       <button class="btn btn-primary btn-block" data-act="close-modal">Nice!</button>
@@ -2086,7 +2134,10 @@ function onClick(e){
     const logData = {date:d.date, distanceKm:unitToKm(distV,unit), durationSec:durSec, notes:d.notes, createdAt:new Date().toISOString()};
     const item = Store.addLog(logData);
     state.logs = [item, ...state.logs];
-    state.modal=null; showToast('Run logged'); return;
+    state.modal = null;
+    const milestoneFired = checkAndTriggerMilestones(item);
+    if(milestoneFired) render(); else showToast('Run logged');
+    return;
   }
   if(act==='delete-log'){
     const id = el.dataset.id;
@@ -2248,6 +2299,7 @@ function onClick(e){
   if(act==='do-reset'){
     Store.resetAll();
     state.name=''; state.setup=null; state.plan=null; state.logs=[]; state.modal=null;
+    state.milestonesShown = {halfway:false, arrived:false};
     state.view='onboarding'; state.onboardDraft = defaultDraft(); state.onboardStep = 1;
     render(); window.scrollTo(0,0); return;
   }
