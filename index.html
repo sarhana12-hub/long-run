@@ -122,6 +122,8 @@ input.input[type="date"]::-webkit-calendar-picker-indicator{ cursor:pointer; opa
 .chip-select{display:flex; flex-wrap:wrap; gap:8px;}
 .chip{padding:8px 14px; border-radius:999px; border:1px solid var(--line); background:var(--surface-2); font-size:13.5px; font-weight:600; color:var(--ink-soft);}
 .chip.active{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+.kind-card{cursor:pointer;}
+.kind-card.active{border-color:var(--accent); background:var(--accent-soft);}
 a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; text-underline-offset:2px;}
 
 /* ---------- onboarding ---------- */
@@ -850,6 +852,280 @@ function generatePlan(setup){
   };
 }
 
+/* ============================= general (non-race) plans ============================= */
+// Four goal-driven plan kinds for runners not training toward a specific race. Each
+// produces the exact same plan/week/day shape generatePlan() does (so every existing
+// render/progress/pace-tracker/milestone codepath works unmodified) but through its own,
+// much simpler week-by-week logic — deliberately NOT threaded through generatePlan()
+// itself, since that function's taper/race-week/emphasis-dial machinery doesn't apply
+// here and forcing it through would risk the working race path for no benefit.
+const PLAN_KIND_META = {
+  speed:      { label:'Build Speed',    weeksMin:4, weeksMax:16, weeksDefault:8,  hint:'6–12 weeks is the typical effective window for a focused speed block.' },
+  distance:   { label:'Build Distance', weeksMin:4, weeksMax:52, weeksDefault:10, hint:'Longer, patient ramps are safer than short aggressive ones.' },
+  maintenance:{ label:'Maintenance',    weeksMin:1, weeksMax:52, weeksDefault:6,  hint:'No natural end point — regenerate to keep going whenever you like.' },
+  recovery:   { label:'Recovery',       weeksMin:1, weeksMax:6,  weeksDefault:2,  hint:'Past 4 weeks this stops being "recovery" — consider Maintenance or Build Distance instead.' },
+};
+
+// Shared by all four: builds one week's 7 days from a target weekly volume and an already-
+// decided long-run km, splitting whatever's left over evenly across easy days (a simpler
+// split than the race generator's recovery/aerobic distinction — appropriate here since
+// these plans don't have a single race-specific long run to protect the day after).
+function buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, strengthDows, strengthPerWeek, runsPerWeek, addStrides){
+  const days = [];
+  for(let d=0; d<7; d++){
+    const date = addDays(weekStart, d);
+    days.push({id:uid(), date:fmtDate(date), dow:date.getDay(), type:'rest', km:0, strength:false, label:'Rest'});
+  }
+  const longIdx = days.findIndex(x=>x.dow===longDow);
+  let remaining = Math.max(0, weeklyKm-longKm);
+
+  const qualityIdxs = [];
+  quality.forEach(q=>{
+    let idx = days.findIndex((x,i)=>x.dow===q.dow && x.type==='rest' && !qualityIdxs.includes(i));
+    if(idx!==-1 && idx!==longIdx){
+      days[idx] = {...days[idx], type:q.type, km:q.km, label:TYPE_META[q.type].label};
+      qualityIdxs.push(idx);
+      remaining = Math.max(0, remaining-q.km);
+    }
+  });
+
+  const usedRunDays = 1 + qualityIdxs.length;
+  const easyDaysNeeded = Math.max(0, runsPerWeek-usedRunDays);
+  const candidateIdxs = days.map((x,i)=>i).filter(i=>i!==longIdx && !qualityIdxs.includes(i));
+  const easyIdxs = candidateIdxs.slice(0, easyDaysNeeded);
+  const easyKmEach = easyIdxs.length ? round1(remaining/easyIdxs.length) : 0;
+  easyIdxs.forEach((i,n)=>{ days[i] = {...days[i], type:'easy', km:easyKmEach, label:'Easy Run', easyRole:'easy', strides: addStrides && n===0}; });
+
+  days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run'};
+
+  let strengthLeft = strengthPerWeek;
+  strengthDows.forEach(dw=>{
+    if(strengthLeft<=0) return;
+    const idx = days.findIndex(x=>x.dow===dw && !QUALITY_TYPES.includes(x.type));
+    if(idx!==-1){ days[idx].strength = true; strengthLeft--; }
+  });
+
+  return days;
+}
+
+function finishGeneralPlan(setup, weeks, startVdot, endVdot){
+  const lastDay = weeks[weeks.length-1].days[6];
+  return {
+    generatedAt:new Date().toISOString(), planKind:setup.planKind,
+    raceDate:lastDay.date, raceDistanceKm:null, totalWeeks:weeks.length,
+    startVdot, endVdot, buildWeeksCount:weeks.length, rampWeeks:Math.max(weeks.length-1,1),
+    goalRacePerKm:null, paces:weeks[0].paces, weeks,
+  };
+}
+
+// Build Speed: block/wave periodization (3 weeks progressive build + 1 cutback,
+// repeating) rather than one long linear ramp — real speed-development blocks show
+// diminishing returns past ~8-12 weeks of continuous escalation, and an unbroken ramp
+// with no unloading week is how overuse injuries happen. Each new 4-week cycle starts a
+// little higher than the last (a net upward wave), not a full reset. Two quality sessions
+// a week plus 2x/week strength (heavy compound lifts / plyometrics) - the evidence-backed
+// dose for running-economy gains without crowding out the running itself.
+// Picks whichever remaining day sits at least 48h from every day already in `hardDows`
+// (ties broken toward the first/lowest-index candidate) - used both for the second
+// quality session (avoiding the long run and primary speed day) and for strength
+// placement (avoiding all three hard days at once, not just the two the generic
+// deriveScheduleFromLongDow helper knows about).
+function furthestDow(hardDows, exclude){
+  let best = null, bestScore = -1;
+  for(let dow=0; dow<7; dow++){
+    if(hardDows.includes(dow) || (exclude||[]).includes(dow)) continue;
+    const score = Math.min(...hardDows.map(h=>circularDayDist(dow,h)));
+    if(score>bestScore){ bestScore=score; best=dow; }
+  }
+  return best;
+}
+
+function generateSpeedPlan(setup){
+  const currentKm = setup.currentWeeklyKm;
+  const weeks = setup.weeks;
+  const longDow = setup.longDow ?? 0;
+  const speedDow = setup.speedDow ?? 3;
+  const runsPerWeek = setup.runsPerWeek || runsPerWeekFor(currentKm);
+  const startVdot = baseVdot(setup);
+  const endVdot = startVdot * (1 + clamp(weeks*0.006, 0, 0.06));
+  const weekStart0 = startOfWeek(todayDate());
+
+  // Constant across the whole plan (a function of longDow/speedDow only), so computed
+  // once rather than re-derived every week.
+  const secondDow = furthestDow([longDow, speedDow]);
+  const hardDows = [longDow, speedDow, secondDow];
+  // With three hard-effort days already claiming/flanking most of the week, a strength
+  // day fully 48h clear of all three isn't always possible - same tension the "high"
+  // speed-emphasis race plans already accept. Prefer the day right after a hard day
+  // (pairs with its own recovery, the ideal placement) before falling back to whatever's
+  // least-bad; the schedule-warnings banner still honestly flags anything left over.
+  const idealOrder = hardDows.map(h=>(h+1)%7);
+  const badDows = new Set([...hardDows, ...hardDows.map(h=>(h+6)%7)]);
+  const strengthDows = [];
+  idealOrder.forEach(dw=>{ if(strengthDows.length<2 && !strengthDows.includes(dw) && !badDows.has(dw)) strengthDows.push(dw); });
+  for(let offset=0; offset<7 && strengthDows.length<2; offset++){
+    const dw=(longDow+offset)%7;
+    if(!strengthDows.includes(dw) && !badDows.has(dw)) strengthDows.push(dw);
+  }
+  for(let offset=0; offset<7 && strengthDows.length<2; offset++){
+    const dw=(longDow+offset)%7;
+    if(!strengthDows.includes(dw) && !hardDows.includes(dw)) strengthDows.push(dw);
+  }
+
+  const weekList = [];
+  for(let w=0; w<weeks; w++){
+    const weekStart = addDays(weekStart0, w*7);
+    const cycleIdx = Math.floor(w/4), weekInCycle = w%4;
+    const isCutback = weekInCycle===3;
+    const cycleBonus = clamp(cycleIdx*0.04, 0, 0.16);
+    const weeklyKm = isCutback
+      ? round1(currentKm*(1+cycleBonus)*0.85)
+      : round1(currentKm*(1+cycleBonus)*(1+0.05*(weekInCycle/2)));
+
+    const frac = weeks<=1 ? 1 : clamp(w/(weeks-1), 0, 1);
+    const weekVdot = startVdot + (endVdot-startVdot)*frac;
+    const weekPaces = paceZonesFromVdot(weekVdot);
+
+    const longKm = round1(Math.min(weeklyKm*0.25, currentKm*0.30));
+    const primaryType = BUILD_ROTATION[w % BUILD_ROTATION.length];
+    const primaryKm = round1(Math.min((weeklyKm-longKm)*0.35, 8));
+    const quality = [{dow:speedDow, type:primaryType, km:primaryKm}];
+    if(!isCutback){
+      const secondType = BUILD_ROTATION[(w+1) % BUILD_ROTATION.length];
+      quality.push({dow:secondDow, type:secondType, km:round1(primaryKm*0.6)});
+    }
+
+    const days = buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, strengthDows, 2, runsPerWeek, true);
+    days.forEach(day=>{ Object.assign(day, buildWorkoutMeta(day, 10)); });
+    weekPaces.racePerKm = null;
+    weekList.push({weekIndex:w, phase:isCutback?'cutback':'build', isCutback, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), paces:weekPaces, days});
+  }
+  return finishGeneralPlan(setup, weekList, startVdot, endVdot);
+}
+
+// Build Distance: ramps whichever metric the user cares about (weekly mileage or
+// longest run) from their current value to a target by a chosen week, using a smooth
+// compound growth curve (so the final week lands exactly on target rather than
+// approaching it asymptotically) with the usual every-4th-week cutback dipping below
+// that curve, not resetting it. The metric NOT chosen as primary still moves in step
+// underneath it - a long run can't grow in isolation from weekly volume, and vice versa.
+const DISTANCE_LONG_FRACTION = 0.28;
+function generateDistancePlan(setup){
+  const weeks = setup.weeks;
+  const longDow = setup.longDow ?? 0;
+  const strengthDows = setup.strengthDows ?? [1,4];
+  const startVdot = baseVdot(setup);
+  const weekStart0 = startOfWeek(todayDate());
+  const metric = setup.distanceGoalMetric;
+  const fromKm = setup.distanceGoalCurrentKm, toKm = setup.distanceGoalTargetKm;
+
+  const weekList = [];
+  for(let w=0; w<weeks; w++){
+    const weekStart = addDays(weekStart0, w*7);
+    const t = weeks<=1 ? 1 : w/(weeks-1);
+    const smoothTargetVal = fromKm * Math.pow(toKm/fromKm, t);
+    const isCutback = w>0 && w<weeks-1 && (w%4===3);
+    const targetVal = isCutback ? Math.max(fromKm, smoothTargetVal*0.82) : smoothTargetVal;
+
+    let weeklyKm, longKm;
+    if(metric==='longest'){
+      longKm = round1(targetVal);
+      weeklyKm = round1(longKm/DISTANCE_LONG_FRACTION);
+    } else {
+      weeklyKm = round1(targetVal);
+      longKm = round1(weeklyKm*DISTANCE_LONG_FRACTION);
+    }
+    const runsPerWeek = setup.runsPerWeek || runsPerWeekFor(weeklyKm);
+
+    const days = buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, [], strengthDows, 1, runsPerWeek, true);
+    days.forEach(day=>{ Object.assign(day, buildWorkoutMeta(day, 10)); });
+    const weekPaces = paceZonesFromVdot(startVdot);
+    weekPaces.racePerKm = null;
+    weekList.push({weekIndex:w, phase:isCutback?'cutback':'base', isCutback, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), paces:weekPaces, days});
+  }
+  return finishGeneralPlan(setup, weekList, startVdot, startVdot);
+}
+// Whether a weekly-mileage or longest-run goal is a safe ask for the given number of
+// weeks, using the standard ~10%/week safe-progression guideline. Returns null when
+// fine, or a message to show inline (the explicit-warning behavior, not a silent clamp).
+function distanceGoalWarning(fromKm, toKm, weeks){
+  if(!fromKm || !toKm || !weeks || toKm<=fromKm) return null;
+  const weeksNeeded = Math.ceil(Math.log(toKm/fromKm)/Math.log(1.10));
+  if(weeks < weeksNeeded){
+    return `That's a bigger jump than is safe in ${weeks} week${weeks===1?'':'s'} — try at least ${weeksNeeded} weeks, or a lower target.`;
+  }
+  return null;
+}
+
+// Maintenance: deliberately flat, not progressive - the point is holding fitness
+// steady, so weekly volume doesn't ramp and there's no cutback week (nothing being
+// built up that needs unloading). One moderate tempo session a week keeps fitness
+// markers from eroding without asking for anything new.
+function generateMaintenancePlan(setup){
+  const weeks = setup.weeks;
+  const currentKm = setup.currentWeeklyKm;
+  const longDow = setup.longDow ?? 0;
+  const speedDow = setup.speedDow ?? 3;
+  const strengthDows = setup.strengthDows ?? [1,4];
+  const runsPerWeek = setup.runsPerWeek || runsPerWeekFor(currentKm);
+  const startVdot = baseVdot(setup);
+  const weekStart0 = startOfWeek(todayDate());
+  const longKm = round1(currentKm*DISTANCE_LONG_FRACTION);
+  const weekPaces = paceZonesFromVdot(startVdot);
+  weekPaces.racePerKm = null;
+
+  const weekList = [];
+  for(let w=0; w<weeks; w++){
+    const weekStart = addDays(weekStart0, w*7);
+    const quality = [{dow:speedDow, type:'tempo', km:round1(Math.min((currentKm-longKm)*0.3, 6))}];
+    const days = buildGeneralWeekDays(weekStart, currentKm, longKm, longDow, quality, strengthDows, 1, runsPerWeek, false);
+    days.forEach(day=>{ Object.assign(day, buildWorkoutMeta(day, 10)); });
+    weekList.push({weekIndex:w, phase:'maintenance', isCutback:false, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), paces:weekPaces, days});
+  }
+  return finishGeneralPlan(setup, weekList, startVdot, startVdot);
+}
+
+// Recovery: meaningfully reduced volume and zero hard efforts - no intervals, tempo,
+// hills, or fartlek, just easy running (including the "long" day, deliberately run at
+// easy pace here rather than this app's usual marathon-adjacent long-run pace). Starts
+// around 55% of pre-recovery mileage and steps gently back up toward ~75% by the end,
+// rather than staying flat the whole block or ramping back to full volume - the point is
+// full recovery, not a compressed return-to-training plan.
+function generateRecoveryPlan(setup){
+  const weeks = setup.weeks;
+  const baselineKm = setup.currentWeeklyKm;
+  const longDow = setup.longDow ?? 0;
+  const startVdot = baseVdot(setup);
+  const weekStart0 = startOfWeek(todayDate());
+  const runsPerWeek = clamp((setup.runsPerWeek || runsPerWeekFor(baselineKm))-1, 3, 4);
+  const weekPaces = paceZonesFromVdot(startVdot);
+  weekPaces.racePerKm = null;
+
+  const weekList = [];
+  for(let w=0; w<weeks; w++){
+    const weekStart = addDays(weekStart0, w*7);
+    const t = weeks<=1 ? 1 : w/(weeks-1);
+    const weeklyKm = round1(baselineKm*(0.55+0.20*t));
+    const longKm = round1(weeklyKm*DISTANCE_LONG_FRACTION);
+    const days = buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, [], [], 0, runsPerWeek, false);
+    days.forEach(day=>{
+      if(day.type==='long') day.paceKeyOverride = true; // easy-pace long run, not marathon-adjacent
+      Object.assign(day, buildWorkoutMeta(day, 10));
+      if(day.paceKeyOverride) day.paceKey = 'easyPerKm';
+    });
+    weekList.push({weekIndex:w, phase:'recovery', isCutback:false, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), paces:weekPaces, days});
+  }
+  return finishGeneralPlan(setup, weekList, startVdot, startVdot);
+}
+
+function generateGeneralPlan(setup){
+  if(setup.planKind==='speed') return generateSpeedPlan(setup);
+  if(setup.planKind==='distance') return generateDistancePlan(setup);
+  if(setup.planKind==='maintenance') return generateMaintenancePlan(setup);
+  if(setup.planKind==='recovery') return generateRecoveryPlan(setup);
+  return generatePlan(setup);
+}
+
 /* ============================= storage layer (local only) ============================= */
 const Store = {
   _get(key, fallback){ try{ const v = localStorage.getItem(key); return v==null? fallback : JSON.parse(v); }catch(e){ return fallback; } },
@@ -1058,12 +1334,16 @@ async function fetchStravaRuns(){
 function defaultDraft(){
   return {
     name: state.name || '',
+    goalMode: 'race', // 'race' | 'general'
     raceKey:'half', raceDistanceKm:21.0975, raceDate:'', currentWeeklyMi: 20,
     units:'mi', recentDistanceKey:'5k', recentTime:'', goalTime:'',
     longDow:0,
     restDays: clamp(7 - runsPerWeekFor(unitToKm(20,'mi')), 1, 4),
     maxLongRunMi: '', maxWeeklyMi: '',
     longRunEmphasis: 'balanced', speedEmphasis: 'balanced', strengthPerWeek: 2,
+    // General (non-race) plan fields
+    planKind: 'speed', weeks: PLAN_KIND_META.speed.weeksDefault,
+    distanceGoalMetric: 'weekly', distanceGoalCurrentMi: '', distanceGoalTargetMi: '',
   };
 }
 const LONG_DISTANCE_CAP_THRESHOLD_KM = 21.0975; // half marathon and up get optional long-run/volume caps
@@ -1074,7 +1354,16 @@ function onboardStepError(step){
   const d = state.onboardDraft;
   if(step===1){
     if(!d.name || !d.name.trim()) return 'Enter your name';
-    if(!d.raceDate) return 'Pick a race date first';
+    if(d.goalMode==='race'){
+      if(!d.raceDate) return 'Pick a race date first';
+    } else {
+      const meta = PLAN_KIND_META[d.planKind];
+      const weeks = Number(d.weeks);
+      if(!weeks || weeks<meta.weeksMin) return `Enter at least ${meta.weeksMin} week${meta.weeksMin===1?'':'s'}`;
+    }
+  }
+  if(step===2 && d.goalMode==='general' && d.planKind==='distance'){
+    if(!d.distanceGoalTargetMi) return 'Enter a target to build toward';
   }
   return null;
 }
@@ -1083,26 +1372,48 @@ function onboardStepError(step){
 function submitOnboarding(){
   const d = state.onboardDraft;
   if(!d.name || !d.name.trim()){ showToast('Enter your name'); return; }
-  if(!d.raceDate){ showToast('Pick a race date first'); return; }
   const recentPreset = RACE_PRESETS.find(r=>r.key===d.recentDistanceKey);
   const recentSec = parseDurationToSec(d.recentTime);
-  const goalSec = parseDurationToSec(d.goalTime);
-  const setup = {
-    units: d.units,
-    raceKey: d.raceKey,
-    raceDistanceKm: d.raceDistanceKm,
-    raceDate: d.raceDate,
-    currentWeeklyKm: unitToKm(Number(d.currentWeeklyMi)||0, d.units),
-    recentDistanceKm: recentPreset? recentPreset.km : null,
-    recentTimeSec: recentSec,
-    goalTimeSec: goalSec,
-    longDow: d.longDow, ...deriveScheduleFromLongDow(d.longDow, d.strengthPerWeek),
-    runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: d.strengthPerWeek,
-    maxLongRunKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxLongRunMi) ? unitToKm(Number(d.maxLongRunMi), d.units) : null,
-    maxWeeklyKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxWeeklyMi) ? unitToKm(Number(d.maxWeeklyMi), d.units) : null,
-    longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis,
-  };
-  const plan = generatePlan(setup);
+  let setup, plan;
+
+  if(d.goalMode==='general'){
+    const weeks = clamp(Number(d.weeks)||PLAN_KIND_META[d.planKind].weeksDefault, PLAN_KIND_META[d.planKind].weeksMin, PLAN_KIND_META[d.planKind].weeksMax);
+    setup = {
+      planKind: d.planKind, units: d.units, weeks,
+      currentWeeklyKm: unitToKm(Number(d.currentWeeklyMi)||0, d.units),
+      recentDistanceKm: recentPreset? recentPreset.km : null,
+      recentTimeSec: recentSec,
+      longDow: d.longDow, ...deriveScheduleFromLongDow(d.longDow, d.planKind==='speed'?2:1),
+      runsPerWeek: clamp(7 - d.restDays, 3, 6),
+    };
+    if(d.planKind==='distance'){
+      if(!d.distanceGoalTargetMi){ showToast('Enter a target to build toward'); return; }
+      const currentVal = d.distanceGoalMetric==='weekly' ? d.currentWeeklyMi : d.distanceGoalCurrentMi;
+      setup.distanceGoalMetric = d.distanceGoalMetric;
+      setup.distanceGoalCurrentKm = unitToKm(Number(currentVal)||0, d.units);
+      setup.distanceGoalTargetKm = unitToKm(Number(d.distanceGoalTargetMi)||0, d.units);
+    }
+    plan = generateGeneralPlan(setup);
+  } else {
+    if(!d.raceDate){ showToast('Pick a race date first'); return; }
+    const goalSec = parseDurationToSec(d.goalTime);
+    setup = {
+      units: d.units,
+      raceKey: d.raceKey,
+      raceDistanceKm: d.raceDistanceKm,
+      raceDate: d.raceDate,
+      currentWeeklyKm: unitToKm(Number(d.currentWeeklyMi)||0, d.units),
+      recentDistanceKm: recentPreset? recentPreset.km : null,
+      recentTimeSec: recentSec,
+      goalTimeSec: goalSec,
+      longDow: d.longDow, ...deriveScheduleFromLongDow(d.longDow, d.strengthPerWeek),
+      runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: d.strengthPerWeek,
+      maxLongRunKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxLongRunMi) ? unitToKm(Number(d.maxLongRunMi), d.units) : null,
+      maxWeeklyKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxWeeklyMi) ? unitToKm(Number(d.maxWeeklyMi), d.units) : null,
+      longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis,
+    };
+    plan = generatePlan(setup);
+  }
   state.name = d.name.trim();
   Store.setName(state.name);
   Store.setSetup(setup);
@@ -1154,6 +1465,12 @@ function renderLoading(){
   </div>`;
 }
 
+// Works for either kind of plan: a real race's distance label, or the general plan's
+// kind name (Build Speed, Maintenance, etc.) - the one thing every setup has a name for.
+function planLabel(setup){
+  return isGeneralPlan(setup) ? PLAN_KIND_META[setup.planKind].label : raceLabel(setup);
+}
+function isGeneralPlan(setup){ return !!(setup && setup.planKind); }
 function raceLabel(setup){
   const preset = RACE_PRESETS.find(r=>r.key===setup.raceKey);
   if(preset && Math.abs(preset.km-setup.raceDistanceKm)<0.05) return preset.label;
@@ -1180,20 +1497,35 @@ const ONBOARD_STEPS = [
   {title:'Your fitness', hint:'Current mileage and a recent time so paces are calibrated to you.'},
   {title:'How you train', hint:'Fine-tune how the plan builds you up — sensible defaults are already picked.'},
 ];
+// Same three steps for a general (non-race) plan, just retitled — the goal-mode fork
+// lives on step 1 itself rather than adding a fourth step.
+const ONBOARD_STEPS_GENERAL = [
+  {title:'Your training', hint:'Your name and what kind of plan you want.'},
+  {title:'Your fitness', hint:'Current mileage and a recent time so paces are calibrated to you.'},
+  {title:'Weekly rhythm', hint:'When you run and rest — the rest is baked into the plan you picked.'},
+];
+function onboardStepMeta(step, d){
+  return (d.goalMode==='general' ? ONBOARD_STEPS_GENERAL : ONBOARD_STEPS)[step-1];
+}
 
+const PLAN_KIND_DESC = {
+  speed: 'A focused block to build pace — quality sessions plus 2x/week strength.',
+  distance: 'Progressively build toward a mileage or long-run goal.',
+  maintenance: 'Hold your current fitness steady — no ramp, no pressure.',
+  recovery: 'Reduced volume and zero hard efforts — get back on your feet.',
+};
 function renderOnboardStep1(d){
   const presetChips = RACE_PRESETS.map(r=>`<button class="chip ${d.raceKey===r.key?'active':''}" data-act="pick-race" data-key="${r.key}">${r.label}</button>`).join('');
   const unitChips = ['mi','km'].map(u=>`<button class="chip ${d.units===u?'active':''}" data-act="pick-unit" data-u="${u}">${u==='mi'?'Miles':'Kilometers'}</button>`).join('');
   const weeksToRace = d.raceDate ? Math.max(1,Math.ceil((parseDate(d.raceDate)-todayDate())/86400000/7)) : null;
-  return `
-    <div class="section-title" style="margin-top:0; display:flex; align-items:center; gap:8px;">
-      <span>Your name</span>
-      <span id="lexi-badge" style="display:none; color:var(--accent-strong); font-weight:700; text-transform:none; letter-spacing:normal; font-size:12px;"></span>
-    </div>
-    <div class="field">
-      <input class="input" type="text" id="in-name" placeholder="e.g. Ahmed" value="${esc(d.name)}">
-    </div>
 
+  const goalModeChips = `
+    <div class="chip-select" style="margin-bottom:16px;">
+      <button class="chip ${d.goalMode==='race'?'active':''}" data-act="pick-goal-mode" data-mode="race">A specific race</button>
+      <button class="chip ${d.goalMode==='general'?'active':''}" data-act="pick-goal-mode" data-mode="general">General fitness</button>
+    </div>`;
+
+  const raceFieldsHtml = `
     <div class="section-title">Race distance</div>
     <div class="chip-select" style="margin-bottom:8px;">${presetChips}</div>
     <div class="row" style="margin-bottom:16px;">
@@ -1214,7 +1546,44 @@ function renderOnboardStep1(d){
         ${!d.raceDate ? `<div style="position:absolute; top:0; left:0; bottom:0; right:32px; display:flex; align-items:center; padding-left:13px; background:var(--surface-2); color:var(--muted); border-radius:11px 0 0 11px; pointer-events:none;">Enter date of race here</div>` : ''}
       </div>
       ${weeksToRace? `<div class="hint">${weeksToRace} week${weeksToRace===1?'':'s'} from today.</div>`:''}
+    </div>`;
+
+  const kindCards = Object.keys(PLAN_KIND_META).map(k=>{
+    const meta = PLAN_KIND_META[k];
+    return `<button class="card kind-card ${d.planKind===k?'active':''}" data-act="pick-plan-kind" data-kind="${k}" style="text-align:left; width:100%; padding:14px 16px; margin-bottom:8px; display:block;">
+      <div style="font-weight:700; font-size:14.5px; margin-bottom:3px;">${meta.label}</div>
+      <div class="hint" style="margin:0;">${PLAN_KIND_DESC[k]}</div>
+    </button>`;
+  }).join('');
+  const kindMeta = PLAN_KIND_META[d.planKind];
+
+  const generalFieldsHtml = `
+    <div class="section-title">Choose your focus</div>
+    ${kindCards}
+
+    <div class="section-title">Units</div>
+    <div class="chip-select" style="margin-bottom:16px;">${unitChips}</div>
+
+    <div class="section-title">Plan length</div>
+    <div class="field">
+      <label class="field-label">Weeks</label>
+      <input class="input" type="number" min="1" step="1" id="in-weeks" value="${d.weeks}">
+      <div class="hint">${kindMeta.hint} (typical: ${kindMeta.weeksMin}–${kindMeta.weeksMax}, we default to ${kindMeta.weeksDefault}).</div>
+    </div>`;
+
+  return `
+    <div class="section-title" style="margin-top:0; display:flex; align-items:center; gap:8px;">
+      <span>Your name</span>
+      <span id="lexi-badge" style="display:none; color:var(--accent-strong); font-weight:700; text-transform:none; letter-spacing:normal; font-size:12px;"></span>
     </div>
+    <div class="field">
+      <input class="input" type="text" id="in-name" placeholder="e.g. Ahmed" value="${esc(d.name)}">
+    </div>
+
+    <div class="section-title">What are you training for?</div>
+    ${goalModeChips}
+
+    ${d.goalMode==='race' ? raceFieldsHtml : generalFieldsHtml}
   `;
 }
 
@@ -1287,6 +1656,39 @@ function recentPaceHint(d){
 
 function renderOnboardStep2(d){
   const recentChips = RACE_PRESETS.slice(0,5).map(r=>`<button class="chip ${d.recentDistanceKey===r.key?'active':''}" data-act="pick-recent" data-key="${r.key}">${r.label}</button>`).join('');
+  const isGeneral = d.goalMode==='general';
+  const isDistance = isGeneral && d.planKind==='distance';
+
+  const distanceGoalHtml = !isDistance ? '' : (()=>{
+    const metricChips = `
+      <div class="chip-select" style="margin-bottom:10px;">
+        <button class="chip ${d.distanceGoalMetric==='weekly'?'active':''}" data-act="pick-distance-metric" data-m="weekly">Weekly mileage</button>
+        <button class="chip ${d.distanceGoalMetric==='longest'?'active':''}" data-act="pick-distance-metric" data-m="longest">Longest run</button>
+      </div>`;
+    const currentVal = d.distanceGoalMetric==='weekly' ? d.currentWeeklyMi : d.distanceGoalCurrentMi;
+    const fromKm = unitToKm(Number(currentVal)||0, d.units);
+    const toKm = unitToKm(Number(d.distanceGoalTargetMi)||0, d.units);
+    const warning = distanceGoalWarning(fromKm, toKm, Number(d.weeks)||0);
+    return `
+      <div class="field">
+        <label class="field-label">Which matters more to you?</label>
+        ${metricChips}
+      </div>
+      <div class="row">
+        ${d.distanceGoalMetric==='longest' ? `
+        <div class="field">
+          <label class="field-label">Current longest run (${d.units})</label>
+          <input class="input" type="number" min="0" step="0.5" id="in-distance-current" value="${d.distanceGoalCurrentMi}">
+        </div>` : ''}
+        <div class="field">
+          <label class="field-label">Target ${d.distanceGoalMetric==='weekly'?'weekly mileage':'longest run'} (${d.units})</label>
+          <input class="input" type="number" min="0" step="0.5" id="in-distance-target" value="${d.distanceGoalTargetMi}">
+        </div>
+      </div>
+      ${warning ? `<div class="banner" style="margin:4px 0 16px;">${esc(warning)}</div>` : ''}
+    `;
+  })();
+
   return `
     <div class="section-title" style="margin-top:0;">Current fitness</div>
     <div class="field">
@@ -1300,16 +1702,32 @@ function renderOnboardStep2(d){
       <input class="input" type="text" inputmode="numeric" id="in-recent-time" placeholder="HH:MM:SS — just type digits" value="${esc(d.recentTime)}">
       <div class="hint" id="recent-pace-hint">${recentPaceHint(d)}</div>
     </div>
+    ${isGeneral ? '' : `
     <div class="field">
       <label class="field-label">Goal time for this race (optional)</label>
       <input class="input" type="text" id="in-goal-time" placeholder="e.g. 1:45:00 — leave blank to let paces guide you" value="${esc(d.goalTime)}">
-    </div>
+    </div>`}
+    ${isDistance ? `<div class="section-title">Your goal</div>${distanceGoalHtml}` : ''}
   `;
 }
 
 function renderOnboardStep3(d){
   const dowGrid = (name, selected, multi)=> dowGridHtml(name, selected, multi, 'pick-dow');
   const runDaysPerWeek = clamp(7 - d.restDays, 3, 6);
+  if(d.goalMode==='general'){
+    return `
+      <div class="section-title" style="margin-top:0;">Rest days per week</div>
+      <div class="field">
+        <div class="chip-select">${restDaysChipsHtml(d.restDays, 'pick-restdays')}</div>
+        <div class="hint">${runDaysPerWeek} running day${runDaysPerWeek===1?'':'s'} per week.</div>
+      </div>
+      <div class="section-title">Long run day</div>
+      <div class="field">
+        <div class="dow-grid">${dowGrid('longDow', d.longDow, false)}</div>
+        <div class="hint">Everything else — speed work, strength — is placed automatically around this.</div>
+      </div>
+    `;
+  }
   return `
     ${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM ? `
     <div class="section-title" style="margin-top:0;">Caps (optional)</div>
@@ -1360,7 +1778,7 @@ function renderOnboardStep3(d){
 function renderOnboarding(){
   const d = state.onboardDraft;
   const step = state.onboardStep || 1;
-  const meta = ONBOARD_STEPS[step-1];
+  const meta = onboardStepMeta(step, d);
   const stepHtml = step===1 ? renderOnboardStep1(d) : step===2 ? renderOnboardStep2(d) : renderOnboardStep3(d);
   const dotsHtml = ONBOARD_STEPS.map((s,i)=>`<span class="step-dot ${i+1<=step?'active':''}"></span>`).join('');
   const navHtml = step<3 ? `
@@ -1425,13 +1843,13 @@ function tabBtn(key,icon,label){
 function phaseColorVar(phase){
   return phase==='taper' ? 'var(--z-race)' : phase==='peak' ? 'var(--z-intervals)' : phase==='build' ? 'var(--z-tempo)' : 'var(--z-easy)';
 }
-function phaseLabel(phase){ return {base:'Base', build:'Build', peak:'Peak', taper:'Taper'}[phase]||phase; }
+function phaseLabel(phase){ return {base:'Base', build:'Build', peak:'Peak', taper:'Taper', maintenance:'Maintenance', recovery:'Recovery'}[phase]||phase; }
 // Cutback weeks display as their own label/color rather than whatever phase they fall
 // in — the underlying phase still drives workout selection, this is display-only. The
 // very last week (the one race day actually falls in) displays as "Race Week" rather
 // than "Taper" even though it's still internally the taper phase.
-function weekDisplayLabel(week, totalWeeks){
-  if(week.weekIndex===totalWeeks-1) return 'Race Week';
+function weekDisplayLabel(week, totalWeeks, planKind){
+  if(!planKind && week.weekIndex===totalWeeks-1) return 'Race Week';
   return week.isCutback ? 'Cutback' : phaseLabel(week.phase);
 }
 function weekColorVar(week){ return week.isCutback ? 'var(--z-rest)' : phaseColorVar(week.phase); }
@@ -1446,7 +1864,7 @@ function renderPlanTab(week, plan){
   const daysToRaceForWeek = daysBetween(weekStartDate, raceDate);
   const strip = plan.weeks.map((w,i)=>`
     <button class="week-tab ${i===state.currentWeekIndex?'active':''}" style="--phase-color:${weekColorVar(w)}" data-act="goto-week" data-i="${i}">
-      <div class="wk">${weekDisplayLabel(w, plan.totalWeeks)}</div>
+      <div class="wk">${weekDisplayLabel(w, plan.totalWeeks, plan.planKind)}</div>
       <div class="wn">${i+1}</div>
     </button>`).join('');
 
@@ -1483,8 +1901,10 @@ function renderPlanTab(week, plan){
   <div class="week-strip">${strip}</div>
   <div class="week-header">
     <div>
-      <h2>${weekDisplayLabel(week, plan.totalWeeks)} · Week ${week.weekIndex+1}</h2>
-      <div class="week-meta">${niceDate(weekStartDate)} – ${niceDate(addDays(weekStartDate,6))} · ${daysToRaceForWeek>0?daysToRaceForWeek+' days to race':(week.weekIndex===plan.totalWeeks-1?'Race week':'Race day has passed')}</div>
+      <h2>${weekDisplayLabel(week, plan.totalWeeks, plan.planKind)} · Week ${week.weekIndex+1}</h2>
+      <div class="week-meta">${niceDate(weekStartDate)} – ${niceDate(addDays(weekStartDate,6))} · ${plan.planKind
+        ? (week.weekIndex===plan.totalWeeks-1?'Final week':`${plan.totalWeeks-week.weekIndex-1} week${plan.totalWeeks-week.weekIndex-1===1?'':'s'} left`)
+        : (daysToRaceForWeek>0?daysToRaceForWeek+' days to race':(week.weekIndex===plan.totalWeeks-1?'Race week':'Race day has passed'))}</div>
     </div>
     <div class="week-stat">
       <div class="v">${fmtDist(loggedKm,unit,1)} <span style="color:var(--muted); font-weight:600; font-size:12px;">/ ${fmtDist(week.targetKm,unit,1)}</span></div>
@@ -1563,7 +1983,11 @@ function checkAndTriggerMilestones(newLog){
   if(!shown.arrived && plan && plan.raceDate && parseDate(newLog.date) >= parseDate(plan.raceDate)){
     shown.arrived = true;
     Store.setMilestonesShown(shown);
-    state.modal = {type:'milestone', data:{
+    state.modal = {type:'milestone', data: plan.planKind ? {
+      hero: ICONS.summitArrived,
+      title:'Plan complete',
+      message:"You made it through every week. However this stretch went, you earned this."
+    } : {
       hero: ICONS.summitArrived,
       title:'You made it to race day',
       message:"Every training week led here. However today went, you earned this."
@@ -1681,7 +2105,9 @@ function renderProgressTab(){
   return `
   <div class="container" style="padding-top:14px;">
     <h2 style="font-size:20px; margin-bottom:2px;">${esc(state.name)}'s progress</h2>
-    <div class="hint" style="margin-bottom:16px;">${daysToRace>=0? daysToRace+' days until '+raceLabel(state.setup) : 'Race day has passed — nice work.'}</div>
+    <div class="hint" style="margin-bottom:16px;">${plan.planKind
+      ? (daysToRace>=0 ? `${planLabel(state.setup)} — ${daysToRace} day${daysToRace===1?'':'s'} left` : `${planLabel(state.setup)} — complete. Nice work.`)
+      : (daysToRace>=0? daysToRace+' days until '+planLabel(state.setup) : 'Race day has passed — nice work.')}</div>
   </div>
   <div class="stat-grid" style="margin-bottom:16px;">
     <button class="card stat-tile" data-act="open-stat-detail" data-stat="total-logged"><div class="v">${fmtDist(stats.totalLoggedKm,unit,0)}</div><div class="l">total logged</div></button>
@@ -1838,12 +2264,14 @@ function renderSettingsTab(){
       </div>
     </div>
 
-    <div class="section-title">Race</div>
+    <div class="section-title">${isGeneralPlan(s) ? 'Plan' : 'Race'}</div>
     <div class="card" style="padding:6px 16px;">
-      <div class="settings-row"><div><div class="lbl">${raceLabel(s)}</div><div class="sub">${niceDateFull(parseDate(s.raceDate))}</div></div></div>
+      ${isGeneralPlan(s)
+        ? `<div class="settings-row"><div><div class="lbl">${esc(planLabel(s))}</div><div class="sub">${s.weeks} week${s.weeks===1?'':'s'} total</div></div></div>`
+        : `<div class="settings-row"><div><div class="lbl">${esc(planLabel(s))}</div><div class="sub">${niceDateFull(parseDate(s.raceDate))}</div></div></div>`}
       <div class="settings-row"><div><div class="lbl">Weekly mileage used to build plan</div><div class="sub">${fmtDist(s.currentWeeklyKm,unit,1)}/week</div></div></div>
-      <div class="settings-row"><div><div class="lbl">This week's paces</div><div class="sub">Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)} · Goal race pace ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}</div></div></div>
-      <div class="hint" style="padding:0 0 12px;">Training paces gradually get faster as your plan builds toward peak fitness, then hold steady through the taper.${recal ? ` Right now they're also adjusted based on your last ${recal.count} logged tempo/interval/over-under run${recal.count===1?'':'s'}.` : ''}</div>
+      <div class="settings-row"><div><div class="lbl">This week's paces</div><div class="sub">Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)}${isGeneralPlan(s) ? '' : ` · Goal race pace ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}`}</div></div></div>
+      <div class="hint" style="padding:0 0 12px;">${isGeneralPlan(s) ? 'Training paces are calibrated to your current fitness.' : 'Training paces gradually get faster as your plan builds toward peak fitness, then hold steady through the taper.'}${recal ? ` Right now they're also adjusted based on your last ${recal.count} logged tempo/interval/over-under run${recal.count===1?'':'s'}.` : ''}</div>
     </div>
 
     <div class="section-title">Strava</div>
@@ -1857,11 +2285,12 @@ function renderSettingsTab(){
       `}
     </div>
 
+    ${isGeneralPlan(s) ? '' : `
     <div class="section-title">Plan controls</div>
     <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
       <div class="hint">Regenerating rebuilds every week of your plan from today's inputs. Your logged runs are kept — only the plan itself changes.</div>
       <button class="btn btn-block" data-act="open-edit-setup">Edit inputs & regenerate plan</button>
-    </div>
+    </div>`}
 
     <div class="section-title">Backup</div>
     <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
@@ -2323,7 +2752,9 @@ function modalConfirmReset(){
 }
 
 function modalConfirmImport(data){
-  const raceLine = `${raceLabel(data.setup)} · ${niceDateFull(parseDate(data.setup.raceDate))}`;
+  const raceLine = isGeneralPlan(data.setup)
+    ? `${planLabel(data.setup)} · ${data.setup.weeks} week${data.setup.weeks===1?'':'s'}`
+    : `${planLabel(data.setup)} · ${niceDateFull(parseDate(data.setup.raceDate))}`;
   const runCount = data.logs.length;
   const currentRunCount = state.logs.length;
   const replaceLine = currentRunCount>0
@@ -2373,7 +2804,8 @@ function handleImportFile(file){
     let parsed;
     try{ parsed = JSON.parse(reader.result); }
     catch(e){ showToast('That file is not valid backup data'); return; }
-    if(!parsed || !parsed.setup || !parsed.setup.raceDate || !parsed.setup.units || !Array.isArray(parsed.logs)){
+    const hasValidSetup = parsed && parsed.setup && parsed.setup.units && (parsed.setup.raceDate || (parsed.setup.planKind && parsed.setup.weeks));
+    if(!hasValidSetup || !Array.isArray(parsed.logs)){
       showToast('That file is not a Peak backup'); return;
     }
     state.modal = {type:'confirm-import', data:parsed};
@@ -2384,7 +2816,7 @@ function handleImportFile(file){
 }
 
 function doImportBackup(data){
-  const plan = generatePlan(data.setup);
+  const plan = generateGeneralPlan(data.setup);
   state.name = data.name || '';
   state.paceFormat = data.paceFormat || 'pace';
   state.setup = data.setup;
@@ -2437,6 +2869,14 @@ function onClick(e){
   }
   if(act==='pick-unit'){ state.onboardDraft.units = el.dataset.u; render(); return; }
   if(act==='pick-recent'){ state.onboardDraft.recentDistanceKey = el.dataset.key; render(); return; }
+  if(act==='pick-goal-mode'){ state.onboardDraft.goalMode = el.dataset.mode; render(); return; }
+  if(act==='pick-plan-kind'){
+    const kind = el.dataset.kind;
+    state.onboardDraft.planKind = kind;
+    state.onboardDraft.weeks = PLAN_KIND_META[kind].weeksDefault;
+    render(); return;
+  }
+  if(act==='pick-distance-metric'){ state.onboardDraft.distanceGoalMetric = el.dataset.m; render(); return; }
   if(act==='pick-restdays'){ state.onboardDraft.restDays = Number(el.dataset.n); render(); return; }
   if(act==='pick-long-emphasis'){ state.onboardDraft.longRunEmphasis = el.dataset.key; render(); return; }
   if(act==='pick-speed-emphasis'){ state.onboardDraft.speedEmphasis = el.dataset.key; render(); return; }
@@ -2727,10 +3167,13 @@ function onChange(e){
     return;
   }
   if(e.target.id==='in-race-date'){ state.onboardDraft.raceDate = e.target.value; render(); return; }
-  if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; }
+  if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; render(); return; }
   if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; }
   if(e.target.id==='in-max-long'){ state.onboardDraft.maxLongRunMi = e.target.value; }
   if(e.target.id==='in-max-weekly'){ state.onboardDraft.maxWeeklyMi = e.target.value; }
+  if(e.target.id==='in-weeks'){ state.onboardDraft.weeks = e.target.value; render(); return; }
+  if(e.target.id==='in-distance-current'){ state.onboardDraft.distanceGoalCurrentMi = e.target.value; render(); return; }
+  if(e.target.id==='in-distance-target'){ state.onboardDraft.distanceGoalTargetMi = e.target.value; render(); return; }
   if(state.modal && state.modal.type==='log-run' && e.target.id==='lr-date'){
     state.modal.data.date = e.target.value;
     render(); return;
