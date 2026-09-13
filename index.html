@@ -286,6 +286,13 @@ const QUALITY_TYPES = ['long','tempo','intervals','hills','fartlek','overunder',
 // cases), not a real hard effort, so they're excluded here even though their bare `type`
 // is in QUALITY_TYPES.
 function isLegDemandingDay(day){ return day.type==='long' || (QUALITY_TYPES.includes(day.type) && !day.easyVariety); }
+// Continuous/structured hard-pace efforts get a guaranteed warm-up (jumping into
+// threshold/interval pace cold hurts both quality and injury risk); hills already gets
+// one for free from its own capped-reps leftover, so it's deliberately not in this list.
+// Cool-down is left to the runner's own judgment for these - see the "optional cool down"
+// clause in renderWorkoutText/workoutPartsFor.
+const WARMUP_ELIGIBLE_TYPES = ['tempo','cruise','intervals','overunder','racepace'];
+const QUALITY_WARMUP_KM = 1.5; // ~10-15 min easy for most paces
 // Types that can carry the "add strides" add-on, in the edit modal - matches which types
 // generatePlan's easyIdxs.forEach can assign strides to (easy days, plus the fartlek/
 // progression variety picks drawn from that same pool).
@@ -660,6 +667,50 @@ function warmupCooldownKm(totalKm, structuredKm){
   const remainder = Math.max(0, totalKm-structuredKm);
   return [remainder/2, remainder/2];
 }
+// The reps/cycles formula (and resulting instruction text) for every structured-effort
+// type, given the km budget allocated to its quality portion specifically (NOT day.km -
+// for the WARMUP_ELIGIBLE_TYPES, day.km also includes a warm-up on top, added elsewhere;
+// this always operates on the quality-only distance so reps/cycles counts reflect what
+// was actually budgeted, not an inflated total). Shared by buildWorkoutMeta (final
+// description) and warmupFundingKm (estimating how much of a warm-up a capped-reps type
+// already provides for free, before topping up to the guaranteed minimum).
+function structuredEffort(type, qualityKm, raceDistanceKm){
+  switch(type){
+    case 'intervals':{
+      const repM = raceDistanceKm<=10 ? 800 : 1000;
+      const reps = Math.max(4, Math.round((qualityKm*1000)/(repM*1.4)));
+      return {structuredKm: reps*repM*1.5/1000, descBase:`${reps} × ${repM}m intervals, jog ${Math.round(repM*0.5)}m recovery`, paceKey:'intervalPerKm'};
+    }
+    case 'hills':{
+      const reps = clamp(Math.round(qualityKm/0.3), 6, 12);
+      return {structuredKm: reps*0.3, descBase:`${reps} hill reps — 60–90s hard uphill effort, jog back down to recover`, paceKey:null};
+    }
+    case 'overunder':{
+      const cycles = clamp(Math.round(qualityKm/1.2), 4, 7);
+      return {structuredKm: cycles*1.2, descBase:`Over/unders — ${cycles} × (2 min above / 1 min below) around tempo pace`, paceKey:'tempoPerKm'};
+    }
+    case 'cruise':{
+      const repM = raceDistanceKm<=10 ? 1000 : 1600;
+      const reps = clamp(Math.round((qualityKm*1000)/(repM*1.15)), 3, 6);
+      return {structuredKm: reps*repM*1.15/1000, descBase:`Cruise intervals — ${reps} × ${repM}m at threshold pace, jog 60–90s recovery`, paceKey:'tempoPerKm'};
+    }
+    case 'tempo': return {structuredKm: qualityKm, descBase:'Continuous, comfortably hard', paceKey:'tempoPerKm'};
+    case 'racepace': return {structuredKm: qualityKm, descBase:'Continuous, goal race effort — rehearses exactly what race day should feel like', paceKey:'racePerKm'};
+    default: return {structuredKm: qualityKm, descBase:'', paceKey:null};
+  }
+}
+// How much warm-up (in km) to fund for a quality day of this type, given the km budget
+// its quality portion was allocated (before warm-up). Capped-reps types (cruise/
+// intervals/overunder) often already leave some of that budget unconsumed - if so, that
+// leftover counts toward the guaranteed minimum rather than stacking on top of it; only
+// the shortfall (if any) needs funding from elsewhere (the week's easy-day distance).
+// Non-reps continuous types (tempo/racepace) never have a natural leftover, so they
+// always need the full guaranteed minimum funded externally.
+function warmupFundingKm(type, qualityKm, raceDistanceKm){
+  if(!WARMUP_ELIGIBLE_TYPES.includes(type)) return 0;
+  const naturalLeftover = Math.max(0, qualityKm - structuredEffort(type, qualityKm, raceDistanceKm).structuredKm);
+  return Math.max(QUALITY_WARMUP_KM, naturalLeftover);
+}
 
 /* Workout description is split from pace: descBase/paceKey are stored on the day,
    the pace string itself is rendered live so unit/mph-toggle and the week's
@@ -677,28 +728,26 @@ function buildWorkoutMeta(day, raceDistanceKm){
         : 'Conversational, easy effort';
       return {descBase, paceKey:'easyPerKm'};
     }
-    case 'tempo': return {descBase:'Continuous, comfortably hard', paceKey:'tempoPerKm'};
-    case 'intervals':{
-      const repM = raceDistanceKm<=10 ? 800 : 1000;
-      const reps = Math.max(4, Math.round((day.km*1000)/(repM*1.4)));
-      // Reps × (hard rep + recovery jog) rarely consumes the whole prescribed distance
-      // exactly - whatever's left over gets split into an explicit warm-up/cool-down
-      // before/after the reps, rather than left as an unordered "run the rest easy"
-      // afterthought. See warmupCooldownKm below and renderWorkoutText/workoutPartsFor.
-      const structuredKm = reps*repM*1.5/1000;
-      const [warmupKm, cooldownKm] = warmupCooldownKm(day.km, structuredKm);
-      return {descBase:`${reps} × ${repM}m intervals, jog ${Math.round(repM*0.5)}m recovery`, paceKey:'intervalPerKm', warmupKm, cooldownKm};
+    case 'tempo': case 'intervals': case 'overunder': case 'cruise': case 'racepace':{
+      // day.warmupKm is already set by the time this runs (computed in generatePlan/
+      // buildGeneralWeekDays via warmupFundingKm, funded from the week's easy-day
+      // distance) - back it out to get the actual quality-effort budget before computing
+      // reps/cycles, so the structured work itself stays exactly what was calibrated
+      // rather than growing to match the now-inflated day.km.
+      const qualityKm = Math.max(0, day.km - (day.warmupKm||0));
+      const {structuredKm, descBase, paceKey} = structuredEffort(day.type, qualityKm, raceDistanceKm);
+      const meta = {descBase, paceKey, warmupKm: day.warmupKm||0};
+      if(day.type==='overunder') meta.paceKey2 = null;
+      return meta;
     }
     case 'hills':{
-      // Capped at 12 reps deliberately (more than that isn't a realistic single hill
-      // session) - so for a longer prescribed distance, most of day.km is genuinely NOT
-      // covered by the reps themselves. Split evenly into a named warm-up (run to the
-      // hill) and cool-down (run back), rather than one undifferentiated leftover blob -
-      // a runner needs to know WHEN to run it, not just that it exists.
-      const reps = clamp(Math.round(day.km/0.3), 6, 12);
-      const structuredKm = reps*0.3;
+      // Unlike the types above, hills' warm-up/cool-down is entirely self-funded from
+      // whatever its own capped-reps formula doesn't consume from day.km - capped at 12
+      // reps for realism, so a longer prescribed distance naturally leaves plenty of room
+      // without needing outside funding from elsewhere in the week.
+      const {structuredKm, descBase} = structuredEffort('hills', day.km, raceDistanceKm);
       const [warmupKm, cooldownKm] = warmupCooldownKm(day.km, structuredKm);
-      return {descBase:`${reps} hill reps — 60–90s hard uphill effort, jog back down to recover`, paceKey:null, warmupKm, cooldownKm};
+      return {descBase, paceKey:null, warmupKm, cooldownKm};
     }
     case 'fartlek':{
       // One continuous run at easy pace with surges woven in throughout - NOT a surges
@@ -707,12 +756,6 @@ function buildWorkoutMeta(day, raceDistanceKm){
       // structure explicit instead of reading like two sequential phases.
       const surges = clamp(Math.round(day.km/1.5), 4, 8);
       return {descBase:`${surges} fartlek surges (2 min faster / 2 min easy jog each) woven into a continuous run`, paceKey:'easyPerKm'};
-    }
-    case 'overunder':{
-      const cycles = clamp(Math.round(day.km/1.2), 4, 7);
-      const structuredKm = cycles*1.2;
-      const [warmupKm, cooldownKm] = warmupCooldownKm(day.km, structuredKm);
-      return {descBase:`Over/unders — ${cycles} × (2 min above / 1 min below) around tempo pace`, paceKey:'tempoPerKm', paceKey2:null, warmupKm, cooldownKm};
     }
     case 'progression':{
       // Two flavors, same type: a genuine quality session (build/peak rotations, finishes
@@ -725,14 +768,6 @@ function buildWorkoutMeta(day, raceDistanceKm){
         ? {descBase:'Progression — start at an easy jog, gradually quicken through the second half, staying comfortable the whole way', paceKey:'easyPerKm', paceKey2:'marathonPerKm', desc2:'finish'}
         : {descBase:'Progression — start easy, gradually quicken over the back half to finish at tempo effort', paceKey:'easyPerKm', paceKey2:'tempoPerKm', desc2:'finish'};
     }
-    case 'cruise':{
-      const repM = raceDistanceKm<=10 ? 1000 : 1600;
-      const reps = clamp(Math.round((day.km*1000)/(repM*1.15)), 3, 6);
-      const structuredKm = reps*repM*1.15/1000;
-      const [warmupKm, cooldownKm] = warmupCooldownKm(day.km, structuredKm);
-      return {descBase:`Cruise intervals — ${reps} × ${repM}m at threshold pace, jog 60–90s recovery`, paceKey:'tempoPerKm', warmupKm, cooldownKm};
-    }
-    case 'racepace': return {descBase:'Continuous, goal race effort — rehearses exactly what race day should feel like', paceKey:'racePerKm'};
     case 'race': return {descBase:'Goal pace effort', paceKey:'racePerKm'};
     case 'rest': return day.strength
       ? {descBase:'Rest day — mobility & light stretching, or easy cross-training instead if you prefer', paceKey:null}
@@ -758,12 +793,34 @@ function cooldownClause(day, weekPaces, unit, fmt){
   const pace = weekPaces && weekPaces.easyPerKm;
   return `cool down ${fmtDist(day.cooldownKm, unit)} easy${pace!=null?` @ ${paceOrSpeedStr(pace,unit,fmt)}`:''}`;
 }
+// Tempo/Race Pace have no reps/cycles structure of their own to imply a distance (unlike
+// hills' rep count or intervals' "N × Rm"), so once they carry a warm-up, the quality
+// segment's own distance needs to be stated explicitly too - otherwise the only distance
+// visible is day.km's combined total, leaving the same "which miles are which pace"
+// ambiguity this whole fix exists to close.
+function qualityDistancePrefix(day, unit){
+  if(!(day.type==='tempo' || day.type==='racepace')) return '';
+  if(!(day.warmupKm>0.15)) return '';
+  const qualityKm = Math.max(0, day.km-(day.warmupKm||0)-(day.cooldownKm||0));
+  return qualityKm>0.15 ? `${fmtDist(qualityKm, unit)} ` : '';
+}
+// A prefixed descBase ("4.3 mi Continuous, comfortably hard") reads oddly mid-sentence
+// with its normal leading capital - lowercase it only when qualityDistancePrefix actually
+// added something before it.
+function lowercaseFirst(s){ return s.charAt(0).toLowerCase()+s.slice(1); }
+// Warm-up is a real, always-present part of these types now; cool-down is left to the
+// runner's own judgment rather than auto-generated, per design - naming that explicitly
+// (instead of just omitting any mention of it) avoids reading as an oversight.
+function optionalCooldownNote(day){
+  return WARMUP_ELIGIBLE_TYPES.includes(day.type) ? 'an optional easy cool-down, as preferred' : null;
+}
 function renderWorkoutText(day, weekPaces, unit, fmt){
   if(!day.descBase) return '';
   const segs = [];
   const warmup = warmupClause(day, weekPaces, unit, fmt);
   if(warmup) segs.push(warmup);
-  let main = day.descBase;
+  const qtyPrefix = qualityDistancePrefix(day, unit);
+  let main = qtyPrefix + (qtyPrefix ? lowercaseFirst(day.descBase) : day.descBase);
   if(day.paceKey){
     const p = day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : (weekPaces && weekPaces[day.paceKey]);
     if(p!=null) main += ` @ ${paceOrSpeedStr(p, unit, fmt)}`;
@@ -772,6 +829,7 @@ function renderWorkoutText(day, weekPaces, unit, fmt){
   segs.push(main);
   const cooldown = cooldownClause(day, weekPaces, unit, fmt);
   if(cooldown) segs.push(cooldown);
+  else { const note = optionalCooldownNote(day); if(note) segs.push(note); }
   let text = segs.join(', then ');
   if(day.strides) text += day.hillStrides ? ' + hill strides (6 × 10s hard effort uphill, walk back down to recover)' : ' + strides (6 × 20s relaxed, full recovery)';
   if(day.terrain==='hilly') text += ' — rolling hills, run by effort not pace';
@@ -794,7 +852,8 @@ function workoutPartsFor(day, weekPaces, unit, fmt){
   const parts = [];
   const warmup = warmupClause(day, weekPaces, unit, fmt);
   if(warmup) parts.push(warmup);
-  let main = day.descBase;
+  const qtyPrefix = qualityDistancePrefix(day, unit);
+  let main = qtyPrefix + (qtyPrefix ? lowercaseFirst(day.descBase) : day.descBase);
   if(day.paceKey){
     const p = day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : (weekPaces && weekPaces[day.paceKey]);
     if(p!=null) main += ` @ ${paceOrSpeedStr(p, unit, fmt)}`;
@@ -806,6 +865,7 @@ function workoutPartsFor(day, weekPaces, unit, fmt){
   }
   const cooldown = cooldownClause(day, weekPaces, unit, fmt);
   if(cooldown) parts.push(cooldown.charAt(0).toUpperCase()+cooldown.slice(1));
+  else { const note = optionalCooldownNote(day); if(note) parts.push(note.charAt(0).toUpperCase()+note.slice(1)); }
   if(day.strides) parts.push(day.hillStrides ? 'Finish with hill strides — 6 × 10s hard effort uphill, walk back down to recover' : 'Finish with strides — 6 × 20s relaxed, full recovery');
   if(day.terrain==='hilly') parts.push('Course: rolling hills — run by effort, not pace');
   else if(day.terrain==='suggested') parts.push('Course: seek out rolling terrain if you can — still builds strength and economy');
@@ -975,7 +1035,7 @@ function generatePlan(setup){
     let remaining = Math.max(0, weeklyKm-longKm);
     const speedAllowedPhases = speedEmphasis.introducePhase==='peak' ? ['peak','taper'] : ['build','peak','taper'];
     const wantsSpeed = speedAllowedPhases.includes(phase) && speedIdx!==-1;
-    let speedKm = 0, speedType = 'tempo';
+    let speedKm = 0, speedType = 'tempo', speedQualityKm = 0, speedWarmupKm = 0;
     const weekWithinPhase = phase==='build' ? (w-baseCount) : phase==='peak' ? (w-baseCount-buildCount) : 0;
     if(wantsSpeed){
       if(phase==='build'){
@@ -988,13 +1048,18 @@ function generatePlan(setup){
       } else {
         speedType = 'tempo';
       }
-      speedKm = round1(Math.min(remaining*0.4, raceKm<=10?8:9) * speedEmphasis.sessionScale);
+      speedQualityKm = round1(Math.min(remaining*0.4, raceKm<=10?8:9) * speedEmphasis.sessionScale);
+      // Structured/continuous hard-pace types get a guaranteed warm-up, funded here by
+      // trimming the week's easy-day distance rather than growing the week's total or
+      // shrinking the quality segment itself - see WARMUP_ELIGIBLE_TYPES/warmupFundingKm.
+      speedWarmupKm = warmupFundingKm(speedType, speedQualityKm, raceKm);
+      speedKm = round1(speedQualityKm + speedWarmupKm);
       remaining = Math.max(0, remaining-speedKm);
     }
     // "High" speed emphasis adds a second, lighter quality session in build/peak weeks
     // (never taper — tapering stays light regardless of philosophy), placed on whichever
     // remaining day sits furthest from the primary speed day.
-    let secondSpeedIdx = -1, secondSpeedKm = 0, secondSpeedType = null;
+    let secondSpeedIdx = -1, secondSpeedKm = 0, secondSpeedType = null, secondSpeedWarmupKm = 0;
     if(wantsSpeed && speedEmphasis.secondSession && (phase==='build' || phase==='peak')){
       const dayDist = (a,b)=>{ const diff=Math.abs(a-b); return Math.min(diff,7-diff); };
       const candidates = days.map((x,i)=>i).filter(i=>i!==longIdx && i!==speedIdx);
@@ -1007,7 +1072,12 @@ function generatePlan(setup){
             ? (raceKm<=10 ? PEAK_ROTATION_SHORT_HILLY : PEAK_ROTATION_LONG_HILLY)
             : (raceKm<=10 ? PEAK_ROTATION_SHORT : PEAK_ROTATION_LONG));
         secondSpeedType = rotation2[(weekWithinPhase+1) % rotation2.length];
-        secondSpeedKm = round1(speedKm*0.6);
+        // Based off speedQualityKm (the primary session's quality-only budget), not the
+        // warm-up-inflated speedKm, so this session's own warm-up funding (below) doesn't
+        // compound on top of an already-inflated base.
+        const secondQualityKm = round1(speedQualityKm*0.6);
+        secondSpeedWarmupKm = warmupFundingKm(secondSpeedType, secondQualityKm, raceKm);
+        secondSpeedKm = round1(secondQualityKm + secondSpeedWarmupKm);
         remaining = Math.max(0, remaining-secondSpeedKm);
       }
     }
@@ -1064,8 +1134,8 @@ function generatePlan(setup){
     // strides for the same reason: a lower-commitment way to get a genuine power stimulus
     // without needing a full dedicated hill-repeats session.
     days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run', terrain: isHilly?'hilly':'suggested'};
-    if(wantsSpeed){ days[speedIdx] = {...days[speedIdx], type:speedType, km:speedKm, label:TYPE_META[speedType].label}; }
-    if(secondSpeedIdx!==-1){ days[secondSpeedIdx] = {...days[secondSpeedIdx], type:secondSpeedType, km:secondSpeedKm, label:TYPE_META[secondSpeedType].label}; }
+    if(wantsSpeed){ days[speedIdx] = {...days[speedIdx], type:speedType, km:speedKm, label:TYPE_META[speedType].label, warmupKm:speedWarmupKm}; }
+    if(secondSpeedIdx!==-1){ days[secondSpeedIdx] = {...days[secondSpeedIdx], type:secondSpeedType, km:secondSpeedKm, label:TYPE_META[secondSpeedType].label, warmupKm:secondSpeedWarmupKm}; }
     easyIdxs.forEach(i=>{
       const isVariety = i===varietyIdx;
       days[i] = {
@@ -1154,9 +1224,15 @@ function buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, str
   quality.forEach(q=>{
     let idx = days.findIndex((x,i)=>x.dow===q.dow && x.type==='rest' && !qualityIdxs.includes(i));
     if(idx!==-1 && idx!==longIdx){
-      days[idx] = {...days[idx], type:q.type, km:q.km, label:TYPE_META[q.type].label};
+      // Same guaranteed-warm-up treatment as race plans (see WARMUP_ELIGIBLE_TYPES) -
+      // funded from this week's easy-day distance, q.km itself stays the calibrated
+      // quality-only budget. General plans have no single race distance, so 10 matches
+      // the same placeholder already used for buildWorkoutMeta calls below.
+      const warmupKm = warmupFundingKm(q.type, q.km, 10);
+      const km = round1(q.km + warmupKm);
+      days[idx] = {...days[idx], type:q.type, km, label:TYPE_META[q.type].label, warmupKm};
       qualityIdxs.push(idx);
-      remaining = Math.max(0, remaining-q.km);
+      remaining = Math.max(0, remaining-km);
     }
   });
 
@@ -3072,8 +3148,8 @@ function modalEditDay(){
   const matchedLogs = state.logs.filter(l=>l.date===day.date);
   const typeOpts = Object.keys(TYPE_META).map(t=>`<option value="${t}" ${draft.type===t?'selected':''}>${TYPE_META[t].label}</option>`).join('');
   const weekPaces = getWeekPaces(state.plan, week, state.logs);
-  const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy:draft.progressionEasy}, state.plan.raceDistanceKm);
-  const previewDay = {...meta, paceOverrideSecPerKm: draft.paceOverrideSecPerKm, strides:draft.strides};
+  const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy:draft.progressionEasy, warmupKm:draft.warmupKm, cooldownKm:draft.cooldownKm}, state.plan.raceDistanceKm);
+  const previewDay = {...meta, type:draft.type, km:draft.km, paceOverrideSecPerKm: draft.paceOverrideSecPerKm, strides:draft.strides};
   const description = renderWorkoutText(previewDay, weekPaces, unit, fmt) || 'No planned distance for this day.';
   const recommendedSecPerKm = meta.paceKey ? weekPaces[meta.paceKey] : null;
   const effectiveSecPerKm = draft.paceOverrideSecPerKm!=null ? draft.paceOverrideSecPerKm : recommendedSecPerKm;
@@ -3338,6 +3414,7 @@ function onClick(e){
     state.modal={type:'edit-day', weekIndex, dayIndex, draft:{
       type: day.type, km: day.km, strength: day.strength, strides: !!day.strides, easyRole: day.easyRole ?? null,
       paceOverrideSecPerKm: day.paceOverrideSecPerKm ?? null, progressionEasy: !!day.progressionEasy,
+      warmupKm: day.warmupKm ?? 0, cooldownKm: day.cooldownKm ?? 0,
     }};
     render(); return;
   }
@@ -3378,8 +3455,8 @@ function onClick(e){
     const day = state.plan.weeks[wi].days[di];
     const strides = STRIDES_ELIGIBLE_TYPES.includes(draft.type) && !!draft.strides;
     const progressionEasy = draft.type==='progression' && !!draft.progressionEasy;
-    const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy}, state.plan.raceDistanceKm);
-    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta};
+    const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy, warmupKm:draft.warmupKm, cooldownKm:draft.cooldownKm}, state.plan.raceDistanceKm);
+    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0};
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     Store.setPlan(state.plan);
