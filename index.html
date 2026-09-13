@@ -94,6 +94,11 @@ input,select,textarea{font-family:inherit; font-size:15px;}
 .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow);}
 .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-weight:700; font-size:14px; padding:11px 16px; transition:transform .1s ease;}
 .btn:active{transform:scale(.97);}
+/* An inline icon SVG with no width/height of its own sizes unpredictably in a flex
+   button — fine in a narrow, content-width button, but a wide .btn-block with short
+   text can blow it up to fill the available space. Pin it explicitly everywhere. */
+.btn svg{width:16px; height:16px; flex:none;}
+.fab svg{width:18px; height:18px; flex:none;}
 .btn-primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
 .btn-ghost{border-color:transparent; background:transparent;}
 .btn-block{width:100%;}
@@ -244,6 +249,19 @@ const TYPE_META = {
   race:{label:'Race Day', bg:'--z-race-bg', fg:'--z-race'},
 };
 const QUALITY_TYPES = ['long','tempo','intervals','hills','fartlek','overunder'];
+// Plain-language training purpose + target effort per workout type, shown in the
+// read-only day detail view so "why does this run exist" is answered without opening edit.
+const WORKOUT_PURPOSE = {
+  rest: {purpose:'Lets your body absorb the training and rebuild stronger.', effort:'None — or light mobility if paired with strength.'},
+  easy: {purpose:'Builds aerobic endurance and recovery capacity without piling on fatigue.', effort:'Conversational — you should be able to hold a conversation the whole way.'},
+  long: {purpose:'Extends your endurance and trains your body to use fat efficiently over long time on your feet.', effort:'Steady and aerobic — comfortably sustainable, not a grind.'},
+  tempo: {purpose:'Raises your lactate threshold — the pace you can hold before fatigue piles up fast.', effort:'Comfortably hard — sustainable with focus, not a sprint.'},
+  intervals: {purpose:'Improves VO2 max and running economy through repeated hard efforts.', effort:'Hard — close to max sustainable effort for each rep, with easy jog recovery between.'},
+  hills: {purpose:'Builds power, strength, and running form through resisted uphill effort.', effort:'Hard push uphill, easy jog back down to recover.'},
+  fartlek: {purpose:'Blends speed and endurance with unstructured surges of faster running.', effort:'Alternates moderately hard surges with easy jogging in between.'},
+  overunder: {purpose:'Trains your body to clear lactate at race-relevant pace by riding just above and below threshold.', effort:'Alternates comfortably hard and hard, back and forth.'},
+  race: {purpose:'This is race day — execute your goal-pace strategy.', effort:'Your target race effort.'},
+};
 const BUILD_ROTATION = ['tempo','hills','fartlek'];
 const PEAK_ROTATION_SHORT = ['intervals','hills','fartlek','tempo'];
 const PEAK_ROTATION_LONG = ['tempo','overunder','intervals'];
@@ -1466,6 +1484,7 @@ function renderSettingsTab(){
 /* ============================= modals ============================= */
 function renderModal(){
   const m = state.modal;
+  if(m.type==='day-detail') return renderDayDetail();
   if(m.type==='log-run') return modalLogRun();
   if(m.type==='edit-day') return modalEditDay();
   if(m.type==='edit-setup') return modalEditSetup();
@@ -1473,10 +1492,11 @@ function renderModal(){
   return '';
 }
 
-function modalShell(title, innerHtml){
+function modalShell(title, innerHtml, headerButtonHtml){
   return `<div class="overlay" data-act="close-modal-overlay">
     <div class="sheet" data-stop="1">
       <div class="sheet-handle"></div>
+      ${headerButtonHtml || ''}
       <button class="sheet-close" data-act="close-modal" aria-label="Close">${ICONS.close}</button>
       <h3 class="sheet-title">${title}</h3>
       ${innerHtml}
@@ -1590,6 +1610,43 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
     <div class="hint" style="margin-top:8px; color:var(--ink-soft);">${impactLine}</div>
     <button class="btn btn-ghost btn-sm" data-act="delete-log" data-id="${log.id}" style="margin-top:10px; color:#C4432E;">Remove this log</button>
   </div>`;
+}
+
+// Tapping a day opens this read-only view first — pace, purpose, and effort for the run,
+// plus how it actually went if it's already logged. Editing (type, distance, pace override,
+// swap) lives behind the Edit button so a casual "what's today's run again?" tap never risks
+// accidentally changing the plan.
+function renderDayDetail(){
+  const {weekIndex, dayIndex} = state.modal;
+  const week = state.plan.weeks[weekIndex];
+  const day = week.days[dayIndex];
+  const unit = state.setup.units, fmt = state.paceFormat;
+  const matchedLog = state.logs.find(l=>l.date===day.date);
+  const meta = TYPE_META[day.type];
+  const weekPaces = getWeekPaces(state.plan, week, state.logs);
+  const description = dayDisplayText(day, weekPaces, unit, fmt);
+  const purpose = WORKOUT_PURPOSE[day.type];
+  const editBtn = `<button class="btn" data-act="open-day-edit" style="position:absolute; top:14px; right:62px; padding:9px 16px; font-size:13.5px;">Edit</button>`;
+
+  return modalShell(`${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}`, `
+    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+      <span class="pill" style="background:var(--${meta.bg}); color:var(--${meta.fg}); font-size:13px; padding:6px 14px;">${day.label}</span>
+      ${day.km>0?`<span class="mono" style="font-size:15px; font-weight:700;">${fmtDist(day.km,unit)}</span>`:''}
+      ${day.strength?`<span class="strength-badge">+ Strength</span>`:''}
+    </div>
+    ${description ? `<div style="font-size:14.5px; color:var(--ink-soft); margin-bottom:16px;">${esc(description)}</div>` : ''}
+    ${matchedLog ? renderLoggedComparisonHtml(day, matchedLog, state.plan, week, state.logs, unit, fmt) : ''}
+    ${purpose ? `
+    <div class="field">
+      <label class="field-label">Purpose</label>
+      <div class="input" style="height:auto; color:var(--ink-soft);">${esc(purpose.purpose)}</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Effort</label>
+      <div class="input" style="height:auto; color:var(--ink-soft);">${esc(purpose.effort)}</div>
+    </div>` : ''}
+    ${!matchedLog ? `<button class="btn btn-primary btn-block" data-act="open-log-for-day" style="padding:13px; margin-top:6px;">${ICONS.plus} Log a run</button>` : ''}
+  `, editBtn);
 }
 
 function modalEditDay(){
@@ -1786,11 +1843,22 @@ function onClick(e){
 
   if(act==='open-day'){
     const di = Number(el.dataset.i);
-    const day = state.plan.weeks[state.currentWeekIndex].days[di];
-    state.modal={type:'edit-day', weekIndex:state.currentWeekIndex, dayIndex:di, draft:{
+    state.modal={type:'day-detail', weekIndex:state.currentWeekIndex, dayIndex:di};
+    render(); return;
+  }
+  if(act==='open-day-edit'){
+    const {weekIndex, dayIndex} = state.modal;
+    const day = state.plan.weeks[weekIndex].days[dayIndex];
+    state.modal={type:'edit-day', weekIndex, dayIndex, draft:{
       type: day.type, km: day.km, strength: day.strength, strides: !!day.strides, easyRole: day.easyRole ?? null,
       paceOverrideSecPerKm: day.paceOverrideSecPerKm ?? null,
     }};
+    render(); return;
+  }
+  if(act==='open-log-for-day'){
+    const {weekIndex, dayIndex} = state.modal;
+    const day = state.plan.weeks[weekIndex].days[dayIndex];
+    state.modal={type:'log-run', data:{date:day.date, dist:'', time:'', notes:''}};
     render(); return;
   }
   if(act==='reset-day-pace'){
