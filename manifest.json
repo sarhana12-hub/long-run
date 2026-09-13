@@ -1,6 +1,6 @@
 {
-  "name": "Long Run — Training Plan",
-  "short_name": "Long Run",
+  "name": "Peak — Training Plan",
+  "short_name": "Peak",
   "description": "A personalized week-by-week running training plan and tracker.",
   "start_url": "./index.html",
   "scope": "./",

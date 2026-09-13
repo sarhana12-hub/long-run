@@ -1,0 +1,7 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Peak mark, Concept A "Simple Peak" — the app's new logo/brand mark.
+       Drop-in replacement for ICONS.route: same stroke-based style, currentColor. -->
+  <path d="M3 19 L9 10 L11 13 L15 6 L21 19"/>
+  <path d="M15 6 L15 2"/>
+  <path d="M15 2 L18.5 3.2 L15 4.4"/>
+</svg>

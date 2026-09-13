@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Long Run</title>
+<title>Peak</title>
 <meta name="description" content="A personalized week-by-week running training plan and tracker.">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#101511">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Long Run">
+<meta name="apple-mobile-web-app-title" content="Peak">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
@@ -85,7 +85,7 @@ input,select,textarea{font-family:inherit; font-size:15px;}
 /* ---------- top bar ---------- */
 .topbar{display:flex; align-items:center; justify-content:space-between; padding:calc(16px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) 8px calc(18px + env(safe-area-inset-left));}
 .brand{display:flex; align-items:center; gap:8px;}
-.brand-mark{width:30px; height:30px; border-radius:9px; background:var(--accent); display:flex; align-items:center; justify-content:center; flex:none;}
+.brand-mark{width:30px; height:30px; border-radius:9px; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; flex:none;}
 .brand-mark svg{width:17px; height:17px;}
 .brand-name{font-family:var(--font-display); font-weight:800; font-size:19px; letter-spacing:-.01em;}
 
@@ -865,6 +865,7 @@ const Store = {
 /* ============================= icons ============================= */
 const ICONS = {
   route:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M6 15.5V13a4 4 0 0 1 4-4h4a4 4 0 0 0 4-4"/></svg>',
+  peak:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19 L9 10 L11 13 L15 6 L21 19"/><path d="M15 6 L15 2"/><path d="M15 2 L18.5 3.2 L15 4.4"/></svg>',
   chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -1029,7 +1030,7 @@ function keepActiveWeekTabVisible(){
 
 function renderLoading(){
   return `<div class="center-screen">
-    <div class="brand-mark" style="width:52px;height:52px;border-radius:16px;">${ICONS.route.replace('width:17px','width:26px').replace('height:17px','height:26px')}</div>
+    <div class="brand-mark" style="width:52px;height:52px;border-radius:16px;">${ICONS.peak.replace('width:17px','width:26px').replace('height:17px','height:26px')}</div>
     <div style="color:var(--muted); font-size:13px; font-weight:600;">Loading Long Run…</div>
   </div>`;
 }
@@ -1257,7 +1258,7 @@ function renderOnboarding(){
 
   return `
   <div class="topbar">
-    <div class="brand"><div class="brand-mark">${ICONS.route}</div><div class="brand-name">Long Run</div></div>
+    <div class="brand"><div class="brand-mark">${ICONS.peak}</div><div class="brand-name">Long Run</div></div>
   </div>
   <div class="container">
     <div class="eyebrow" style="margin-top:6px;">Training plans, tailored to race day</div>
@@ -1286,7 +1287,7 @@ function renderApp(){
 
   return `
   <div class="topbar">
-    <div class="brand"><div class="brand-mark">${ICONS.route}</div><div class="brand-name">Long Run</div></div>
+    <div class="brand"><div class="brand-mark">${ICONS.peak}</div><div class="brand-name">Long Run</div></div>
     <div style="font-weight:700; font-size:13.5px; color:var(--muted);">${esc(state.name)}</div>
   </div>
   ${body}
