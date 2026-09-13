@@ -178,6 +178,11 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .sheet-title{font-size:19px; margin-bottom:16px;}
 .sheet-close{position:absolute; top:14px; right:14px; background:var(--surface-2); border-radius:50%; width:40px; height:40px; border:none; display:flex; align-items:center; justify-content:center; color:var(--muted);}
 .sheet-close svg{width:24px; height:24px;}
+.sheet.milestone{ text-align:center; }
+.badge-ring{ width:84px; height:84px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; margin:0 auto 18px; }
+.badge-ring svg{ width:44px; height:44px; }
+.sheet-title.milestone{ font-family:var(--font-display); font-weight:800; font-size:22px; margin-bottom:8px; }
+.sheet-body{ font-size:14.5px; line-height:1.55; color:var(--ink-soft); margin-bottom:22px; }
 
 /* ---------- progress ---------- */
 .stat-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; padding:0 18px;}
@@ -1648,7 +1653,21 @@ function renderModal(){
   if(m.type==='edit-setup') return modalEditSetup();
   if(m.type==='confirm-reset') return modalConfirmReset();
   if(m.type==='stat-detail') return renderStatDetailModal(m.stat);
+  if(m.type==='milestone') return modalMilestone(m.data.title, m.data.message);
   return '';
+}
+
+function modalMilestone(title, message){
+  return `<div class="overlay" data-act="close-modal-overlay">
+    <div class="sheet milestone" data-stop="1">
+      <div class="sheet-handle"></div>
+      <button class="sheet-close" data-act="close-modal">${ICONS.close}</button>
+      <div class="badge-ring">${ICONS.summitBadge}</div>
+      <div class="sheet-title milestone">${esc(title)}</div>
+      <div class="sheet-body">${esc(message)}</div>
+      <button class="btn btn-primary btn-block" data-act="close-modal">Nice!</button>
+    </div>
+  </div>`;
 }
 
 // A big number with a small caption under it — the building block for the stat detail
