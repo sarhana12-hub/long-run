@@ -2176,22 +2176,7 @@ function renderOnboardStep3(d){
     `;
   }
   return `
-    ${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM ? `
-    <div class="section-title" style="margin-top:0;">Caps (optional)</div>
-    <div class="row">
-      <div class="field">
-        <label class="field-label">Max long run (${d.units})</label>
-        <input class="input" type="number" min="0" step="0.5" id="in-max-long" placeholder="no cap" value="${d.maxLongRunMi}">
-      </div>
-      <div class="field">
-        <label class="field-label">Max weekly mileage (${d.units})</label>
-        <input class="input" type="number" min="0" step="1" id="in-max-weekly" placeholder="no cap" value="${d.maxWeeklyMi}">
-      </div>
-    </div>
-    <div class="hint" style="margin-top:-8px; margin-bottom:16px;">If the plan would otherwise go higher, it scales back down to stay under whichever caps you set here.</div>
-    ` : ''}
-
-    <div class="section-title" style="${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM?'':'margin-top:0;'}">Training style</div>
+    <div class="section-title" style="margin-top:0;">Training style</div>
     <div class="field">
       <label class="field-label">Long run emphasis</label>
       <div class="chip-select">${emphasisChipsHtml(d.longRunEmphasis, 'pick-long-emphasis')}</div>
@@ -2220,6 +2205,21 @@ function renderOnboardStep3(d){
       <div class="dow-grid">${dowGrid('longDow', d.longDow, false)}</div>
       <div class="hint">Speed work and strength days are placed automatically for proper recovery spacing — move any day later from the plan itself if you'd rather.</div>
     </div>
+
+    ${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM ? `
+    <div class="section-title">Caps (optional)</div>
+    <div class="row">
+      <div class="field">
+        <label class="field-label">Max long run (${d.units})</label>
+        <input class="input" type="number" min="0" step="0.5" id="in-max-long" placeholder="no cap" value="${d.maxLongRunMi}">
+      </div>
+      <div class="field">
+        <label class="field-label">Max weekly mileage (${d.units})</label>
+        <input class="input" type="number" min="0" step="1" id="in-max-weekly" placeholder="no cap" value="${d.maxWeeklyMi}">
+      </div>
+    </div>
+    <div class="hint" style="margin-top:-8px; margin-bottom:16px;">If the plan would otherwise go higher, it scales back down to stay under whichever caps you set here.</div>
+    ` : ''}
   `;
 }
 
