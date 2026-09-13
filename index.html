@@ -3187,7 +3187,14 @@ function modalEditDay(){
   const typeOpts = Object.keys(TYPE_META).map(t=>`<option value="${t}" ${draft.type===t?'selected':''}>${TYPE_META[t].label}</option>`).join('');
   const weekPaces = getWeekPaces(state.plan, week, state.logs);
   const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy:draft.progressionEasy, warmupKm:draft.warmupKm, cooldownKm:draft.cooldownKm}, state.plan.raceDistanceKm);
-  const previewDay = {...meta, type:draft.type, km:draft.km, paceOverrideSecPerKm: draft.paceOverrideSecPerKm, strides:draft.strides, hillStrides:day.hillStrides, terrain:day.terrain};
+  // Same strides/terrain/hillStrides eligibility as the save handler (see save-day) - the
+  // live preview shouldn't show a stale strides or terrain note for a type the user has
+  // switched to but not saved yet either (previously it used draft.strides raw here,
+  // showing "+ strides" even for a type like Rest that can never actually save with it).
+  const previewStrides = STRIDES_ELIGIBLE_TYPES.includes(draft.type) && !!draft.strides;
+  const previewTerrainEligible = draft.type==='long' || (draft.type==='easy' && day.easyRole==='aerobic');
+  const previewHillStridesEligible = draft.type==='easy' && day.easyRole==='aerobic' && previewStrides;
+  const previewDay = {...meta, type:draft.type, km:draft.km, paceOverrideSecPerKm: draft.paceOverrideSecPerKm, strides:previewStrides, hillStrides: previewHillStridesEligible ? day.hillStrides : false, terrain: previewTerrainEligible ? day.terrain : null};
   const description = renderWorkoutText(previewDay, weekPaces, unit, fmt) || 'No planned distance for this day.';
   const recommendedSecPerKm = meta.paceKey ? weekPaces[meta.paceKey] : null;
   const effectiveSecPerKm = draft.paceOverrideSecPerKm!=null ? draft.paceOverrideSecPerKm : recommendedSecPerKm;
@@ -3494,7 +3501,15 @@ function onClick(e){
     const strides = STRIDES_ELIGIBLE_TYPES.includes(draft.type) && !!draft.strides;
     const progressionEasy = draft.type==='progression' && !!draft.progressionEasy;
     const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy, warmupKm:draft.warmupKm, cooldownKm:draft.cooldownKm}, state.plan.raceDistanceKm);
-    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0, easyVariety:false};
+    // terrain/hillStrides are generatePlan-assigned, role-based fields (the long run, and
+    // the week's "aerobic" easy day - see easyIdxs.forEach), not something the edit modal
+    // lets the user set directly. Only keep them when the day's (possibly just-changed)
+    // type is still one where they'd apply - easyRole itself can't change here, so a day
+    // edited away from Long/aerobic-Easy into anything else drops its stale terrain note
+    // instead of carrying it forward onto a workout it no longer describes.
+    const terrainEligible = draft.type==='long' || (draft.type==='easy' && day.easyRole==='aerobic');
+    const hillStridesEligible = draft.type==='easy' && day.easyRole==='aerobic' && strides;
+    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0, easyVariety:false, terrain: terrainEligible ? day.terrain : null, hillStrides: hillStridesEligible ? day.hillStrides : false};
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     Store.setPlan(state.plan);
