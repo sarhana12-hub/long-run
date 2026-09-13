@@ -763,8 +763,18 @@ function generatePlan(setup){
   // mileage by construction — comparing against it would make every runner look
   // "nearly at peak" regardless of actual fitness.
   const fitnessRatio = idealPeakWeeklyKm>0 ? clamp(currentKm/idealPeakWeeklyKm, 0, 1) : 0;
-  const baseFraction = interp([[0,0.55],[0.5,0.45],[0.75,0.25],[1,0.10]], fitnessRatio);
-  const baseCount = Math.max(buildWeeksCount>=3?Math.round(buildWeeksCount*baseFraction):buildWeeksCount, buildWeeksCount>0?1:0);
+  // Softened in the 0.4-0.9 range from an earlier, more conservative curve: someone
+  // already running consistently at 60-80% of ideal peak (e.g. 25mi/week into a half
+  // marathon, ~67%) was landing ~31% of build weeks in base - 3-4 full weeks of
+  // easy-only running before any quality work, for a runner who'd already built most of
+  // the aerobic engine base phase exists for. The true-beginner and already-at-peak ends
+  // barely moved - they were reasonable before.
+  const baseFraction = interp([[0,0.55],[0.4,0.40],[0.6,0.22],[0.8,0.12],[1,0.08]], fitnessRatio);
+  // Explicit override for a runner who knows they're ready for structured speed work
+  // immediately - bypasses the curve entirely rather than just nudging it, since this is
+  // the runner's own informed call, not something the formula should second-guess.
+  const baseCount = setup.skipBase ? 0
+    : Math.max(buildWeeksCount>=3?Math.round(buildWeeksCount*baseFraction):buildWeeksCount, buildWeeksCount>0?1:0);
   const buildCount = Math.max(buildWeeksCount-baseCount>=2? Math.round(buildWeeksCount*0.35):Math.max(0,buildWeeksCount-baseCount), 0);
   function phaseFor(i){
     if(i>=buildWeeksCount) return 'taper';
@@ -878,6 +888,16 @@ function generatePlan(setup){
     const easyLabelFor = i => i===recoveryIdx ? 'Recovery Run' : i===aerobicIdx ? 'Aerobic Run' : 'Easy Run';
     const easyRoleFor = i => i===recoveryIdx ? 'recovery' : i===aerobicIdx ? 'aerobic' : 'easy';
 
+    // Base phase never gets quality work (speedAllowedPhases excludes 'base' entirely, by
+    // design) — but for higher-frequency runners that leaves most of the week as
+    // undifferentiated "Easy Run"s. Fartlek is safe variety there, not a hidden hard
+    // session: it runs at the same easyPerKm pace as a plain easy run (see
+    // buildWorkoutMeta), just broken into surges rather than steady. Only one of the
+    // "generic" easy days (never the recovery jog or the aerobic day) becomes a fartlek,
+    // and only every other base week, so it reads as a change of pace rather than a habit.
+    const genericEasyIdxs = easyIdxs.filter(i=>i!==recoveryIdx && i!==aerobicIdx);
+    const fartlekIdx = (phase==='base' && w%2===0 && genericEasyIdxs.length>=1) ? genericEasyIdxs[0] : null;
+
     // Strides (short relaxed accelerations) go on up to two easy days a week — skipping the
     // recovery jog right after the long run, which should stay fully easy.
     const stridesEligible = easyIdxs.filter(i=>i!==recoveryIdx);
@@ -899,7 +919,7 @@ function generatePlan(setup){
     days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run', terrain: isHilly?'hilly':'suggested'};
     if(wantsSpeed){ days[speedIdx] = {...days[speedIdx], type:speedType, km:speedKm, label:TYPE_META[speedType].label}; }
     if(secondSpeedIdx!==-1){ days[secondSpeedIdx] = {...days[secondSpeedIdx], type:secondSpeedType, km:secondSpeedKm, label:TYPE_META[secondSpeedType].label}; }
-    easyIdxs.forEach(i=>{ days[i] = {...days[i], type:'easy', km:easyKmFor(i), label:easyLabelFor(i), easyRole:easyRoleFor(i), strides:stridesIdxs.includes(i), hillStrides: i===aerobicIdx && stridesIdxs.includes(i), terrain: i===aerobicIdx ? (isHilly?'hilly':'suggested') : null}; });
+    easyIdxs.forEach(i=>{ const isFartlek = i===fartlekIdx; days[i] = {...days[i], type: isFartlek?'fartlek':'easy', km:easyKmFor(i), label: isFartlek?TYPE_META.fartlek.label:easyLabelFor(i), easyRole:easyRoleFor(i), strides:stridesIdxs.includes(i), hillStrides: i===aerobicIdx && stridesIdxs.includes(i), terrain: i===aerobicIdx ? (isHilly?'hilly':'suggested') : null}; });
 
     let strengthLeft = setup.strengthPerWeek==null?2:setup.strengthPerWeek;
     strengthDows.forEach(dw=>{
@@ -1424,6 +1444,7 @@ function defaultDraft(){
     maxLongRunMi: '', maxWeeklyMi: '',
     longRunEmphasis: 'balanced', speedEmphasis: 'balanced', strengthPerWeek: 2,
     hillsMode: 'flat', // 'flat' | 'hilly' - race plans only, see generatePlan()
+    skipBase: false, // race plans only - skip straight to build phase, see generatePlan()
     // General (non-race) plan fields
     planKind: 'speed', weeks: PLAN_KIND_META.speed.weeksDefault,
     distanceGoalMetric: 'weekly', distanceGoalCurrentMi: '', distanceGoalTargetMi: '',
@@ -1461,6 +1482,7 @@ function draftFromSetup(setup){
     longRunEmphasis: setup.longRunEmphasis || 'balanced', speedEmphasis: setup.speedEmphasis || 'balanced',
     strengthPerWeek: setup.strengthPerWeek==null ? 2 : setup.strengthPerWeek,
     hillsMode: setup.hillsMode || 'flat',
+    skipBase: !!setup.skipBase,
   };
 }
 const LONG_DISTANCE_CAP_THRESHOLD_KM = 21.0975; // half marathon and up get optional long-run/volume caps
@@ -1528,7 +1550,7 @@ function submitOnboarding(){
       maxLongRunKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxLongRunMi) ? unitToKm(Number(d.maxLongRunMi), d.units) : null,
       maxWeeklyKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxWeeklyMi) ? unitToKm(Number(d.maxWeeklyMi), d.units) : null,
       longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis,
-      hillsMode: d.hillsMode,
+      hillsMode: d.hillsMode, skipBase: d.skipBase,
     };
     plan = generatePlan(setup);
   }
@@ -1834,6 +1856,15 @@ function renderOnboardStep2(d){
       <input class="input" type="number" min="0" step="1" id="in-weekly" value="${d.currentWeeklyMi}">
       <div class="hint">Rough average over the last few weeks is fine.</div>
     </div>
+    ${!isGeneral ? `
+    <div class="field">
+      <label class="field-label">Base phase</label>
+      <div class="chip-select">
+        <button class="chip ${d.skipBase?'':'active'}" data-act="pick-skip-base" data-mode="0">Build up gradually</button>
+        <button class="chip ${d.skipBase?'active':''}" data-act="pick-skip-base" data-mode="1">Skip straight to speed work</button>
+      </div>
+      <div class="hint">${d.skipBase ? "You'll go straight into structured speed sessions instead of easy-only base weeks — good if you're already running consistently and comfortable with quality workouts." : "A few weeks of easy-only running before speed work starts, scaled to how close your current mileage already is to what the plan will peak at."}</div>
+    </div>` : ''}
     <div class="field">
       <label class="field-label">Most recent race (optional, calibrates your paces)</label>
       <div class="chip-select" style="margin-bottom:10px;">${recentChips}</div>
@@ -2475,6 +2506,7 @@ function renderSettingsTab(){
         ? `<div class="settings-row"><div><div class="lbl">${esc(planLabel(s))}</div><div class="sub">${s.weeks} week${s.weeks===1?'':'s'} total</div></div></div>`
         : `<div class="settings-row"><div><div class="lbl">${esc(planLabel(s))}</div><div class="sub">${niceDateFull(parseDate(s.raceDate))}</div></div></div>`}
       ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Course profile</div><div class="sub">${s.hillsMode==='hilly'?'Hilly':'Flat / rolling'}</div></div></div>` : ''}
+      ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Base phase</div><div class="sub">${s.skipBase?'Skipped — straight to speed work':'Build up gradually'}</div></div></div>` : ''}
       <div class="settings-row"><div><div class="lbl">Weekly mileage used to build plan</div><div class="sub">${fmtDist(s.currentWeeklyKm,unit,1)}/week</div></div></div>
       <div class="settings-row"><div><div class="lbl">This week's paces</div><div class="sub">Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)}${isGeneralPlan(s) ? '' : ` · Goal race pace ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}`}</div></div></div>
       <div class="hint" style="padding:0 0 12px;">${isGeneralPlan(s) ? 'Training paces are calibrated to your current fitness.' : 'Training paces gradually get faster as your plan builds toward peak fitness, then hold steady through the taper.'}${recal ? ` Right now they're also adjusted based on your last ${recal.count} logged tempo/interval/over-under run${recal.count===1?'':'s'}.` : ''}</div>
@@ -3025,6 +3057,7 @@ function onClick(e){
   if(act==='pick-recent'){ state.onboardDraft.recentDistanceKey = el.dataset.key; render(); return; }
   if(act==='pick-goal-mode'){ state.onboardDraft.goalMode = el.dataset.mode; render(); return; }
   if(act==='pick-hills-mode'){ state.onboardDraft.hillsMode = el.dataset.mode; render(); return; }
+  if(act==='pick-skip-base'){ state.onboardDraft.skipBase = el.dataset.mode==='1'; render(); return; }
   if(act==='pick-plan-kind'){
     const kind = el.dataset.kind;
     state.onboardDraft.planKind = kind;
