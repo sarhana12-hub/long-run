@@ -193,6 +193,12 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .chart-col .wl{font-size:9.5px; color:var(--muted); font-weight:700;}
 .legend{display:flex; gap:16px; padding:10px 4px 14px; font-size:11.5px; color:var(--muted);}
 .legend span{display:inline-flex; align-items:center; gap:5px;}
+/* Diverging pace bar: a center tick marks "on pace" (the planned pace); the fill grows
+   left (faster) or right (slower) from center, capped at PACE_TRACK_CAP_FRAC so one
+   outlier run can't flatten the rest of the scale. */
+.pace-track{position:relative; height:10px; background:var(--surface-2); border-radius:999px;}
+.pace-track-center{position:absolute; top:-3px; bottom:-3px; left:50%; width:2px; margin-left:-1px; background:var(--line); border-radius:1px;}
+.pace-track-fill{position:absolute; top:0; bottom:0; border-radius:999px;}
 .legend i{width:9px; height:9px; border-radius:3px; display:inline-block;}
 .log-row{display:flex; align-items:center; gap:12px; padding:12px 14px;}
 .log-row + .log-row{border-top:1px solid var(--line-soft);}
@@ -1432,9 +1438,10 @@ function renderProgressTab(){
     <div class="legend"><span><i style="background:var(--line)"></i>Planned</span><span><i style="background:var(--accent-strong)"></i>Logged</span></div>
   </div>
   <div class="section-title" style="padding:0 20px;">Pace tracker</div>
-  <div class="card" style="padding:6px 16px; margin:0 18px 24px;">
+  <div class="card" style="padding:6px 16px 14px; margin:0 18px 24px;">
     ${paceTrackerRowHtml('long','Long runs')}
     ${paceTrackerRowHtml('tempo','Tempo runs')}
+    <div class="hint" style="margin-top:10px;">Each bar compares your average logged pace to the plan's target — centered means right on pace, left is faster, right is slower.</div>
   </div>
   <div class="section-title" style="padding:0 20px;">Recent runs</div>
   <div class="card" style="margin:0 18px 24px;">${logRows}</div>
@@ -1471,17 +1478,43 @@ function paceComparisonForType(type){
   const avgPlanned = matches.reduce((s,m)=>s+m.plannedPaceSecPerKm,0)/matches.length;
   return {count:matches.length, avgActual, avgPlanned};
 }
+const PACE_TRACK_CAP_FRAC = 0.12; // a delta this big (12% of target pace) or more fills the bar to its edge
 function paceTrackerRowHtml(type, label){
   const unit = state.setup.units, fmt = state.paceFormat;
   const cmp = paceComparisonForType(type);
   if(!cmp){
-    return `<div class="settings-row"><div><div class="lbl">${label}</div><div class="sub">No logged ${label.toLowerCase()}s yet.</div></div></div>`;
+    return `<div style="padding:14px 0; border-bottom:1px solid var(--line-soft);">
+      <div style="font-weight:700; font-size:14px;">${label}</div>
+      <div class="hint" style="margin:2px 0 0;">No logged ${label.toLowerCase()}s yet.</div>
+    </div>`;
   }
-  const deltaLine = paceDeltaLine(cmp.avgActual, cmp.avgPlanned, unit, fmt);
-  return `<div class="settings-row">
-    <div>
-      <div class="lbl">${label}</div>
-      <div class="sub">Avg ${paceOrSpeedStr(cmp.avgActual,unit,fmt)} vs planned ${paceOrSpeedStr(cmp.avgPlanned,unit,fmt)} — ${deltaLine} · ${cmp.count} logged</div>
+  const deltaSecPerKm = cmp.avgActual - cmp.avgPlanned;
+  const onPace = Math.abs(deltaSecPerKm) < 2;
+  const isSlower = deltaSecPerKm >= 0;
+  const deltaFrac = clamp(Math.abs(deltaSecPerKm/cmp.avgPlanned), 0, PACE_TRACK_CAP_FRAC);
+  const barPct = (deltaFrac/PACE_TRACK_CAP_FRAC)*50;
+  const barColor = onPace ? 'var(--muted)' : (isSlower ? 'var(--z-tempo)' : 'var(--accent-strong)');
+  const fillStyle = onPace
+    ? `left:calc(50% - 3px); width:6px; background:${barColor};`
+    : isSlower
+      ? `left:50%; width:${barPct}%; background:${barColor};`
+      : `left:${50-barPct}%; width:${barPct}%; background:${barColor};`;
+  const deltaLineFull = paceDeltaLine(cmp.avgActual, cmp.avgPlanned, unit, fmt);
+  const deltaShort = deltaLineFull==='right on target pace' ? 'On pace' : deltaLineFull.replace(' than planned','');
+
+  return `<div style="padding:14px 0; border-bottom:1px solid var(--line-soft);">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
+      <span style="font-weight:700; font-size:14px;">${label}</span>
+      <span class="mono" style="font-size:11px; color:var(--muted);">${cmp.count} logged</span>
+    </div>
+    <div class="pace-track">
+      <div class="pace-track-center"></div>
+      <div class="pace-track-fill" style="${fillStyle}"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-top:7px; font-size:11.5px;">
+      <span class="mono" style="color:var(--muted);">Target ${paceOrSpeedStr(cmp.avgPlanned,unit,fmt)}</span>
+      <span style="font-weight:700; color:${barColor};">${deltaShort}</span>
+      <span class="mono" style="color:var(--ink-soft);">Actual ${paceOrSpeedStr(cmp.avgActual,unit,fmt)}</span>
     </div>
   </div>`;
 }
