@@ -1757,9 +1757,9 @@ function renderOnboardStep1(d){
     <div class="field">
       <div style="position:relative;">
         <input class="input" type="date" id="in-race-date" value="${d.raceDate}">
-        ${!d.raceDate ? `<div style="position:absolute; top:0; left:0; bottom:0; right:32px; display:flex; align-items:center; padding-left:13px; background:var(--surface-2); color:var(--muted); border-radius:11px 0 0 11px; pointer-events:none;">Enter date of race here</div>` : ''}
+        <div id="race-date-placeholder" style="position:absolute; top:0; left:0; bottom:0; right:32px; display:${d.raceDate?'none':'flex'}; align-items:center; padding-left:13px; background:var(--surface-2); color:var(--muted); border-radius:11px 0 0 11px; pointer-events:none;">Enter date of race here</div>
       </div>
-      ${weeksToRace? `<div class="hint">${weeksToRace} week${weeksToRace===1?'':'s'} from today.</div>`:''}
+      <div class="hint" id="race-date-hint" style="display:${weeksToRace?'':'none'};">${weeksToRace? `${weeksToRace} week${weeksToRace===1?'':'s'} from today.` : ''}</div>
     </div>
 
     <div class="section-title">Course profile</div>
@@ -3369,7 +3369,26 @@ function onChange(e){
     if(file) handleImportFile(file);
     return;
   }
-  if(e.target.id==='in-race-date'){ state.onboardDraft.raceDate = e.target.value; render(); return; }
+  if(e.target.id==='in-race-date'){
+    state.onboardDraft.raceDate = e.target.value;
+    // Deliberately not render() here: this app re-renders by regenerating innerHTML, which
+    // destroys and recreates the date input itself. On iOS, opening an empty date field
+    // fires a premature change event with today's date the instant the picker appears,
+    // before the user has actually chosen anything - re-rendering right then yanks the
+    // input out from under the still-open native picker and forcibly closes it. Patching
+    // just the two small bits of UI that depend on raceDate, and leaving the input node
+    // itself untouched, keeps the picker open through that spurious event so the user's
+    // real selection (the change event that follows) lands normally.
+    const placeholder = document.getElementById('race-date-placeholder');
+    if(placeholder) placeholder.style.display = e.target.value ? 'none' : 'flex';
+    const hintEl = document.getElementById('race-date-hint');
+    if(hintEl){
+      const weeksToRace = e.target.value ? Math.max(1,Math.ceil((parseDate(e.target.value)-todayDate())/86400000/7)) : null;
+      hintEl.style.display = weeksToRace ? '' : 'none';
+      hintEl.textContent = weeksToRace ? `${weeksToRace} week${weeksToRace===1?'':'s'} from today.` : '';
+    }
+    return;
+  }
   if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; render(); return; }
   if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; }
   if(e.target.id==='in-max-long'){ state.onboardDraft.maxLongRunMi = e.target.value; }
