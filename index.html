@@ -306,7 +306,7 @@ const WORKOUT_PURPOSE = {
   tempo: {purpose:'Raises your lactate threshold — the pace you can hold before fatigue piles up fast.', effort:'Comfortably hard — sustainable with focus, not a sprint.'},
   intervals: {purpose:'Improves VO2 max and running economy through repeated hard efforts.', effort:'Hard — close to max sustainable effort for each rep, with easy jog recovery between.'},
   hills: {purpose:'Builds power, strength, and running form through resisted uphill effort.', effort:'Hard push uphill, easy jog back down to recover.'},
-  fartlek: {purpose:'Blends speed and endurance with unstructured surges of faster running.', effort:'Alternates moderately hard surges with easy jogging in between.'},
+  fartlek: {purpose:'Blends speed and endurance with unstructured surges of faster running.', effort:'Surges run at roughly interval effort — hard and controlled, not a sprint. Everything else, including the recovery jog between surges, stays easy.'},
   overunder: {purpose:'Trains your body to clear lactate at race-relevant pace by riding just above and below threshold.', effort:'Alternates comfortably hard and hard, back and forth.'},
   progression: {purpose:'Trains pace control under fatigue — starting comfortable and finishing strong, rather than starting fast and fading.', effort:'Starts easy and gradually quickens; how hard the finish gets depends on the day — check the target pace above.'},
   cruise: {purpose:'Builds threshold volume in manageable chunks — same lactate-clearing benefit as tempo, easier to hold pace accurately over repeated reps than one continuous effort.', effort:'Comfortably hard, same as tempo — short jog recoveries keep the pace honest without fully resetting.'},
@@ -777,11 +777,25 @@ function buildWorkoutMeta(day, raceDistanceKm){
     }
     case 'fartlek':{
       // One continuous run at easy pace with surges woven in throughout - NOT a surges
-      // block followed by a separate easy block. Phrasing this as "built into a
+      // block followed by a separate easy block. Phrasing this as "woven into a
       // continuous run" (rather than "X surges, then the rest of the run") makes that
       // structure explicit instead of reading like two sequential phases.
+      // Surge pace is anchored to intervalPerKm (roughly 3K-5K effort, a reasonable
+      // stand-in for a short ~2min surge) via paceKey2/desc2 - real fartlek is run by
+      // feel, not hit precisely, hence "roughly" in the text, but every other workout
+      // type in this app gives a real number, so surges get one too rather than just
+      // "faster." The recovery jog is deliberately left unpaced, same convention this
+      // app already uses for interval recovery jogs - it shares the single easyPerKm
+      // figure with the rest of the run (the baseline "cruising" pace, the majority of
+      // the time), which the description spells out explicitly so it's clear that
+      // number is NOT an overall average across the whole run.
       const surges = clamp(Math.round(day.km/1.5), 4, 8);
-      return {descBase:`${surges} fartlek surges (2 min faster / 2 min easy jog each) woven into a continuous run`, paceKey:'easyPerKm'};
+      return {
+        descBase: `${surges} surges woven into a continuous run — about 2 min hard, controlled effort (roughly interval pace) with about 2 min easy jog to recover between, repeat; the rest of the run, including recovery jogs, stays easy`,
+        paceKey: 'easyPerKm',
+        paceKey2: 'intervalPerKm',
+        desc2: 'each surge',
+      };
     }
     case 'progression':{
       // Two flavors, same type: a genuine quality session (build/peak rotations, finishes
