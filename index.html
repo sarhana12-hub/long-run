@@ -1931,6 +1931,14 @@ function raceLabel(setup){
   if(preset && Math.abs(preset.km-setup.raceDistanceKm)<0.05) return preset.label;
   return fmtDist(setup.raceDistanceKm, setup.units||'mi',1);
 }
+// Distance + time for the "recent race" the user entered at onboarding, in the same
+// preset-matching style raceLabel/draftFromSetup already use - null when none was given.
+function recentRaceLabel(setup, unit){
+  if(!setup.recentDistanceKm) return null;
+  const preset = RACE_PRESETS.slice(0,5).find(r=>Math.abs(r.km-setup.recentDistanceKm)<0.05);
+  const distLabel = preset ? preset.label : fmtDist(setup.recentDistanceKm, unit, 1);
+  return setup.recentTimeSec ? `${distLabel} — ${secToClock(setup.recentTimeSec)}` : distLabel;
+}
 
 function dowGridHtml(name, selected, multi, act){
   return DOW_LABELS.map((l,i)=>`<button class="dow-opt ${ (multi? selected.includes(i): selected===i) ?'sel':''}" data-act="${act}" data-name="${name}" data-i="${i}" data-multi="${multi?1:0}">${l}</button>`).join('');
@@ -1939,6 +1947,7 @@ function restDaysChipsHtml(restDays, act){
   return [1,2,3,4].map(n=>`<button class="chip ${restDays===n?'active':''}" data-act="${act}" data-n="${n}">${n}</button>`).join('');
 }
 const EMPHASIS_LEVELS = [{key:'low', label:'Less'}, {key:'balanced', label:'Balanced'}, {key:'high', label:'More'}];
+function emphasisLabel(key){ const l = EMPHASIS_LEVELS.find(x=>x.key===key); return l ? l.label : 'Balanced'; }
 function emphasisChipsHtml(value, act){
   return EMPHASIS_LEVELS.map(l=>`<button class="chip ${value===l.key?'active':''}" data-act="${act}" data-key="${l.key}">${l.label}</button>`).join('');
 }
@@ -2816,6 +2825,26 @@ function renderSettingsTab(){
       <div class="settings-row"><div><div class="lbl">This week's paces</div><div class="sub">Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)}${isGeneralPlan(s) ? '' : ` · Goal race pace ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}`}</div></div></div>
       <div class="hint" style="padding:0 0 12px;">${isGeneralPlan(s) ? 'Training paces are calibrated to your current fitness.' : 'Training paces gradually get faster as your plan builds toward peak fitness, then hold steady through the taper.'}${recal ? ` Right now they're also adjusted based on your last ${recal.count} logged tempo/interval/over-under run${recal.count===1?'':'s'}.` : ''}</div>
       ${!isGeneralPlan(s) && s.hillsMode==='hilly' && (s.strengthPerWeek||0)<2 ? `<div class="hint" style="padding:0 0 12px; color:var(--z-tempo);">Hilly course — most coaches recommend at least 2 strength sessions/week for the eccentric demand of climbs and descents. You're currently set to ${s.strengthPerWeek||0}.</div>` : ''}
+    </div>
+
+    <div class="section-title">Your starting inputs</div>
+    <div class="card" style="padding:6px 16px;">
+      ${(()=>{ const recentRace = recentRaceLabel(s, unit); const runsPerWeekVal = s.runsPerWeek || runsPerWeekFor(s.currentWeeklyKm); const restDaysVal = 7-runsPerWeekVal; return `
+      <div class="settings-row"><div><div class="lbl">Recent race</div><div class="sub">${recentRace ? esc(recentRace) : 'Not provided'}</div></div></div>
+      ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Goal time</div><div class="sub">${s.goalTimeSec ? secToClock(s.goalTimeSec) : 'None set — paces follow your fitness'}</div></div></div>` : ''}
+      <div class="settings-row"><div><div class="lbl">Long run day</div><div class="sub">${DOW_LABELS[s.longDow]}</div></div></div>
+      <div class="settings-row"><div><div class="lbl">Rest days per week</div><div class="sub">${restDaysVal} (${runsPerWeekVal} running day${runsPerWeekVal===1?'':'s'}/week)</div></div></div>
+      ${!isGeneralPlan(s) ? `
+      <div class="settings-row"><div><div class="lbl">Long run emphasis</div><div class="sub">${emphasisLabel(s.longRunEmphasis)}</div></div></div>
+      <div class="settings-row"><div><div class="lbl">Speed work emphasis</div><div class="sub">${emphasisLabel(s.speedEmphasis)}</div></div></div>
+      <div class="settings-row"><div><div class="lbl">Strength days per week</div><div class="sub">${s.strengthPerWeek==null?2:s.strengthPerWeek}</div></div></div>
+      <div class="settings-row"><div><div class="lbl">Max long run</div><div class="sub">${s.maxLongRunKm?fmtDist(s.maxLongRunKm,unit,1):'No cap'}</div></div></div>
+      <div class="settings-row"><div><div class="lbl">Max weekly mileage</div><div class="sub">${s.maxWeeklyKm?fmtDist(s.maxWeeklyKm,unit,1):'No cap'}</div></div></div>
+      ` : (s.planKind==='distance' ? `
+      <div class="settings-row"><div><div class="lbl">Distance goal</div><div class="sub">${s.distanceGoalMetric==='weekly'?'Weekly mileage':'Longest run'}: ${fmtDist(s.distanceGoalCurrentKm,unit,1)} → ${fmtDist(s.distanceGoalTargetKm,unit,1)}</div></div></div>
+      ` : '')}
+      <div class="hint" style="padding:0 0 12px;">What you entered when this plan was built, for reference. To change any of it, use Change plan below.</div>
+      `; })()}
     </div>
 
     <div class="section-title">Strava</div>
