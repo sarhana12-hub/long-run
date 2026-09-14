@@ -1605,7 +1605,19 @@ let lrPaceHintTimer = null;
 /* ============================= bootstrap ============================= */
 function boot(){
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
+    // updateViaCache:'none' bypasses GitHub Pages' Cache-Control: max-age=600
+    // when checking sw.js for changes; reg.update() forces an immediate
+    // check; auto-reload on controllerchange applies an update as soon as
+    // it activates, instead of requiring a manual reopen.
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg)=>{
+      reg.update();
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+        if (reloaded) return;
+        reloaded = true;
+        location.reload();
+      });
+    }).catch(()=>{});
   }
   state.name = Store.getName();
   state.paceFormat = Store.getPaceFormat();
