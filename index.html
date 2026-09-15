@@ -3007,6 +3007,54 @@ function renderRaceProjectionSection(stats, unit, fmt){
   return '';
 }
 
+// Every logged long run matched to its plan day, oldest first, with both distance and pace
+// (paceRunsForType only tracks pace, for the trend chart - this needs distance too, to tell
+// the "you used to run X, now you run Y" story). Same current-plan scoping as everywhere
+// else that reads plan-matched history - a switched-away-from plan's days no longer exist
+// to match logs against, so there's no reliable way to know what type an old log even was.
+function longRunHistory(){
+  const runs = [];
+  for(const week of state.plan.weeks){
+    for(const day of week.days){
+      if(day.type!=='long') continue;
+      const dayLogs = state.logs.filter(l=>l.date===day.date);
+      if(!dayLogs.length) continue;
+      const totalKm = dayLogs.reduce((s,l)=>s+l.distanceKm,0);
+      const totalSec = dayLogs.reduce((s,l)=>s+l.durationSec,0);
+      if(totalKm<=0) continue;
+      runs.push({date:day.date, distanceKm:totalKm, paceSecPerKm: totalSec/totalKm});
+    }
+  }
+  runs.sort((a,b)=> a.date<b.date?-1:1);
+  return runs;
+}
+// A quiet, occasional "look how far you've come" card - the kind of thing worth noticing
+// but easy to never think to check yourself, since nothing else in the app puts your first
+// long run next to your most recent one. Only shows once there's real time between them
+// (under 2 weeks apart reads as "this week vs. last," which the mileage chart already
+// covers, not a real then-vs-now story) and only when there's actually a story to tell -
+// no card is better than a flat "nothing's changed" one.
+function renderTrainingFlashback(unit, fmt){
+  const runs = longRunHistory();
+  if(runs.length<2) return '';
+  const first = runs[0], last = runs[runs.length-1];
+  if(daysBetween(parseDate(first.date), parseDate(last.date)) < 14) return '';
+  const distGrew = last.distanceKm > first.distanceKm*1.05;
+  const paceGrew = last.paceSecPerKm < first.paceSecPerKm*0.98;
+  if(!distGrew && !paceGrew) return '';
+  return `<div class="section-title" style="padding:0 20px;">Then vs. now</div>
+  <div class="card" style="padding:16px; margin:0 18px 24px;">
+    <div class="hint" style="margin:-2px 0 14px;">Your long runs, ${niceDate(parseDate(first.date))} to now.</div>
+    ${statCompareRowHtml(
+      `${fmtDist(first.distanceKm,unit,1)}<div style="font-size:11px; font-weight:600; color:var(--muted); margin-top:2px;">${paceOrSpeedStr(first.paceSecPerKm,unit,fmt)}</div>`,
+      'first long run',
+      `${fmtDist(last.distanceKm,unit,1)}<div style="font-size:11px; font-weight:600; color:var(--muted); margin-top:2px;">${paceOrSpeedStr(last.paceSecPerKm,unit,fmt)}</div>`,
+      'most recent',
+      '→'
+    )}
+  </div>`;
+}
+
 function renderProgressTab(){
   const plan = state.plan, unit = state.setup.units;
   const raceDate = parseDate(plan.raceDate);
@@ -3065,6 +3113,7 @@ function renderProgressTab(){
       <div style="color:var(--muted); font-size:18px;">›</div>
     </button>
   </div>
+  ${renderTrainingFlashback(unit, state.paceFormat)}
   <div class="section-title" style="padding:0 20px;">Weekly mileage — planned vs. actual</div>
   <div class="card chart-card">
     <div class="chart-rows">${bars}</div>
