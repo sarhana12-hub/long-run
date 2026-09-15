@@ -3067,11 +3067,22 @@ function renderTrainingTrail(plan, unit){
   const weeks = plan.weeks;
   const n = weeks.length;
   if(n<2) return '';
-  const W = 340, H = 132, padX = 16, topY = 28, baseY = 104;
-  const maxKm = Math.max(1, ...weeks.map(w=>w.targetKm));
+  const W = 340, H = 148, padX = 16, topY = 30, baseY = 108;
   const xFor = i => padX + (W-padX*2) * (i/(n-1));
-  const yFor = km => baseY - (km/maxKm) * (baseY-topY);
-  const pts = weeks.map((w,i)=>({x:xFor(i), y:yFor(w.targetKm)}));
+
+  // Cumulative planned mileage through the end of each week, not that week's own mileage -
+  // this is what climbs the mountain. A cutback or taper week has a smaller weekly total,
+  // so it shows up as a gentler stretch of trail, not a dip back down the slope: you never
+  // lose ground you've already banked. (The first version of this read elevation as
+  // "how hard is this week," which is a different thing and reasonably got called out as
+  // reading like backsliding during a cutback - this fixes that by making the climb
+  // strictly cumulative, while still keeping the terrain shaped by real numbers: steeper
+  // where the weeks are bigger, flatter where they're lighter.)
+  let running = 0;
+  const plannedCum = weeks.map(w => (running += w.targetKm));
+  const totalPlanKm = Math.max(1, plannedCum[n-1]);
+  const yFor = km => baseY - clamp(km/totalPlanKm,0,1) * (baseY-topY);
+  const plannedPts = weeks.map((w,i)=>({x:xFor(i), y:yFor(plannedCum[i])}));
 
   const today = todayDate();
   let idx = weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
@@ -3085,12 +3096,27 @@ function renderTrainingTrail(plan, unit){
   }
   const loIdx = Math.min(n-2, Math.floor(cont));
   const frac = cont-loIdx;
-  const todayPt = {x: pts[loIdx].x + (pts[loIdx+1].x-pts[loIdx].x)*frac, y: pts[loIdx].y + (pts[loIdx+1].y-pts[loIdx].y)*frac};
+  const todayX = plannedPts[loIdx].x + (plannedPts[loIdx+1].x-plannedPts[loIdx].x)*frac;
 
-  // A quadratic curve through each point's midpoint reads as a smooth trail rather than a
-  // jagged connect-the-dots line, without needing full Catmull-Rom math for what's really
-  // just a stylized elevation profile, not a precision chart.
+  // What's actually been logged, cumulative, drawn as its own line against the same
+  // cumulative-planned scale - so the gap between the two lines at any point IS how far
+  // ahead of or behind the plan's pace you really are, not just a number but a shape.
+  // Scoped to this plan's own timeframe only (same as every other plan-relative stat in
+  // this app), so switching plans starts the trail fresh instead of carrying over an old
+  // plan's mileage into a new climb.
+  const planStart = parseDate(weeks[0].weekStart);
+  const relevantLogs = state.logs.filter(l=>parseDate(l.date)>=planStart);
+  const actualCumThrough = date => relevantLogs.filter(l=>parseDate(l.date)<=date).reduce((s,l)=>s+l.distanceKm,0);
+  const actualPts = [];
+  for(let i=0;i<=loIdx;i++) actualPts.push({x:plannedPts[i].x, y:yFor(actualCumThrough(addDays(parseDate(weeks[i].weekStart),6)))});
+  actualPts.push({x:todayX, y:yFor(actualCumThrough(today))});
+  const youAreHere = actualPts[actualPts.length-1];
+
+  // A quadratic curve through each pair's midpoint reads as a smooth trail rather than a
+  // jagged connect-the-dots line, without needing full Catmull-Rom math for what's really a
+  // stylized elevation impression, not a precision chart.
   const smooth = ps => {
+    if(ps.length<2) return '';
     let d = `M ${ps[0].x.toFixed(1)} ${ps[0].y.toFixed(1)}`;
     for(let i=0;i<ps.length-1;i++){
       const a=ps[i], b=ps[i+1], mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
@@ -3100,26 +3126,45 @@ function renderTrainingTrail(plan, unit){
     d += ` L ${last.x.toFixed(1)} ${last.y.toFixed(1)}`;
     return d;
   };
-  const doneD = smooth(pts.slice(0, loIdx+1).concat([todayPt]));
-  const restD = smooth([todayPt].concat(pts.slice(loIdx+1)));
 
+  // The planned trail is drawn as one segment per phase, reusing weekColorVar - the exact
+  // color each week's own tab already uses in the week strip above - so the color language
+  // matches across the app instead of introducing a second palette. Each segment overlaps
+  // its neighbor by one point so there's no visible seam at a phase boundary.
+  const segments = [];
+  let segStart = 0;
+  for(let i=1;i<=n;i++){
+    if(i===n || weekColorVar(weeks[i])!==weekColorVar(weeks[segStart])){
+      segments.push({from:segStart, to:Math.min(n-1,i)});
+      segStart = i;
+    }
+  }
+  const segPaths = segments.map(seg => ({ d: smooth(plannedPts.slice(seg.from, seg.to+1)), color: weekColorVar(weeks[seg.from]) }));
+
+  const actualD = smooth(actualPts);
   const finishColor = plan.planKind ? 'var(--accent-strong)' : 'var(--z-race)';
-  const tx = todayPt.x.toFixed(1), ty = todayPt.y.toFixed(1);
+  const last = plannedPts[n-1];
+  const hx = youAreHere.x.toFixed(1), hy = youAreHere.y.toFixed(1);
   const label = `Week ${idx+1} of ${n} · ${weekDisplayLabel(weeks[idx], plan.totalWeeks, plan.planKind)}`;
 
   return `<div class="section-title" style="padding:0 20px;">Your trail</div>
-  <div class="card" style="padding:14px 14px 10px; margin:0 18px 24px;">
+  <button class="card" data-act="open-trail-week" style="display:block; width:100%; text-align:left; padding:14px 14px 10px; margin:0 18px 24px; cursor:pointer;">
     <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:auto; display:block;">
+      <style>@media (prefers-reduced-motion: reduce){ .trail-pulse{ display:none; } }</style>
       <line x1="${padX}" y1="${baseY}" x2="${W-padX}" y2="${baseY}" stroke="var(--line-soft)" stroke-width="1"/>
-      <path d="${restD}" fill="none" stroke="var(--line)" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 7"/>
-      <path d="${doneD}" fill="none" stroke="var(--accent-strong)" stroke-width="3.5" stroke-linecap="round"/>
-      <circle cx="${pts[0].x.toFixed(1)}" cy="${pts[0].y.toFixed(1)}" r="3" fill="var(--muted)"/>
-      <path d="M ${pts[n-1].x.toFixed(1)} ${(pts[n-1].y-11).toFixed(1)} L ${(pts[n-1].x-6).toFixed(1)} ${(pts[n-1].y-1).toFixed(1)} L ${(pts[n-1].x+6).toFixed(1)} ${(pts[n-1].y-1).toFixed(1)} Z" fill="${finishColor}"/>
-      <line x1="${tx}" y1="${ty}" x2="${tx}" y2="${baseY}" stroke="var(--accent-strong)" stroke-width="1" stroke-dasharray="2 3"/>
-      <circle cx="${tx}" cy="${ty}" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
+      ${segPaths.map(sp=>`<path d="${sp.d}" fill="none" stroke="${sp.color}" stroke-width="3" stroke-linecap="round" opacity="0.5"/>`).join('')}
+      <path d="${actualD}" fill="none" stroke="var(--accent-strong)" stroke-width="3.5" stroke-linecap="round"/>
+      <circle cx="${plannedPts[0].x.toFixed(1)}" cy="${plannedPts[0].y.toFixed(1)}" r="3" fill="var(--muted)"/>
+      <path d="M ${last.x.toFixed(1)} ${(last.y-11).toFixed(1)} L ${(last.x-6).toFixed(1)} ${(last.y-1).toFixed(1)} L ${(last.x+6).toFixed(1)} ${(last.y-1).toFixed(1)} Z" fill="${finishColor}"/>
+      <line x1="${hx}" y1="${hy}" x2="${hx}" y2="${baseY}" stroke="var(--accent-strong)" stroke-width="1" stroke-dasharray="2 3"/>
+      <circle class="trail-pulse" cx="${hx}" cy="${hy}" r="5" fill="none" stroke="var(--accent-strong)" stroke-width="2" opacity="0.6">
+        <animate attributeName="r" values="5;12;5" dur="2.4s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.6;0;0.6" dur="2.4s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="${hx}" cy="${hy}" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
     </svg>
-    <div class="hint" style="text-align:center; margin-top:2px;">${esc(label)} — the shape above is your own weekly mileage, not a generic curve</div>
-  </div>`;
+    <div class="hint" style="margin-top:6px;">${esc(label)} — steeper sections are bigger weeks, colored by phase. The bright line is what you've actually logged. Tap to jump to this week.</div>
+  </button>`;
 }
 
 function renderProgressTab(){
@@ -3995,6 +4040,12 @@ function onClick(e){
 
   if(act==='set-tab'){ state.tab = el.dataset.tab; render(); return; }
   if(act==='goto-week'){ state.currentWeekIndex = Number(el.dataset.i); state.moveFrom=null; render(); return; }
+  if(act==='open-trail-week'){
+    const idx = state.plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return todayDate()>=ws && todayDate()<addDays(ws,7); });
+    state.currentWeekIndex = idx===-1 ? (todayDate()<parseDate(state.plan.weeks[0].weekStart) ? 0 : state.plan.weeks.length-1) : idx;
+    state.tab = 'plan';
+    render(); return;
+  }
 
   if(act==='pick-race'){
     const preset = RACE_PRESETS.find(r=>r.key===el.dataset.key);
