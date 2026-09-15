@@ -3218,9 +3218,17 @@ function renderTrainingTrail(plan, unit){
 // everything else in this app is).
 const PEEK_CLIMB_PTS = [[15,540],[70,486],[30,444],[85,402],[48,352],[105,310],[72,258],[128,216],[98,164],[145,122],[128,80],[160,42]];
 const PEEK_DESCENT_PTS = [[215,108],[195,180],[240,252],[210,334],[260,416],[225,478],[305,540]];
+// A staircase off the summit, offset relative to it (0,0 = summit) - only drawn once
+// there's real mileage beyond the plan's own total to justify it. Deliberately NOT another
+// data-driven axis: the runner always lands exactly halfway up it regardless of how far
+// past 100% the real number goes (101% and 1000% look identical here) - the user's own
+// call ("there's no more calculation"), since past the summit this is celebration, not a
+// second chart.
+const PEEK_STAIR_OFFSETS = [[0,0],[0,-16],[10,-16],[10,-32],[20,-32],[20,-48],[30,-48],[30,-64],[40,-64],[40,-80],[50,-80],[50,-96],[60,-96],[60,-112],[70,-112],[70,-128],[80,-128]];
 function renderPeekThePeak(){
   const plan = state.plan, unit = state.setup.units;
   const progress = planMileageProgress(plan);
+  const isOvershoot = progress.rawFrac>1;
   const climbD = 'M ' + PEEK_CLIMB_PTS.map(p=>p.join(' ')).join(' L ');
   const mountainD = climbD + ' L ' + PEEK_DESCENT_PTS.map(p=>p.join(' ')).join(' L ') + ' Z';
   const capPts = PEEK_CLIMB_PTS.slice(6).concat(PEEK_DESCENT_PTS.slice(0,3));
@@ -3229,13 +3237,23 @@ function renderPeekThePeak(){
   const flagLabel = plan.planKind ? 'FINISH' : 'RACE DAY';
   const pctDisplay = Math.round(progress.rawFrac*100);
   const overshootKm = Math.max(0, progress.loggedKm-progress.totalPlanKm);
-  const captionSub = progress.rawFrac>1
-    ? `Summit reached — ${fmtDist(overshootKm,unit,1)} beyond this plan's ${fmtDist(progress.totalPlanKm,unit,0)} planned miles`
+  const captionSub = isOvershoot
+    ? `${fmtDist(overshootKm,unit,1)} beyond this plan's ${fmtDist(progress.totalPlanKm,unit,0)} planned miles`
     : `${fmtDist(progress.loggedKm,unit,1)} of ${fmtDist(progress.totalPlanKm,unit,0)} planned miles for this plan`;
+  // Extra sky above the summit only exists when it's needed - the normal viewBox is
+  // unchanged for everyone still climbing the mountain itself.
+  const topY = isOvershoot ? -160 : 0;
+  const stairPts = PEEK_STAIR_OFFSETS.map(([dx,dy])=>[summit[0]+dx, summit[1]+dy]);
+  const stairD = isOvershoot ? 'M ' + stairPts.map(p=>p.join(' ')).join(' L ') : '';
+  const notes = isOvershoot ? [
+    {x:summit[0]+18, y:summit[1]-55, s:18, o:0.85, g:'♪'},
+    {x:summit[0]+62, y:summit[1]-100, s:22, o:0.7, g:'♫'},
+    {x:summit[0]+38, y:summit[1]-135, s:15, o:0.9, g:'♪'},
+  ] : [];
   return `<div class="overlay peek-overlay" data-act="close-modal-overlay">
     <div class="peek-card" data-stop="1">
       <button class="peek-close" data-act="close-modal" aria-label="Close">${ICONS.close}</button>
-      <svg id="peek-svg" viewBox="0 0 320 560" data-frac="${progress.frac}">
+      <svg id="peek-svg" viewBox="0 ${topY} 320 ${560-topY}" data-frac="${progress.frac}" data-overshoot="${isOvershoot?'1':''}">
         <defs>
           <linearGradient id="peekSky" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="#0b1120"/>
@@ -3247,12 +3265,14 @@ function renderPeekThePeak(){
             <stop offset="100%" stop-color="#2c333c"/>
           </linearGradient>
         </defs>
-        <rect width="320" height="560" fill="url(#peekSky)"/>
+        <rect x="0" y="${topY}" width="320" height="${560-topY}" fill="url(#peekSky)"/>
         <ellipse cx="70" cy="330" rx="46" ry="10" fill="#fff" opacity="0.06"/>
         <ellipse cx="250" cy="400" rx="60" ry="12" fill="#fff" opacity="0.05"/>
         <rect x="0" y="536" width="320" height="24" fill="#05070a"/>
         <path d="${mountainD}" fill="url(#peekRock)"/>
         <path d="${capD}" fill="#eef3f7" opacity="0.92"/>
+        ${isOvershoot ? `<path id="peek-stair-path" d="${stairD}" fill="none" stroke="#cbd5df" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>` : ''}
+        ${notes.map(n=>`<text x="${n.x}" y="${n.y}" font-size="${n.s}" fill="var(--accent-strong)" opacity="${n.o}">${n.g}</text>`).join('')}
         <path d="M ${summit[0]} ${summit[1]} L ${summit[0]} ${summit[1]-34}" stroke="#dfe6ea" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M ${summit[0]} ${summit[1]-34} L ${summit[0]} ${summit[1]-20} L ${summit[0]+26} ${summit[1]-27} Z" fill="var(--accent-strong)"/>
         <text x="${summit[0]+32}" y="${summit[1]-19}" fill="#fff" font-size="12" font-weight="800" letter-spacing="1" font-family="system-ui, sans-serif" stroke="#0b1120" stroke-width="3" paint-order="stroke fill">${esc(flagLabel)}</text>
@@ -3267,7 +3287,7 @@ function renderPeekThePeak(){
         </g>
       </svg>
       <div class="peek-caption">
-        <div class="pct">${pctDisplay}% climbed</div>
+        <div class="pct" style="${isOvershoot?'font-size:19px;':''}">${isOvershoot ? "You're climbing the stairway to heaven ♫" : `${pctDisplay}% climbed`}</div>
         <div class="sub">${esc(captionSub)}</div>
       </div>
     </div>
@@ -3286,10 +3306,18 @@ function startPeekAnimation(){
   if(!svg || !path || !runner || svg.dataset.animated) return;
   svg.dataset.animated = '1';
   const frac = Number(svg.dataset.frac)||0;
-  const totalLen = path.getTotalLength();
-  const targetLen = totalLen * frac;
+  const climbLen = path.getTotalLength();
+  // Past 100%, the runner finishes the real mountain climb (frac is clamped to 1, so this
+  // always reaches the summit) and then continues onto the staircase - fixed exactly
+  // halfway up it, not proportional to how far past the summit the real mileage goes.
+  const stairPath = svg.dataset.overshoot ? document.getElementById('peek-stair-path') : null;
+  const stairLen = stairPath ? stairPath.getTotalLength() : 0;
+  const targetLen = stairPath ? climbLen + stairLen*0.5 : climbLen*frac;
   const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const place = len => { const pt = path.getPointAtLength(len); runner.setAttribute('transform', `translate(${pt.x} ${pt.y})`); };
+  const place = len => {
+    const pt = len<=climbLen ? path.getPointAtLength(len) : stairPath.getPointAtLength(len-climbLen);
+    runner.setAttribute('transform', `translate(${pt.x} ${pt.y})`);
+  };
   runner.setAttribute('opacity','1');
   if(reduceMotion || targetLen<=0){ place(targetLen); return; }
   const durationMs = 2800;
