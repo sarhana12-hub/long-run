@@ -3476,7 +3476,7 @@ function renderModal(){
   if(m.type==='stat-detail') return renderStatDetailModal(m.stat);
   if(m.type==='milestone') return modalMilestone(m.data);
   if(m.type==='achievements') return renderAchievementsScreen();
-  if(m.type==='pacing-sheet') return renderPacingSheet(m.strategy||'even');
+  if(m.type==='pacing-sheet') return renderPacingSheet(m.strategy||'even', m.courseKey||null);
   return '';
 }
 
@@ -3631,6 +3631,83 @@ const PACING_CHECKPOINTS = [
   {frac:0.78, tag:'late', cue:"This is where the race actually starts. Trust the fitness you've banked and hold your form."},
   {frac:1.0, tag:'finish', cue:"Empty the tank — you've already done everything this moment needed."},
 ];
+// Real, sourced course data for a handful of major marathons, standing in for the "live
+// course database" that doesn't actually exist anywhere free or unified (checked before
+// building this - see the reference-long-run-links memory note on that research). Every
+// mile marker and note here came from an actual search, not a guess - landmark data is the
+// one place in this app where being wrong is actively misleading, not just imprecise, so
+// nothing here is invented. `mile` is always in real miles regardless of the runner's
+// display unit - converted at render time. `hilly:true` on a landmark means THAT specific
+// stretch, not the whole course - most of these majors are flat except for one or two real
+// named climbs, which a single whole-race hilly/flat toggle can't capture but a real
+// landmark list can.
+const RACE_COURSES = [
+  {key:'boston', name:'Boston Marathon',
+    elevationNote:"Net downhill overall, but the real test is Newton: a rolling climb from mile 16 through Heartbreak Hill around mile 20.5, then three fast downhill miles to the finish.",
+    landmarks:[
+      {mile:12.4, label:'Wellesley "Scream Tunnel"', note:"Right around the halfway mark — the loudest crowd on the whole course. Easy to get swept up and go out too hard here; you're not even halfway."},
+      {mile:17, label:'Newton hills begin', note:"Four rolling climbs start here and don't let up until Heartbreak Hill. Shorten your stride, don't fight the hills.", hilly:true},
+      {mile:20.5, label:'Heartbreak Hill', note:"The last and steepest of the Newton hills. If you've paced the first 20 miles honestly, you have enough left to get over this.", hilly:true},
+      {mile:25, label:'Citgo sign', note:"One mile to go. Everything from here is net downhill to Boylston Street — empty the tank."},
+    ]},
+  {key:'chicago', name:'Chicago Marathon',
+    elevationNote:"One of the flattest majors — well under 200 ft of total climbing across the whole course. The only real rise is a short overpass in the final mile.",
+    landmarks:[
+      {mile:6.5, label:'Boystown / Lakeview', note:"One of the loudest, earliest crowd sections on the course."},
+      {mile:13.1, label:'Halfway — Pilsen', note:"You're exactly halfway. Check your split against goal pace and stay patient."},
+      {mile:26, label:'The last hill', note:"A short railroad overpass — the only real incline on the whole course, right when legs are most tired.", hilly:true},
+    ]},
+  {key:'nyc', name:'New York City Marathon',
+    elevationNote:"Deceptively hard for a course that looks flat on paper — five bridges create the real elevation changes, especially the mile-long, spectator-free climb onto the Queensboro Bridge in the second half.",
+    landmarks:[
+      {mile:0.5, label:'Verrazzano-Narrows Bridge', note:"The start itself is a climb — don't let the downhill on the other side tempt you into going out too fast.", hilly:true},
+      {mile:13, label:'Pulaski Bridge into Queens', note:"Halfway is just behind you in Brooklyn — a brief Queens section comes next, before Manhattan."},
+      {mile:15.3, label:'Queensboro Bridge', note:"A mile-long climb with no spectators — the quietest, loneliest part of the course. Stay patient, the noise is coming.", hilly:true},
+      {mile:16, label:'First Avenue "wall of sound"', note:"The crowd hits like a wave off the bridge. Feed off it, but don't let the adrenaline blow your pace."},
+      {mile:20, label:'Willis Avenue Bridge into the Bronx', note:"Shortest, coldest borough on the course — this is where the race gets real."},
+    ]},
+  {key:'london', name:'London Marathon',
+    elevationNote:"One of the flattest majors, built for a fast time — the only real inclines are the Tower Bridge crossing around mile 12 and a short rise near Blackfriars around mile 23.",
+    landmarks:[
+      {mile:6.5, label:'Cutty Sark', note:"Greenwich — an early, iconic landmark, but still very early in the race."},
+      {mile:12, label:'Tower Bridge', note:"Halfway, and one of the most famous sights in the race. Stay level-headed — the crowd here is enormous.", hilly:true},
+      {mile:17, label:'Canary Wharf', note:"Skyscrapers replace crowds for a stretch — a quieter, more businesslike section. Keep your rhythm."},
+      {mile:25, label:'Big Ben & Parliament', note:"One mile to go, running along the Thames toward the finish."},
+      {mile:26, label:'Buckingham Palace turn', note:"The final turn onto The Mall — the finish is right there."},
+    ]},
+  {key:'berlin', name:'Berlin Marathon',
+    elevationNote:"The flattest major marathon in the world — under 100 ft of total climbing across the entire course. This is as close to a pure pace test as a marathon gets.",
+    landmarks:[
+      {mile:13.1, label:'Halfway', note:"Nothing about the terrain will slow you down here — if you're off pace, it's pacing, not the course."},
+      {mile:25.8, label:'Tiergarten', note:"The last green stretch before the historic finish."},
+      {mile:26.1, label:'Brandenburg Gate', note:"You run straight through it with about 200 meters to go — save something for this moment."},
+    ]},
+  {key:'tokyo', name:'Tokyo Marathon',
+    elevationNote:"Flat with a gentle net descent — about 100 ft down in the first few miles, then long, wide, flat avenues the rest of the way.",
+    landmarks:[
+      {mile:11.4, label:'Sensoji Temple / Kaminarimon', note:"The famous red lantern gate — one of the most photographed moments on the course."},
+      {mile:13.1, label:'Halfway', note:"Still flat and fast from here — no terrain excuse for fading."},
+      {mile:23, label:'Ginza', note:"Bright lights, big crowds, not far to go now."},
+    ]},
+  {key:'twincities', name:"Twin Cities Marathon",
+    elevationNote:"Deceptively hilly late — a gradual climb from mile 21 to 24, then the course's signature sting: Summit Avenue rises to the finish at the State Capitol right when legs are most tired.",
+    landmarks:[
+      {mile:7.5, label:'Chain of Lakes', note:"Lake Harriet and the lakes district — one of the most scenic stretches of any major marathon."},
+      {mile:13.5, label:'Minnehaha Parkway climb', note:"Subtle on paper, a real surprise in the legs — don't panic if this mile feels harder than it should.", hilly:true},
+      {mile:18, label:'Mississippi River bluffs', note:"The course turns downhill along the river here."},
+      {mile:22.5, label:'The late climb begins', note:"A gradual uphill from here to mile 24 — this is where the course asks the most.", hilly:true},
+      {mile:25.5, label:'Summit Avenue', note:"The famous closing climb to the State Capitol. Everyone slows here — the goal is to slow less than everyone else.", hilly:true},
+    ]},
+  {key:'grandmas', name:"Grandma's Marathon",
+    elevationNote:"Net downhill and roughly 75% flat along Lake Superior's North Shore — the one real obstacle is Lemon Drop Hill, a half-mile climb around mile 22.",
+    landmarks:[
+      {mile:1, label:'Two Harbors start', note:"Lake Superior stays on your left for most of the race."},
+      {mile:22, label:'Lemon Drop Hill', note:"The longest uphill of the day, right when it hurts most — a relatively minor incline that feels much bigger this late.", hilly:true},
+      {mile:24, label:"Fitger's Brewing Company", note:"Back into Duluth — the crowds build from here to the finish."},
+      {mile:25.5, label:'SS William A. Irvin', note:"The historic ship on the waterfront — the finish is close now."},
+    ]},
+];
+const RACE_COURSES_BY_KEY = Object.fromEntries(RACE_COURSES.map(c=>[c.key,c]));
 // Splits + cumulative clock time for the whole race, in the runner's own display unit.
 // strategy 'even' holds goal pace flat throughout - a reasonable baseline ONLY on a
 // genuinely flat/rolling course. 'negative' eases from ~3% slower than goal pace at the
@@ -3645,7 +3722,7 @@ const PACING_CHECKPOINTS = [
 // pace on a hilly course is close to bad advice - the real target is even EFFORT, slower
 // uphill and faster downhill at consistent exertion, the same "run by effort, not pace"
 // principle this app already applies to hilly long runs elsewhere in the plan.
-function computePacingSheet(plan, setup, unit, strategy){
+function computePacingSheet(plan, setup, unit, strategy, courseKey){
   const goalPaceSecPerKm = getWeekPaces(plan, findWeekForToday(plan), state.logs).racePerKm;
   if(goalPaceSecPerKm==null) return null;
   const raceDistUnit = kmToUnit(plan.raceDistanceKm, unit);
@@ -3666,44 +3743,63 @@ function computePacingSheet(plan, setup, unit, strategy){
     cumDist += d; cumSec += splitSec;
     return {i, distThis:d, cumDist, splitPaceSecPerKm, cumSec};
   });
-  // Snap each checkpoint fraction to the nearest split, skipping one that would land on a
-  // split already claimed by an earlier checkpoint - short races (a 5K, especially in km)
-  // can otherwise put "early" and "half" on the very same split.
   const claimed = new Set();
   const checkpoints = {};
-  PACING_CHECKPOINTS.forEach(cp=>{
-    let best=-1, bestDiff=Infinity;
-    splits.forEach(s=>{
-      if(claimed.has(s.i)) return;
-      const diff = Math.abs(s.cumDist/raceDistUnit - cp.frac);
-      if(diff<bestDiff){ bestDiff=diff; best=s.i; }
+  const course = courseKey ? RACE_COURSES_BY_KEY[courseKey] : null;
+  if(course){
+    // A real, sourced course beats a generic percentage-based checkpoint - use its actual
+    // named landmarks instead, snapped to the nearest split. `mile` on a landmark is always
+    // real miles regardless of display unit, so it's converted here, once.
+    course.landmarks.forEach(l=>{
+      const landmarkDistUnit = unit==='mi' ? l.mile : l.mile*KM_PER_MI;
+      let best=-1, bestDiff=Infinity;
+      splits.forEach(s=>{
+        if(claimed.has(s.i)) return;
+        const diff = Math.abs(s.cumDist-landmarkDistUnit);
+        if(diff<bestDiff){ bestDiff=diff; best=s.i; }
+      });
+      if(best!==-1){ claimed.add(best); checkpoints[best] = {tag:'landmark', label:l.label, cue:l.note, hilly:!!l.hilly}; }
     });
-    if(best!==-1){ claimed.add(best); checkpoints[best]=cp; }
-  });
-  return {goalPaceSecPerKm, raceDistUnit, splits, checkpoints, hasExplicitGoal: setup.goalTimeSec!=null, isHilly: setup.hillsMode==='hilly'};
+  } else {
+    // Snap each generic checkpoint fraction to the nearest split, skipping one that would
+    // land on a split already claimed by an earlier checkpoint - short races (a 5K,
+    // especially in km) can otherwise put "early" and "half" on the very same split.
+    PACING_CHECKPOINTS.forEach(cp=>{
+      let best=-1, bestDiff=Infinity;
+      splits.forEach(s=>{
+        if(claimed.has(s.i)) return;
+        const diff = Math.abs(s.cumDist/raceDistUnit - cp.frac);
+        if(diff<bestDiff){ bestDiff=diff; best=s.i; }
+      });
+      if(best!==-1){ claimed.add(best); checkpoints[best]=cp; }
+    });
+  }
+  return {goalPaceSecPerKm, raceDistUnit, splits, checkpoints, hasExplicitGoal: setup.goalTimeSec!=null, isHilly: setup.hillsMode==='hilly', course};
 }
 
-function renderPacingSheet(strategy){
+function renderPacingSheet(strategy, courseKey){
   const plan = state.plan, setup = state.setup, unit = setup.units, fmt = state.paceFormat;
-  const sheet = computePacingSheet(plan, setup, unit, strategy);
+  const sheet = computePacingSheet(plan, setup, unit, strategy, courseKey);
   if(!sheet){
     return modalShell('Race-day pacing sheet', `<div class="hint">Set a goal time in Settings, or log a recent race, so there's a pace to build splits from.</div>`);
   }
   const isHillyStrategy = strategy==='hilly';
   const rows = sheet.splits.map(s=>{
     const cp = sheet.checkpoints[s.i];
+    const splitIsHilly = isHillyStrategy || (cp && cp.hilly);
     const isLast = s.i===sheet.splits.length-1;
     const distLabel = isLast && Math.abs(s.cumDist-Math.round(s.cumDist))>0.02 ? s.cumDist.toFixed(1) : Math.round(s.cumDist);
-    const paceLine = isHillyStrategy
+    const paceLine = splitIsHilly
       ? `${paceOrSpeedStr(s.splitPaceSecPerKm,unit,fmt)} avg pace — go by effort, not this number`
       : `${paceOrSpeedStr(s.splitPaceSecPerKm,unit,fmt)} this ${unit==='mi'?'mile':'km'}`;
+    const cueHtml = cp ? `<div class="split-cue">${cp.label?`<div style="font-weight:800; color:var(--ink); margin-bottom:2px;">${esc(cp.label)}</div>`:''}${esc(cp.cue)}</div>` : '';
     return `<div class="split-row ${cp?'checkpoint':''}">
       <div class="split-i">${unit==='mi'?'MI':'KM'}<br>${distLabel}</div>
       <div style="flex:1;">
         <div class="split-p">${paceLine}</div>
       </div>
       <div class="split-t mono">${secToClock(s.cumSec)}</div>
-    </div>${cp?`<div class="split-cue">${esc(cp.cue)}</div>`:''}`;
+    </div>${cueHtml}`;
   }).join('');
   const finishSec = sheet.splits[sheet.splits.length-1].cumSec;
   const strategyNote = isHillyStrategy
@@ -3711,6 +3807,16 @@ function renderPacingSheet(strategy){
     : strategy==='negative'
       ? "Starts about 3% slower than goal pace and eases to about 3% faster by the finish — same average time, run smarter instead of just holding on."
       : "Holds your goal pace the entire way. A reasonable baseline, but most coaches recommend Negative split as the smarter default — most people's real attempt at even pace quietly fades anyway.";
+  const courseBannerText = sheet.course ? sheet.course.elevationNote : (sheet.isHilly ? "Hilly course — a single fixed pace was never going to be great advice here. \"Run by effort\" below is the recommended choice; Even/Negative pace are still there as a flat-course reference if you want one." : null);
+  const coursePicker = setup.raceKey==='marathon' ? `
+      <div class="field" style="margin-bottom:14px;">
+        <label class="field-label">Running one of these?</label>
+        <select class="input" id="ps-course">
+          <option value="">Not listed / skip</option>
+          ${RACE_COURSES.map(c=>`<option value="${c.key}" ${courseKey===c.key?'selected':''}>${esc(c.name)}</option>`).join('')}
+        </select>
+        <div class="hint" style="margin-top:4px;">Swaps the generic checkpoints below for that course's real landmarks and elevation, sourced from published course guides.</div>
+      </div>` : '';
   return modalShell('Race-day pacing sheet', `
     <div class="pacing-print">
       <div class="hint" style="margin:-8px 0 4px;">${esc(planLabel(setup))} · ${sheet.hasExplicitGoal?'your stated goal':"your current projected pace — set a goal time in Settings to target a specific one"}</div>
@@ -3718,7 +3824,8 @@ function renderPacingSheet(strategy){
         <div class="mono" style="font-size:34px; font-weight:800;">${secToClock(finishSec)}</div>
         <div class="hint" style="margin-top:2px;">${paceOrSpeedStr(sheet.goalPaceSecPerKm,unit,fmt)} average</div>
       </div>
-      ${sheet.isHilly ? `<div class="banner">${ICONS.bolt}<span>Hilly course — a single fixed pace was never going to be great advice here. "Run by effort" below is the recommended choice; Even/Negative pace are still there as a flat-course reference if you want one.</span></div>` : ''}
+      ${coursePicker}
+      ${courseBannerText ? `<div class="banner">${ICONS.bolt}<span>${esc(courseBannerText)}</span></div>` : ''}
       <div class="chip-select" style="margin-bottom:10px; flex-wrap:wrap;">
         ${sheet.isHilly ? `<button class="chip ${strategy==='hilly'?'active':''}" data-act="set-pacing-strategy" data-strategy="hilly">Run by effort</button>` : ''}
         <button class="chip ${strategy==='even'?'active':''}" data-act="set-pacing-strategy" data-strategy="even">Even pace</button>
@@ -4514,6 +4621,10 @@ function onChange(e){
   if(e.target.id==='in-weeks'){ state.onboardDraft.weeks = e.target.value; render(); return; }
   if(e.target.id==='in-distance-current'){ state.onboardDraft.distanceGoalCurrentMi = e.target.value; render(); return; }
   if(e.target.id==='in-distance-target'){ state.onboardDraft.distanceGoalTargetMi = e.target.value; render(); return; }
+  if(state.modal && state.modal.type==='pacing-sheet' && e.target.id==='ps-course'){
+    state.modal.courseKey = e.target.value || null;
+    render(); return;
+  }
   if(state.modal && state.modal.type==='log-run' && e.target.id==='lr-date'){
     state.modal.data.date = e.target.value;
     render(); return;
