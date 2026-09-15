@@ -187,6 +187,9 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .sheet-close{position:absolute; top:14px; right:14px; background:var(--surface-2); border-radius:50%; width:40px; height:40px; border:none; display:flex; align-items:center; justify-content:center; color:var(--muted);}
 .sheet-close svg{width:24px; height:24px;}
 .sheet.milestone{ text-align:center; }
+.modal-body-text p{ margin:0 0 14px; font-size:14.5px; line-height:1.5; color:var(--ink-soft); }
+.modal-body-text p:last-child{ margin-bottom:0; }
+.modal-body-text strong{ color:var(--ink); }
 .badge-ring{ width:84px; height:84px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; margin:0 auto 18px; }
 .badge-ring svg{ width:44px; height:44px; }
 .milestone-hero{ width:220px; margin:0 auto 18px; }
@@ -1713,6 +1716,7 @@ const ICONS = {
   calendarCheck:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8.5 15.5 11 18l4.5-5"/></svg>',
   trophy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 5H4a3 3 0 0 0 3 4M17 5h3a3 3 0 0 1-3 4"/><path d="M12 14v3M9 21h6M10 17h4v4h-4z"/></svg>',
   pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  help:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.2 9.2a2.8 2.8 0 1 1 3.9 2.6c-.9.5-1.4 1-1.4 2.1"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></svg>',
 };
 
 /* ============================= state ============================= */
@@ -2509,7 +2513,10 @@ function renderApp(){
   return `
   <div class="topbar">
     <div class="brand"><div class="brand-mark">${ICONS.peak}</div><div class="brand-name">Peak</div></div>
-    <div style="font-weight:700; font-size:13.5px; color:var(--muted);">${esc(state.name)}</div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div style="font-weight:700; font-size:13.5px; color:var(--muted);">${esc(state.name)}</div>
+      <button class="btn btn-ghost btn-sm" data-act="open-help" aria-label="How to read this screen" style="color:var(--muted); padding:6px;">${ICONS.help}</button>
+    </div>
   </div>
   ${body}
   <button class="fab" data-act="open-log">${ICONS.plus} Log a run</button>
@@ -3822,7 +3829,46 @@ function renderModal(){
   if(m.type==='achievements') return renderAchievementsScreen();
   if(m.type==='pacing-sheet') return renderPacingSheet(m.strategy||'even', m.courseKey||null);
   if(m.type==='peek-the-peak') return renderPeekThePeak();
+  if(m.type==='help') return renderHelpModal(m.tab);
   return '';
+}
+
+// One short explainer per tab, written for what's actually ON that screen right now rather
+// than the app in general - a "how to read this" reference, not a full manual. Kept as
+// plain HTML strings (not modalShell's usual innerHtml pattern needing escaping) since this
+// is static app copy, never user data.
+const TAB_HELP = {
+  plan: {
+    title: 'Reading the Plan tab',
+    body: `
+      <p>The strip along the top is every week of your plan, in order — tap any week to jump to it. Its color and label (Base, Build, Peak, Taper, Cutback) show which phase that week belongs to; a lighter Cutback week is a deliberate recovery dip, not a mistake.</p>
+      <p>Below that is the week you're viewing, one card per day. A checkmark means you've logged a run against that day. Tap any day to see the full workout detail — purpose, effort level, and pace targets — or to log a run right there.</p>
+      <p>"+ Strength" means a strength session is scheduled alongside that day's run (or on its own, for a rest day); mark it done from the day's detail view. A hill icon means that day is flagged for rolling/hilly terrain.</p>
+      <p>Use "Log a run" any time — it defaults to today's scheduled workout, but you can log against any date.</p>
+    `,
+  },
+  progress: {
+    title: 'Reading the Progress tab',
+    body: `
+      <p><strong>Your trail</strong> is your whole plan as a climb: each colored stretch is a phase, the dot is today, and its color shows whether you're on pace or behind based on real logged miles versus what the plan called for by now. Tap it to jump straight to this week.</p>
+      <p><strong>Peek the Peak</strong> is just for fun — a stylized mountain climb tied to the % of this plan's total mileage you've logged so far.</p>
+      <p><strong>Projected race performance</strong> compares your fitness today against where you started this plan, using your recent logged paces.</p>
+      <p>The four stat tiles below (total logged, % of training miles logged, plan adherence, ahead/behind) are each tappable for the exact numbers behind them. Further down, the weekly mileage chart compares planned vs. actual, and the pace tracker shows whether your long runs and tempo runs are trending toward target.</p>
+      <p><strong>Milestones & badges</strong> is a running gallery of everything you've earned — tap it any time, not just when a badge pops up.</p>
+    `,
+  },
+  settings: {
+    title: 'Reading Settings',
+    body: `
+      <p>The Race/Plan card shows this week's calibrated paces and links to your race-day pacing sheet (race plans only). <strong>Change plan</strong> re-runs onboarding with your current answers prefilled — if you're mid-training, it resumes from your plan's real start date and freezes every week you've already lived through, rather than resetting you to week one.</p>
+      <p><strong>Your starting inputs</strong> is read-only, for reference — exactly what you entered when this plan was built or last changed.</p>
+      <p>Further down: units and pace-display preferences, a Strava connection for one-tap run import, and backup/restore for moving to a new device (manual day edits and swaps don't travel with a backup — your plan settings and logged history do). <strong>Start over</strong> wipes everything and begins fresh — logged runs included.</p>
+    `,
+  },
+};
+function renderHelpModal(tab){
+  const help = TAB_HELP[tab] || TAB_HELP.plan;
+  return modalShell(help.title, `<div class="modal-body-text">${help.body}</div>`);
 }
 
 // Badge-tier celebrations (frequent, small) pass no `hero` and get the 84px badge-ring
@@ -4729,6 +4775,10 @@ function onClick(e){
   }
   if(act==='open-achievements'){
     state.modal={type:'achievements'};
+    render(); return;
+  }
+  if(act==='open-help'){
+    state.modal={type:'help', tab: state.tab};
     render(); return;
   }
   if(act==='open-pacing-sheet'){
