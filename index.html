@@ -1012,6 +1012,14 @@ function generatePlan(setup, dayOneOverride){
   const longEmphasis = LONG_EMPHASIS_PARAMS[setup.longRunEmphasis] || LONG_EMPHASIS_PARAMS.balanced;
   const speedEmphasis = SPEED_EMPHASIS_PARAMS[setup.speedEmphasis] || SPEED_EMPHASIS_PARAMS.balanced;
 
+  // Computed early (normally built further down, alongside the week-by-week ramp) because
+  // the peak-mileage growth cap just below needs to know how many build weeks are actually
+  // available before it can decide how much compounding growth is safe to allow.
+  let taperWeeksForCap = Math.round(interp([[5,1],[10,1],[15,1],[21.0975,2],[32.19,2],[42.195,3]], raceKm));
+  taperWeeksForCap = clamp(taperWeeksForCap, 1, Math.max(1,totalWeeks-1));
+  if(totalWeeks<=2) taperWeeksForCap = totalWeeks;
+  const buildWeeksCountForCap = Math.max(0, totalWeeks - taperWeeksForCap);
+
   const peakLongKm = interp([[5,9],[10,13],[15,14.5],[21.0975,18],[32.19,26],[42.195,32]], raceKm) * longEmphasis.peakScale;
   // Long run as a fraction of that week's total volume. Kept roughly flat (not
   // dropping steeply with race distance) since an already-well-built-up runner
@@ -1034,7 +1042,20 @@ function generatePlan(setup, dayOneOverride){
   // recreational runner, not a hard physiological limit - tune the table if that judgment
   // call needs revisiting.
   const sanePeakWeeklyCapKm = interp([[5,40],[10,48],[15,51],[21.0975,56],[32.19,72],[42.195,88]], raceKm);
-  let peakWeeklyKm = clamp(idealPeakWeeklyKm, currentKm*1.10, Math.min(currentKm*1.35, sanePeakWeeklyCapKm));
+  // The 1.35x figure above is really a single-week growth-rate limit wearing a "final
+  // ceiling" costume - a runner with a longer build genuinely can reach further than that
+  // via ordinary ~10%/week compounding, and there's no physiological reason to deny them
+  // that just because of where their mileage happened to be on day one. Modeled as real
+  // uninterrupted 10%/week compounding over the weeks actually available to build
+  // (`buildWeeksCountForCap`), taking the more generous of that or the flat 1.35x floor so
+  // short plans behave exactly as before. Self-limiting on both ends: `sanePeakWeeklyCapKm`
+  // above still caps a high-mileage runner regardless of how long their build is, and
+  // `idealPeakWeeklyKm` (the clamp's own target value) stops this from ever demanding more
+  // growth than the race distance actually calls for once a long enough build makes it
+  // reachable.
+  const compoundedGrowthCapKm = currentKm * Math.pow(1.10, Math.max(buildWeeksCountForCap-1, 0));
+  const growthCapKm = Math.min(Math.max(currentKm*1.35, compoundedGrowthCapKm), sanePeakWeeklyCapKm);
+  let peakWeeklyKm = clamp(idealPeakWeeklyKm, currentKm*1.10, growthCapKm);
   // With peak week capped, let the long run be a larger share of it (up to 34%) rather
   // than silently shrinking the peak long run itself below the race-distance target.
   let achievablePeakLongKm = Math.min(peakLongKm, peakWeeklyKm*0.34*longEmphasis.fractionScale);
@@ -1049,11 +1070,7 @@ function generatePlan(setup, dayOneOverride){
   // is exactly what happens once maxWeeklyKm or the safe-growth cap above kicks in).
   const startLongKm = Math.min(currentKm*longFraction, achievablePeakLongKm);
 
-  let taperWeeks = Math.round(interp([[5,1],[10,1],[15,1],[21.0975,2],[32.19,2],[42.195,3]], raceKm));
-  taperWeeks = clamp(taperWeeks, 1, Math.max(1,totalWeeks-1));
-  if(totalWeeks<=2) taperWeeks = totalWeeks;
-
-  const buildWeeksCount = Math.max(0, totalWeeks - taperWeeks);
+  const taperWeeks = taperWeeksForCap, buildWeeksCount = buildWeeksCountForCap;
 
   const buildVols = [];
   const cutbackFlags = [];
@@ -1904,7 +1921,7 @@ function defaultDraft(){
     goalMode: 'race', // 'race' | 'general'
     raceKey:'half', raceDistanceKm:21.0975, raceDate:'', currentWeeklyMi: 20,
     units:'mi', recentDistanceKey:'5k', recentTime:'', goalTime:'',
-    longDow:0, weekStartDow:0,
+    longDow:0, weekStartDow:0, trainingStartDate:'',
     restDays: clamp(7 - runsPerWeekFor(unitToKm(20,'mi')), 1, 4),
     maxLongRunMi: '', maxWeeklyMi: '',
     longRunEmphasis: 'balanced', speedEmphasis: 'balanced', strengthPerWeek: 2,
@@ -1985,7 +2002,15 @@ function submitOnboarding(){
   // the fallback/splice step below this if/else for what actually makes that real.
   const isSwitch = state.onboardMode==='switch';
   const oldPlan = isSwitch ? state.plan : null;
-  const dayOneOverride = (oldPlan && oldPlan.weeks && oldPlan.weeks.length) ? parseDate(oldPlan.weeks[0].weekStart) : null;
+  // A first-time onboarding can ALSO backdate day-one, via the optional "already been
+  // training?" field - same override mechanism, just user-supplied instead of read off an
+  // old plan. Switch mode's own old-plan resume always wins if both were somehow set, since
+  // that's the more authoritative "what actually happened" source.
+  const parsedTrainingStart = (!isSwitch && d.trainingStartDate) ? parseDate(d.trainingStartDate) : null;
+  const trainingStartOverride = (parsedTrainingStart && parsedTrainingStart<=todayDate()) ? parsedTrainingStart : null;
+  const dayOneOverride = (oldPlan && oldPlan.weeks && oldPlan.weeks.length)
+    ? parseDate(oldPlan.weeks[0].weekStart)
+    : trainingStartOverride;
 
   if(d.goalMode==='general'){
     const weeks = clamp(Number(d.weeks)||PLAN_KIND_META[d.planKind].weeksDefault, PLAN_KIND_META[d.planKind].weeksMin, PLAN_KIND_META[d.planKind].weeksMax);
@@ -2036,10 +2061,13 @@ function submitOnboarding(){
       // make sense here, so fall back to exactly today's plain behavior: a clean restart
       // from today, no frozen weeks, same as a first-time plan.
       plan = d.goalMode==='general' ? generateGeneralPlan(setup) : generatePlan(setup);
-    } else {
+    } else if(oldPlan){
       // Freeze every already-elapsed week exactly as it was actually lived - the same day
       // objects, same phase/cutback labels, nothing reinterpreted through the new settings.
-      // Only today's week and everything after gets the freshly generated structure.
+      // Only today's week and everything after gets the freshly generated structure. A
+      // first-time onboarding backdated via trainingStartOverride has no old plan to freeze
+      // from - the plan generatePlan/generateGeneralPlan already built, anchored straight to
+      // that start date, is exactly right as-is, nothing to splice.
       const oldByStart = Object.fromEntries(oldPlan.weeks.map(w=>[w.weekStart, w]));
       const todayWeekStart = startOfWeek(today, setup.weekStartDow);
       plan.weeks = plan.weeks.map(w => (parseDate(w.weekStart)<todayWeekStart && oldByStart[w.weekStart]) ? oldByStart[w.weekStart] : w);
@@ -2202,6 +2230,12 @@ function renderOnboardStep1(d){
       <div class="hint" id="race-date-hint" style="display:${weeksToRace?'':'none'};">${weeksToRace? `${weeksToRace} week${weeksToRace===1?'':'s'} from today.` : ''}</div>
     </div>
 
+    <div class="field">
+      <label class="field-label">Already been training for this? (optional)</label>
+      <input class="input" type="date" id="in-training-start" value="${d.trainingStartDate}" max="${fmtDate(todayDate())}">
+      <div class="hint">Leave blank to start this week. If you enter a real start date, the plan builds its full length from there and drops you on whichever week that puts you in today — not week one.</div>
+    </div>
+
     <div class="section-title">Course profile</div>
     <div class="field">
       <div class="chip-select">
@@ -2232,6 +2266,11 @@ function renderOnboardStep1(d){
       <label class="field-label">Weeks</label>
       <input class="input" type="number" min="1" step="1" id="in-weeks" value="${d.weeks}">
       <div class="hint">${kindMeta.hint} (typical: ${kindMeta.weeksMin}–${kindMeta.weeksMax}, we default to ${kindMeta.weeksDefault}).</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Already been training for this? (optional)</label>
+      <input class="input" type="date" id="in-training-start" value="${d.trainingStartDate}" max="${fmtDate(todayDate())}">
+      <div class="hint">Leave blank to start this week. If you enter a real start date, the plan builds its full length from there and drops you on whichever week that puts you in today — not week one.</div>
     </div>`;
 
   return `
@@ -5014,6 +5053,13 @@ function onChange(e){
       hintEl.style.display = weeksToRace ? '' : 'none';
       hintEl.textContent = weeksToRace ? `${weeksToRace} week${weeksToRace===1?'':'s'} from today.` : '';
     }
+    return;
+  }
+  if(e.target.id==='in-training-start'){
+    // Same type="date" iOS picker-closing quirk as in-race-date above - no dependent UI
+    // reads this value anywhere else on the step, so simply not calling render() here is
+    // enough to keep the native picker from being yanked out from under itself.
+    state.onboardDraft.trainingStartDate = e.target.value;
     return;
   }
   if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; render(); return; }
