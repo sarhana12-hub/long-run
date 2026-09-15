@@ -993,14 +993,18 @@ function parsePaceInput(val, unit, fmt){
 
 // How much a weekly-mileage jump is safe to ask for, as a fraction of CURRENT volume -
 // tapers down as that volume climbs, since the same relative jump is a much bigger
-// absolute jolt at higher mileage (10% of 15mi/week is 1.5mi; 10% of 60mi/week is 6mi).
+// absolute jolt at higher mileage (10% of 15mi/week is 1.5mi; 10% of 45mi/week is 4.5mi).
 // Rough, intentionally conservative figures for a recreational runner, not derived from a
 // single controlled study - the oft-quoted "10% rule" itself isn't rigorously validated
 // either (a well-known RCT on novice runners found a MORE aggressive ramp than 10%/week
 // didn't raise injury rates), so treat this as a sensible taper on a soft heuristic, not a
-// hard physiological limit.
+// hard physiological limit. Anchored to what this app's own users actually run, not a
+// generic range extending toward elite mileage nobody here will ever reach - the taper
+// bottoms out at 55mi/week, right around sanePeakWeeklyCapKm's own highest figure (marathon,
+// 88km/54.7mi), so past that point the sane cap is already doing the limiting anyway and a
+// lower floor here wouldn't change anything.
 function weeklyGrowthRateFor(km){
-  return interp([[unitToKm(15,'mi'),0.10],[unitToKm(40,'mi'),0.07],[unitToKm(60,'mi'),0.05],[unitToKm(90,'mi'),0.03]], km);
+  return interp([[unitToKm(15,'mi'),0.10],[unitToKm(30,'mi'),0.08],[unitToKm(45,'mi'),0.06],[unitToKm(55,'mi'),0.05]], km);
 }
 
 function generatePlan(setup, dayOneOverride){
@@ -1079,9 +1083,26 @@ function generatePlan(setup, dayOneOverride){
   const minWeekGrowthKm = currentKm*(1+weeklyGrowthRateFor(currentKm));
   const growthCapKm = Math.min(Math.max(minWeekGrowthKm, simulatedVol), sanePeakWeeklyCapKm);
   let peakWeeklyKm = clamp(idealPeakWeeklyKm, minWeekGrowthKm, growthCapKm);
-  // With peak week capped, let the long run be a larger share of it (up to 34%) rather
-  // than silently shrinking the peak long run itself below the race-distance target.
-  let achievablePeakLongKm = Math.min(peakLongKm, peakWeeklyKm*0.34*longEmphasis.fractionScale);
+  // The long run's own climb is deliberately NOT derived from peakWeeklyKm above, and not
+  // run through the same cutback-interrupted simulation either. Those model CUMULATIVE
+  // weekly load, which is a real, different kind of fatigue than one session's distance -
+  // and a cutback week trims volume AROUND the long run (shorter easy days, maybe skip
+  // speed work), it doesn't reset the long run itself the way that model would. Bottlenecking
+  // achievablePeakLongKm behind a conservative weekly-volume figure was exactly why a
+  // 20mi/week runner with 5 build weeks - plenty of base fitness, going from a 6mi to an
+  // 11mi long run, nothing exotic - was landing on a 7-8mi peak long run for a half
+  // marathon, which doesn't reflect real capability at that starting point. Real long-run
+  // progression is commonly just "add about a mile a week," steadily, so that's the model
+  // here: `naturalStartLongKm` (what the long run would be if it were simply longFraction of
+  // current weekly volume) plus a flat weekly increment (scaled by longRunEmphasis, same as
+  // every other long-run figure) for each build week actually available, capped at the real
+  // race-distance target either way. The per-week `weeklyKm*0.5` cap in the day-building loop
+  // below still backstops this against ever exceeding half of that week's ACTUAL volume, so
+  // this isn't an unbounded promise - just no longer bottlenecked by a figure that measures a
+  // different kind of risk.
+  const naturalStartLongKm = currentKm*longFraction;
+  const longRunWeeklyIncrementKm = unitToKm(1,'mi') * longEmphasis.fractionScale;
+  let achievablePeakLongKm = Math.min(peakLongKm, naturalStartLongKm + longRunWeeklyIncrementKm*Math.max(buildWeeksCountForCap-1,0));
   // User-supplied caps (half marathon+ only) scale the whole plan down to fit — applied
   // as a ceiling on the peak targets, so the existing week-by-week ramp (which already
   // never exceeds these) respects them automatically without a separate pass.
@@ -1091,7 +1112,7 @@ function generatePlan(setup, dayOneOverride){
   // fraction of that week's total volume — a flat fraction can mathematically never reach
   // the peak target once weekly volume is capped well below peakLongKm/longFraction (this
   // is exactly what happens once maxWeeklyKm or the safe-growth cap above kicks in).
-  const startLongKm = Math.min(currentKm*longFraction, achievablePeakLongKm);
+  const startLongKm = Math.min(naturalStartLongKm, achievablePeakLongKm);
 
   const taperWeeks = taperWeeksForCap, buildWeeksCount = buildWeeksCountForCap;
 
