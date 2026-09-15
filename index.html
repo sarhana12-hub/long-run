@@ -1965,7 +1965,7 @@ function defaultDraft(){
     goalMode: 'race', // 'race' | 'general'
     raceKey:'half', raceDistanceKm:21.0975, raceDate:'', currentWeeklyMi: 20,
     units:'mi', recentDistanceKey:'5k', recentTime:'', goalTime:'',
-    longDow:0, weekStartDow:0, trainingStartDate:'',
+    longDow:0, weekStartDow:0, trainingStartDate:'', trackFromToday:false,
     restDays: clamp(7 - runsPerWeekFor(unitToKm(20,'mi')), 1, 4),
     maxLongRunMi: '', maxWeeklyMi: '',
     longRunEmphasis: 'balanced', speedEmphasis: 'balanced', strengthPerWeek: 2,
@@ -2095,6 +2095,7 @@ function submitOnboarding(){
     };
     plan = generatePlan(setup, dayOneOverride);
   }
+  let backdateApplied = !!dayOneOverride;
   if(dayOneOverride){
     const today = todayDate();
     const todayInRange = plan.weeks.some(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
@@ -2105,6 +2106,7 @@ function submitOnboarding(){
       // make sense here, so fall back to exactly today's plain behavior: a clean restart
       // from today, no frozen weeks, same as a first-time plan.
       plan = d.goalMode==='general' ? generateGeneralPlan(setup) : generatePlan(setup);
+      backdateApplied = false;
     } else if(oldPlan){
       // Freeze every already-elapsed week exactly as it was actually lived - the same day
       // objects, same phase/cutback labels, nothing reinterpreted through the new settings.
@@ -2116,6 +2118,21 @@ function submitOnboarding(){
       const todayWeekStart = startOfWeek(today, setup.weekStartDow);
       plan.weeks = plan.weeks.map(w => (parseDate(w.weekStart)<todayWeekStart && oldByStart[w.weekStart]) ? oldByStart[w.weekStart] : w);
     }
+  }
+  // Whether "on track" stats (adherence, mi ahead/behind, % of training miles logged) count
+  // from the plan's real day-one, or only from today on for someone who backdated their
+  // start but isn't going to log the runs in between - see computeProgressStats/
+  // planMileageProgress, which both fall back to this in place of the plan's own weekStart
+  // whenever it's set. A reconfigure keeps whatever the ORIGINAL choice was (never silently
+  // reverting someone who opted out of back-logging to being judged against their true day
+  // one again just because they changed a setting); a genuine first-time backdated
+  // onboarding sets it fresh from what was just chosen; anything else (no backdating, or
+  // the compatibility fallback above discarded the backdated anchor) leaves it unset, which
+  // means "use the plan's real start" - the original, still-correct default.
+  if(isSwitch && state.setup && state.setup.trackingStartDate){
+    setup.trackingStartDate = state.setup.trackingStartDate;
+  } else {
+    setup.trackingStartDate = (backdateApplied && trainingStartOverride && d.trackFromToday) ? fmtDate(todayDate()) : null;
   }
   state.name = d.name.trim();
   Store.setName(state.name);
@@ -2216,6 +2233,14 @@ const WEEK_START_OPTIONS = [{n:0, label:'Sunday'}, {n:1, label:'Monday'}];
 function weekStartChipsHtml(value, act){
   return WEEK_START_OPTIONS.map(o=>`<button class="chip ${ (value||0)===o.n?'active':''}" data-act="${act}" data-n="${o.n}">${o.label}</button>`).join('');
 }
+// Only shown once a training-start date is actually entered - a plan backdated that way
+// tracks "on track" status from the real start by default (matches everything that date
+// already drives: total weeks, phase lengths, frozen-week resume), but someone who isn't
+// going to log those past runs can say so explicitly instead of the app quietly reading
+// weeks of untracked history as "behind."
+function trackFromChipsHtml(trackFromToday, startDate){
+  return `<button class="chip ${!trackFromToday?'active':''}" data-act="pick-track-from" data-mode="start">${startDate ? niceDate(parseDate(startDate)) : 'Start date'} (I'll log old runs)</button><button class="chip ${trackFromToday?'active':''}" data-act="pick-track-from" data-mode="today">Today (skip logging old runs)</button>`;
+}
 
 /* ============================= render: onboarding ============================= */
 const ONBOARD_STEPS = [
@@ -2279,6 +2304,12 @@ function renderOnboardStep1(d){
       <input class="input" type="date" id="in-training-start" value="${d.trainingStartDate}" max="${fmtDate(todayDate())}">
       <div class="hint">Leave blank to start this week. If you enter a real start date, the plan builds its full length from there and drops you on whichever week that puts you in today — not week one.</div>
     </div>
+    ${d.trainingStartDate ? `
+    <div class="field">
+      <label class="field-label">Track progress from</label>
+      <div class="chip-select">${trackFromChipsHtml(d.trackFromToday, d.trainingStartDate)}</div>
+      <div class="hint">${d.trackFromToday ? "Plan adherence and ahead/behind only count from today on — those earlier weeks won't count against you, but they won't count toward your progress total either." : "Plan adherence and ahead/behind compare against the full plan from your real start date, so they'll be accurate only once you've logged those earlier runs too."}</div>
+    </div>` : ''}
 
     <div class="section-title">Course profile</div>
     <div class="field">
@@ -2315,7 +2346,13 @@ function renderOnboardStep1(d){
       <label class="field-label">Already been training for this? (optional)</label>
       <input class="input" type="date" id="in-training-start" value="${d.trainingStartDate}" max="${fmtDate(todayDate())}">
       <div class="hint">Leave blank to start this week. If you enter a real start date, the plan builds its full length from there and drops you on whichever week that puts you in today — not week one.</div>
-    </div>`;
+    </div>
+    ${d.trainingStartDate ? `
+    <div class="field">
+      <label class="field-label">Track progress from</label>
+      <div class="chip-select">${trackFromChipsHtml(d.trackFromToday, d.trainingStartDate)}</div>
+      <div class="hint">${d.trackFromToday ? "Plan adherence and ahead/behind only count from today on — those earlier weeks won't count against you, but they won't count toward your progress total either." : "Plan adherence and ahead/behind compare against the full plan from your real start date, so they'll be accurate only once you've logged those earlier runs too."}</div>
+    </div>` : ''}`;
 
   return `
     <div class="section-title" style="margin-top:0; display:flex; align-items:center; gap:8px;">
@@ -2743,7 +2780,13 @@ function computeProgressStats(){
   // totalLoggedKm/an unbounded log filter, so switching plans without a lot of history would
   // silently carry old mileage into a brand new plan's "ahead of schedule" and "% of plan
   // logged" numbers even though not a single run had been logged against it yet).
-  const planStart = parseDate(plan.weeks[0].weekStart);
+  // Normally the plan's real first day - but a plan backdated from a real training-start
+  // date (see the onboarding "Track progress from" choice) can instead track "on track"
+  // status only from today on, for someone who isn't going to log the weeks of running they
+  // already did before setting the plan up. setup.trackingStartDate carries that choice
+  // through; unset (the common case) just falls back to the plan's own start, unchanged
+  // from before this existed.
+  const planStart = state.setup.trackingStartDate ? parseDate(state.setup.trackingStartDate) : parseDate(plan.weeks[0].weekStart);
   // "Behind/ahead of plan" and adherence both compare against a single as-of date, not
   // necessarily today - if nothing's logged for today yet, today gets the benefit of the
   // doubt (it's not "missed" just because it's still morning) and the cutoff holds at
@@ -2758,7 +2801,7 @@ function computeProgressStats(){
   const loggedKmToDate = state.logs.filter(l=>{ const d=parseDate(l.date); return d>=planStart && d<=statusCutoff; }).reduce((s,l)=>s+l.distanceKm,0);
   const plannedToDateWeeks = plan.weeks.filter(w=>parseDate(w.weekStart) <= statusCutoff);
   const plannedToDateKm = plannedToDateWeeks.reduce((s,w)=>{
-    return s + w.days.filter(d=>parseDate(d.date)<=statusCutoff).reduce((s2,d)=>s2+d.km,0);
+    return s + w.days.filter(d=>{ const dd=parseDate(d.date); return dd>=planStart && dd<=statusCutoff; }).reduce((s2,d)=>s2+d.km,0);
   },0);
   // Positive means behind (planned more than you've logged); negative means you've
   // logged more than the plan called for so far — genuinely possible (extra volume, or
@@ -2771,14 +2814,17 @@ function computeProgressStats(){
   // rest days that were never part of what "completed so far" should be measuring. Same
   // statusCutoff as plannedToDateKm above.
   const plannedRunDatesToDate = [];
-  plannedToDateWeeks.forEach(w=>w.days.forEach(d=>{ if(parseDate(d.date)<=statusCutoff && d.km>0) plannedRunDatesToDate.push(d.date); }));
+  plannedToDateWeeks.forEach(w=>w.days.forEach(d=>{ const dd=parseDate(d.date); if(dd>=planStart && dd<=statusCutoff && d.km>0) plannedRunDatesToDate.push(d.date); }));
   const loggedDates = new Set(state.logs.map(l=>l.date));
   const completedPlannedRuns = plannedRunDatesToDate.filter(date=>loggedDates.has(date)).length;
   const adherence = plannedRunDatesToDate.length>0 ? Math.round(100*completedPlannedRuns/plannedRunDatesToDate.length) : 0;
   // Separate from adherence (did you run on the days the plan called for): what fraction
-  // of the whole plan's training mileage — every week, not just the ones behind you —
-  // have you actually logged. Race day itself isn't "training" so it's excluded.
-  const totalPlanTrainingKm = plan.weeks.reduce((s,w)=> s + w.days.filter(d=>d.type!=='race').reduce((s2,d)=>s2+d.km,0), 0);
+  // of the plan's training mileage from planStart on — every week from there, not just the
+  // ones behind you — have you actually logged. Race day itself isn't "training" so it's
+  // excluded. Scoped to planStart (not always week 0) so this can genuinely reach 100% for
+  // someone tracking from today rather than being permanently capped below it by training
+  // weeks they never intended to log.
+  const totalPlanTrainingKm = plan.weeks.reduce((s,w)=> s + w.days.filter(d=>d.type!=='race' && parseDate(d.date)>=planStart).reduce((s2,d)=>s2+d.km,0), 0);
   const planScopedLoggedKm = state.logs.filter(l=>parseDate(l.date)>=planStart).reduce((s,l)=>s+l.distanceKm,0);
   const pctPlanMilesLogged = totalPlanTrainingKm>0 ? Math.round(100*Math.min(1, planScopedLoggedKm/totalPlanTrainingKm)) : 0;
 
@@ -3849,6 +3895,7 @@ function renderSettingsTab(){
       ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Goal time</div><div class="sub">${s.goalTimeSec ? secToClock(s.goalTimeSec) : 'None set — paces follow your fitness'}</div></div></div>` : ''}
       <div class="settings-row"><div><div class="lbl">Long run day</div><div class="sub">${DOW_LABELS[s.longDow]}</div></div></div>
       <div class="settings-row"><div><div class="lbl">Week starts on</div><div class="sub">${(s.weekStartDow||0)===1?'Monday':'Sunday'}</div></div></div>
+      ${s.trackingStartDate ? `<div class="settings-row"><div><div class="lbl">Tracking progress from</div><div class="sub">${niceDate(parseDate(s.trackingStartDate))} — earlier training weeks aren't counted</div></div></div>` : ''}
       <div class="settings-row"><div><div class="lbl">Rest days per week</div><div class="sub">${restDaysVal} (${runsPerWeekVal} running day${runsPerWeekVal===1?'':'s'}/week)</div></div></div>
       ${!isGeneralPlan(s) ? `
       <div class="settings-row"><div><div class="lbl">Long run emphasis</div><div class="sub">${emphasisLabel(s.longRunEmphasis)}</div></div></div>
@@ -4774,6 +4821,7 @@ function onClick(e){
   if(act==='pick-distance-metric'){ state.onboardDraft.distanceGoalMetric = el.dataset.m; render(); return; }
   if(act==='pick-restdays'){ state.onboardDraft.restDays = Number(el.dataset.n); render(); return; }
   if(act==='pick-week-start'){ state.onboardDraft.weekStartDow = Number(el.dataset.n); render(); return; }
+  if(act==='pick-track-from'){ state.onboardDraft.trackFromToday = el.dataset.mode==='today'; render(); return; }
   if(act==='pick-long-emphasis'){ state.onboardDraft.longRunEmphasis = el.dataset.key; render(); return; }
   if(act==='pick-speed-emphasis'){ state.onboardDraft.speedEmphasis = el.dataset.key; render(); return; }
   if(act==='pick-strength-count'){ state.onboardDraft.strengthPerWeek = Number(el.dataset.n); render(); return; }
