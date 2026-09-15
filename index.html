@@ -1251,11 +1251,18 @@ function generatePlan(setup){
     if(isRaceWeek){
       const raceIdx = days.findIndex(x=>x.date===fmtDate(raceDate));
       const targetIdx = raceIdx!==-1 ? raceIdx : 6;
+      // Every day this loop rewrites may have already picked up role-based fields earlier
+      // in this same week's build (the long run's terrain, a speed day's warmupKm, the
+      // aerobic easy day's terrain/hillStrides) - clearing them here alongside type/km/label
+      // is the same fix as recomputeStrengthFocus/the edit-day save handler apply elsewhere,
+      // just needed at generation time too: a day rebuilt into Rest/Shakeout/Race Day should
+      // never carry description text left over from whatever it used to be.
+      const clearedRoleFields = {terrain:null, hillStrides:false, warmupKm:0, cooldownKm:0, progressionEasy:false, easyVariety:false};
       for(let i=0;i<7;i++){
         const diff = daysBetween(parseDate(days[i].date), raceDate);
-        if(i===targetIdx){ days[i] = {...days[i], type:'race', km:raceKm, label:'Race Day', strength:false, strides:false, easyRole:null}; }
-        else if(diff>0 && diff<=2){ days[i] = {...days[i], type:diff===1?'rest':'easy', km:diff===1?0:round1(Math.min(3,achievablePeakLongKm*0.15)), strength:false, strides:false, easyRole:null, label:diff===1?'Rest':'Shakeout Jog'}; }
-        else if(diff<0){ days[i] = {...days[i], type:'rest', km:0, strength:false, strides:false, easyRole:null, label:'Rest'}; }
+        if(i===targetIdx){ days[i] = {...days[i], ...clearedRoleFields, type:'race', km:raceKm, label:'Race Day', strength:false, strides:false, easyRole:null}; }
+        else if(diff>0 && diff<=2){ days[i] = {...days[i], ...clearedRoleFields, type:diff===1?'rest':'easy', km:diff===1?0:round1(Math.min(3,achievablePeakLongKm*0.15)), strength:false, strides:false, easyRole:null, label:diff===1?'Rest':'Shakeout Jog'}; }
+        else if(diff<0){ days[i] = {...days[i], ...clearedRoleFields, type:'rest', km:0, strength:false, strides:false, easyRole:null, label:'Rest'}; }
       }
     }
 
@@ -1659,13 +1666,14 @@ const state = {
   onboardMode:'new', // 'new' | 'switch' - 'switch' means re-entering onboarding to change an
                       // existing plan from Settings; keeps logs, resets only plan-specific milestones.
   toast:null,
+  toastUndo:null, // {logId} - shows an inline Undo link on the current toast, cleared with it
   strengthDone:[], // dates (YYYY-MM-DD) explicitly marked as strength-completed
   achievementLog:[], // {key, date, detail?} - see Store.getAchievementLog
   stravaAuth:null,
 };
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function showToast(msg){ state.toast = msg; render(); setTimeout(()=>{ state.toast=null; render(); }, 2200); }
+function showToast(msg, undo){ state.toast = msg; state.toastUndo = undo || null; render(); setTimeout(()=>{ state.toast=null; state.toastUndo=null; render(); }, 2200); }
 // Flashes a message inline next to the "Your name" label (the lexi-badge span) instead of
 // a floating toast — a fixed-position popup kept landing either behind the Dynamic Island
 // or under the keyboard depending on how far up the screen it sat. Bypasses render()
@@ -1971,7 +1979,7 @@ function render(){
   else if(state.view==='onboarding') html = renderOnboarding();
   else html = renderApp();
   if(state.view!=='loading'){
-    html += (state.modal ? renderModal() : '') + (state.toast ? `<div class="toast">${esc(state.toast)}</div>` : '');
+    html += (state.modal ? renderModal() : '') + (state.toast ? `<div class="toast">${esc(state.toast)}${state.toastUndo ? ` · <a data-act="undo-log" data-id="${state.toastUndo.logId}" style="color:inherit; text-decoration:underline; cursor:pointer;">Undo</a>` : ''}</div>` : '');
   }
   app.innerHTML = html;
   bindGlobal();
@@ -2423,6 +2431,36 @@ function weekDisplayLabel(week, totalWeeks, planKind){
 }
 function weekColorVar(week){ return week.isCutback ? 'var(--z-rest)' : phaseColorVar(week.phase); }
 
+// One short, high-signal sentence about what's different this week vs. last, shown at the
+// top of the Plan tab - deliberately quiet (returns null) when nothing stands out, rather
+// than restating "similar to last week" every single time. Checked in priority order: the
+// biggest-picture thing worth knowing first, mileage-jump last since it's the most routine.
+function computeCoachNote(plan, week, unit){
+  const isRacePlan = !plan.planKind;
+  const isFinalWeek = week.weekIndex===plan.totalWeeks-1;
+  if(isRacePlan && isFinalWeek){
+    return "Race week. Taper the last few days and trust the training you've already banked — this isn't the week to chase anything new.";
+  }
+  if(week.isCutback){
+    return "Scheduled cutback week — lighter mileage on purpose, so your body can absorb the work you've already put in before the next push.";
+  }
+  const prev = week.weekIndex>0 ? plan.weeks[week.weekIndex-1] : null;
+  if(!prev) return null;
+  if(week.phase==='taper' && prev.phase!=='taper'){
+    return "Taper starts this week — mileage eases off on purpose so you show up to race day fresh, not just rested.";
+  }
+  if(week.phase!==prev.phase){
+    return `Moving from ${phaseLabel(prev.phase)} into ${phaseLabel(week.phase)} phase this week.`;
+  }
+  if(prev.targetKm>0){
+    const pctChange = (week.targetKm-prev.targetKm)/prev.targetKm*100;
+    if(pctChange>=15){
+      return `Weekly mileage steps up from ${fmtDist(prev.targetKm,unit,1)} to ${fmtDist(week.targetKm,unit,1)} this week — a bigger jump than usual, so prioritize sleep and fueling.`;
+    }
+  }
+  return null;
+}
+
 function renderPlanTab(week, plan){
   const unit = state.setup.units;
   const fmt = state.paceFormat;
@@ -2479,6 +2517,10 @@ function renderPlanTab(week, plan){
       <div class="l">logged this week</div>
     </div>
   </div>
+  ${(()=>{ const note = computeCoachNote(plan, week, unit); return note ? `<div class="card" style="padding:14px 16px; margin:0 18px 16px; background:var(--accent-soft); border-color:var(--accent-strong); display:flex; gap:10px; align-items:flex-start;">
+    <div style="width:16px; height:16px; flex-shrink:0; margin-top:1px; color:var(--accent-ink);">${ICONS.route}</div>
+    <span style="font-size:13px; line-height:1.4; color:var(--ink);">${esc(note)}</span>
+  </div>` : ''; })()}
   <div class="day-list">${dayCards}</div>
   <div style="height:20px"></div>
   `;
@@ -2566,7 +2608,10 @@ function commitLogEntry(logData){
   state.logs = [item, ...state.logs];
   state.modal = null;
   const fired = evaluateAndTriggerAchievements(item);
-  if(fired) render(); else showToast('Run logged');
+  // No inline Undo when an achievement fires - that flow already lands on its own
+  // celebration screen instead of this toast, and deleting the run afterward is still
+  // always reachable the normal way (open the day, Remove this log).
+  if(fired) render(); else showToast('Run logged', {logId: item.id});
 }
 
 // The full catalog of every earnable achievement - the single source of truth for both
@@ -2837,6 +2882,63 @@ function mileageMilestoneCheck(miles){
   return {message:`You've logged ${miles} lifetime miles across every run you've tracked in this app.`};
 }
 
+// Only achievements with a genuine "getting closer" number get a progress bar in the
+// gallery - most of the catalog is event-based (log one specific run, finish one specific
+// phase) with nothing meaningful to show partway through, so those just keep their plain
+// locked hint. Each entry returns {current, target, unitLabel} or null.
+const ACHIEVEMENT_PROGRESS = {
+  'miles-50': ()=>mileageProgress(50),
+  'miles-100': ()=>mileageProgress(100),
+  'miles-250': ()=>mileageProgress(250),
+  'miles-500': ()=>mileageProgress(500),
+  'streak-7': ()=>({current: longestLoggingStreakDays(), target: 7, unitLabel: 'day streak'}),
+  'strength-streak': ()=>({current: currentStrengthStreak(), target: 4, unitLabel: 'in a row'}),
+  'halfway': ()=>({current: computeProgressStats().pctPlanMilesLogged, target: 50, unitLabel: '%'}),
+  'full-house': ()=>fullHouseProgress(),
+};
+function mileageProgress(miles){
+  return {current: Math.round(kmToUnit(computeProgressStats().totalLoggedKm,'mi')), target: miles, unitLabel: 'mi'};
+}
+// Same consecutive-completed-strength-days count the strength-streak check itself uses,
+// minus that check's >=4 early-exit and endDate bookkeeping (only needed there, for the
+// repeat-instance key) - this just needs the plain current-best number for the bar.
+function currentStrengthStreak(){
+  const strengthDays = state.plan.weeks.flatMap(w=>w.days).filter(d=>d.strength).map(d=>d.date).sort();
+  const done = new Set(state.strengthDone);
+  let best=0, cur=0;
+  for(const date of strengthDays){
+    if(parseDate(date)>=todayDate()) break;
+    cur = done.has(date) ? cur+1 : 0;
+    best = Math.max(best,cur);
+  }
+  return best;
+}
+function fullHouseProgress(){
+  const planTypes = new Set();
+  state.plan.weeks.forEach(w=>w.days.forEach(d=>{ if(d.type!=='rest' && d.km>0) planTypes.add(d.type); }));
+  if(planTypes.size<2) return null;
+  const loggedDates = new Set(state.logs.map(l=>l.date));
+  const loggedTypes = new Set();
+  state.plan.weeks.forEach(w=>w.days.forEach(d=>{ if(loggedDates.has(d.date)) loggedTypes.add(d.type); }));
+  const matched = [...planTypes].filter(t=>loggedTypes.has(t)).length;
+  return {current: matched, target: planTypes.size, unitLabel: 'workout types'};
+}
+// A thin fill bar + "X of Y" caption, shown under a locked achievement's hint text. Clamps
+// the visual fill just short of full even if rounding makes current reach target, since
+// the achievement is by definition still locked at this point - a full-looking bar next to
+// "still locked" would read as a bug, not a coincidence of rounding.
+function achievementProgressHtml(key){
+  const fn = ACHIEVEMENT_PROGRESS[key];
+  if(!fn) return '';
+  const p = fn();
+  if(!p || p.target<=0) return '';
+  const pct = clamp(Math.round(p.current/p.target*100), 0, 98);
+  return `<div style="margin-top:6px;">
+    <div style="height:4px; border-radius:2px; background:var(--surface-2); overflow:hidden;"><div style="height:100%; width:${pct}%; background:var(--accent);"></div></div>
+    <div class="hint" style="margin-top:4px;">${Math.min(p.current,p.target)} of ${p.target} ${p.unitLabel}</div>
+  </div>`;
+}
+
 // Runs every achievement check in catalog order (biggest/rarest first), records every one
 // that newly qualifies (so nothing is ever silently lost even if one action satisfies
 // several at once), but only pops up a celebration for the first - the rest are still
@@ -2861,6 +2963,7 @@ function evaluateAndTriggerAchievements(newLog){
     icon: top.def.tier==='badge' ? badgeGlyph(top.def.key) : null,
     title: top.def.title,
     message: top.message,
+    extraCount: earned.length-1,
   }};
   return true;
 }
@@ -3188,6 +3291,7 @@ function renderModal(){
   if(m.type==='day-detail') return renderDayDetail();
   if(m.type==='log-run') return modalLogRun();
   if(m.type==='edit-day') return modalEditDay();
+  if(m.type==='confirm-swap') return modalConfirmSwap(m.data);
   if(m.type==='confirm-reset') return modalConfirmReset();
   if(m.type==='confirm-import') return modalConfirmImport(m.data);
   if(m.type==='stat-detail') return renderStatDetailModal(m.stat);
@@ -3202,10 +3306,18 @@ function renderModal(){
 // just in the gallery; summit-tier celebrations (rare, plan-defining) pass a hero
 // illustration shown larger in its place. Same sheet either way.
 function modalMilestone(data){
-  const { hero, icon, title, message } = data;
+  const { hero, icon, title, message, extraCount } = data;
   const artHtml = hero
     ? `<div class="milestone-hero">${hero}</div>`
     : `<div class="badge-ring">${icon || ICONS.summitBadge}</div>`;
+  // A single action (logging a run, marking strength done) can satisfy more than one
+  // achievement at once, but only the first gets this popup - the rest are still recorded
+  // in state.achievementLog and visible in the gallery, just easy to miss otherwise. This
+  // link is the only signal that there's more to see, so it has to be here, not just left
+  // for someone to stumble onto later.
+  const extraHtml = extraCount>0
+    ? `<div class="hint" style="margin-top:2px;">+${extraCount} more milestone${extraCount===1?'':'s'} earned just now — <a class="link-btn" data-act="open-achievements" style="cursor:pointer;">see them all</a></div>`
+    : '';
   return `<div class="overlay" data-act="close-modal-overlay">
     <div class="sheet milestone" data-stop="1">
       <div class="sheet-handle"></div>
@@ -3213,6 +3325,7 @@ function modalMilestone(data){
       ${artHtml}
       <div class="sheet-title milestone">${esc(title)}</div>
       <div class="sheet-body">${esc(message)}</div>
+      ${extraHtml}
       <button class="btn btn-primary btn-block" data-act="close-modal">Nice!</button>
     </div>
   </div>`;
@@ -3236,6 +3349,7 @@ function renderAchievementsScreen(){
       <div style="flex:1; min-width:0;">
         <div style="font-weight:700; font-size:14px;">${esc(a.title)}</div>
         <div style="font-size:12.5px; color:var(--muted);">${earned ? `Earned${date?' '+niceDate(parseDate(date)):''}` : esc(a.locked)}</div>
+        ${earned ? '' : achievementProgressHtml(a.key)}
       </div>
     </div>`;
   };
@@ -3630,6 +3744,18 @@ function modalEditDay(){
   `);
 }
 
+function modalConfirmSwap(data){
+  const week = state.plan.weeks[data.weekIndex];
+  const da = week.days[data.dayIndexA], db_ = week.days[data.dayIndexB];
+  const lineFor = d => `${DOW_LABELS[d.dow]}, ${niceDate(parseDate(d.date))} — ${TYPE_META[d.type].label}`;
+  return modalShell('Swap these two days?', `
+    <div class="hint" style="margin:-8px 0 14px;">Each day keeps its own date — only the workouts trade places.</div>
+    <div class="settings-row"><div class="lbl">${esc(lineFor(da))}</div></div>
+    <div class="settings-row" style="border-bottom:none;"><div class="lbl">${esc(lineFor(db_))}</div></div>
+    <div class="row" style="margin-top:18px;"><button class="btn btn-block" data-act="close-modal">Cancel</button><button class="btn btn-primary btn-block" data-act="do-swap-days">Swap</button></div>
+  `);
+}
+
 function modalConfirmReset(){
   return modalShell('Start over?', `
     <div class="hint" style="margin-bottom:18px;">This erases your plan and logged runs on this device. This can't be undone.</div>
@@ -3651,7 +3777,7 @@ function modalConfirmImport(data){
     <div class="settings-row" style="border-bottom:none;">
       <div><div class="lbl">${esc(raceLine)}</div><div class="sub">${runCount} logged run${runCount===1?'':'s'} in this backup</div></div>
     </div>
-    <div class="hint" style="margin:14px 0 18px;">${replaceLine} This can't be undone.</div>
+    <div class="hint" style="margin:14px 0 18px;">${replaceLine} This can't be undone. The plan is rebuilt fresh from your original inputs, so any one-off day edits, added strides, or day swaps you'd made won't carry over — logged runs, strength completions, and badges all will.</div>
     <div class="row"><button class="btn btn-block" data-act="close-modal">Cancel</button><button class="btn btn-primary btn-block" data-act="do-import-backup">Import backup</button></div>
   `);
 }
@@ -3832,6 +3958,13 @@ function onClick(e){
     state.logs = state.logs.filter(l=>l.id!==id);
     render(); return;
   }
+  if(act==='undo-log'){
+    const id = el.dataset.id;
+    Store.deleteLog(id);
+    state.logs = state.logs.filter(l=>l.id!==id);
+    showToast('Run removed');
+    return;
+  }
   if(act==='open-day-for-log-date'){
     const found = planDayIndexForDate(el.dataset.date);
     if(!found){ showToast("That date isn't in your current plan"); return; }
@@ -3891,17 +4024,28 @@ function onClick(e){
     const di = Number(el.dataset.i);
     if(state.moveFrom && state.moveFrom.weekIndex===state.currentWeekIndex){
       const a = state.moveFrom.dayIndex, b = di;
-      if(a===b){ state.moveFrom=null; render(); return; }
-      const week = state.plan.weeks[state.currentWeekIndex];
-      const da = week.days[a], db_ = week.days[b];
-      const keepA = {date:da.date, dow:da.dow, id:da.id}, keepB = {date:db_.date, dow:db_.dow, id:db_.id};
-      week.days[a] = {...db_, ...keepA};
-      week.days[b] = {...da, ...keepB};
-      recomputeStrengthFocus(week.days);
-      Store.setPlan(state.plan);
-      state.moveFrom=null;
-      showToast('Swapped');
+      state.moveFrom = null;
+      if(a===b){ render(); return; }
+      // A tapped target used to swap immediately - one misplaced tap during "choose a day
+      // to swap with" silently rearranged the week with no way back. Now it opens a
+      // confirmation naming both days instead of committing right away; do-swap-days below
+      // does the actual swap, unchanged from what this used to do inline.
+      state.modal = {type:'confirm-swap', data:{weekIndex: state.currentWeekIndex, dayIndexA:a, dayIndexB:b}};
+      render();
     }
+    return;
+  }
+  if(act==='do-swap-days'){
+    const {weekIndex, dayIndexA:a, dayIndexB:b} = state.modal.data;
+    const week = state.plan.weeks[weekIndex];
+    const da = week.days[a], db_ = week.days[b];
+    const keepA = {date:da.date, dow:da.dow, id:da.id}, keepB = {date:db_.date, dow:db_.dow, id:db_.id};
+    week.days[a] = {...db_, ...keepA};
+    week.days[b] = {...da, ...keepB};
+    recomputeStrengthFocus(week.days);
+    Store.setPlan(state.plan);
+    state.modal = null;
+    showToast('Swapped');
     return;
   }
   if(act==='cancel-move'){ state.moveFrom=null; render(); return; }
