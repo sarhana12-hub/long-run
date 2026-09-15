@@ -3156,7 +3156,7 @@ function planMileageProgress(plan){
 // exact position, moving smoothly day to day rather than jumping once a week. Turns the
 // "Peak" branding and the halfway-up-the-mountain achievement art into something you see
 // every time you check progress, not just once when it's earned.
-function renderTrainingTrail(plan, unit){
+function renderTrainingTrail(plan, unit, stats){
   const weeks = plan.weeks;
   const n = weeks.length;
   if(n<2) return '';
@@ -3201,13 +3201,17 @@ function renderTrainingTrail(plan, unit){
     y: plannedPts[loIdx].y + (plannedPts[loIdx+1].y-plannedPts[loIdx].y)*frac,
   };
   // Ahead/behind still shown, just as the marker's own color now rather than a second line -
-  // real logged mileage (this plan's own timeframe only, same scoping as every other
-  // plan-relative stat here) against what the plan called for by this exact point in time.
-  const planStart = parseDate(weeks[0].weekStart);
-  const relevantLogs = state.logs.filter(l=>parseDate(l.date)>=planStart);
-  const actualKmToday = relevantLogs.filter(l=>parseDate(l.date)<=today).reduce((s,l)=>s+l.distanceKm,0);
-  const plannedKmToday = plannedCum[loIdx] + (plannedCum[loIdx+1]-plannedCum[loIdx])*frac;
-  const onPaceOrAhead = actualKmToday >= plannedKmToday;
+  // deliberately reuses the SAME mileageStatusLabel the "mi ahead/behind" stat tile below
+  // already computes precisely (real day-by-day planned mileage vs. logged, not a linear
+  // approximation across a whole week) rather than re-deriving a second, cruder estimate
+  // here. An earlier version compared actual-to-date against `plannedCum[loIdx]` interpolated
+  // toward `plannedCum[loIdx+1]` - loIdx/frac are indices into the CURRENT week's own
+  // checkpoint pair (used below for the marker's on-trail position), so that comparison
+  // silently counted the entire current week's target as already "due" from the moment the
+  // week began, making early progress read as behind when it was genuinely ahead. Sourcing
+  // this from the shared stats object guarantees the trail can never disagree with the tile
+  // right below it about the same underlying fact.
+  const onPaceOrAhead = stats.mileageStatusLabel !== 'behind plan';
   const markerColor = onPaceOrAhead ? 'var(--accent)' : 'var(--z-tempo)';
   const markerRingColor = onPaceOrAhead ? 'var(--accent-strong)' : 'var(--z-tempo)';
 
@@ -3459,7 +3463,7 @@ function renderProgressTab(){
       ? (daysToRace>=0 ? `${planLabel(state.setup)} — ${daysToRace} day${daysToRace===1?'':'s'} left` : `${planLabel(state.setup)} — complete. Nice work.`)
       : (daysToRace>=0? daysToRace+' days until '+planLabel(state.setup) : 'Race day has passed — nice work.')}</div>
   </div>
-  ${renderTrainingTrail(plan, unit)}
+  ${renderTrainingTrail(plan, unit, stats)}
   <div class="container">
     <button class="btn btn-block" data-act="open-peek-the-peak" style="margin-bottom:20px; background:linear-gradient(135deg, #1a2a44, #3a2a52); color:#fff; border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
       <span style="width:18px; height:18px;">${ICONS.peak}</span> Peek the Peak
