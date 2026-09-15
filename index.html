@@ -3271,8 +3271,8 @@ function renderPeekThePeak(){
         <rect x="0" y="536" width="320" height="24" fill="#05070a"/>
         <path d="${mountainD}" fill="url(#peekRock)"/>
         <path d="${capD}" fill="#eef3f7" opacity="0.92"/>
-        ${isOvershoot ? `<path id="peek-stair-path" d="${stairD}" fill="none" stroke="#cbd5df" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>` : ''}
-        ${notes.map(n=>`<text x="${n.x}" y="${n.y}" font-size="${n.s}" fill="var(--accent-strong)" opacity="${n.o}">${n.g}</text>`).join('')}
+        ${isOvershoot ? `<path id="peek-stair-path" d="${stairD}" fill="none" stroke="#cbd5df" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0" style="transition:opacity .9s ease;"/>` : ''}
+        ${isOvershoot ? `<g id="peek-notes" opacity="0" style="transition:opacity .9s ease;">${notes.map(n=>`<text x="${n.x}" y="${n.y}" font-size="${n.s}" fill="var(--accent-strong)" opacity="${n.o}">${n.g}</text>`).join('')}</g>` : ''}
         <path d="M ${summit[0]} ${summit[1]} L ${summit[0]} ${summit[1]-34}" stroke="#dfe6ea" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M ${summit[0]} ${summit[1]-34} L ${summit[0]} ${summit[1]-20} L ${summit[0]+26} ${summit[1]-27} Z" fill="var(--accent-strong)"/>
         <text x="${summit[0]+32}" y="${summit[1]-19}" fill="#fff" font-size="12" font-weight="800" letter-spacing="1" font-family="system-ui, sans-serif" stroke="#0b1120" stroke-width="3" paint-order="stroke fill">${esc(flagLabel)}</text>
@@ -3287,7 +3287,7 @@ function renderPeekThePeak(){
         </g>
       </svg>
       <div class="peek-caption">
-        <div class="pct" style="${isOvershoot?'font-size:19px;':''}">${isOvershoot ? "You're climbing the stairway to heaven ♫" : `${pctDisplay}% climbed`}</div>
+        <div class="pct" id="peek-pct" data-stairway-text="You're climbing the stairway to heaven ♫">${pctDisplay}% climbed</div>
         <div class="sub">${esc(captionSub)}</div>
       </div>
     </div>
@@ -3318,14 +3318,30 @@ function startPeekAnimation(){
     const pt = len<=climbLen ? path.getPointAtLength(len) : stairPath.getPointAtLength(len-climbLen);
     runner.setAttribute('transform', `translate(${pt.x} ${pt.y})`);
   };
+  // The staircase, its notes, and the playful caption line all stay hidden until the
+  // runner's animated position actually reaches the summit - revealed here as one small
+  // moment instead of being visible the instant the modal opens, so beating the plan is a
+  // surprise you climb into, not something spoiled before the runner has taken a step.
+  let revealed = false;
+  const reveal = () => {
+    if(revealed || !stairPath) return;
+    revealed = true;
+    stairPath.style.opacity = '1';
+    const notes = document.getElementById('peek-notes');
+    if(notes) notes.style.opacity = '1';
+    const pctEl = document.getElementById('peek-pct');
+    if(pctEl){ pctEl.textContent = pctEl.dataset.stairwayText; pctEl.style.fontSize = '19px'; }
+  };
   runner.setAttribute('opacity','1');
-  if(reduceMotion || targetLen<=0){ place(targetLen); return; }
-  const durationMs = 2800;
+  if(reduceMotion || targetLen<=0){ place(targetLen); if(targetLen>=climbLen) reveal(); return; }
+  const durationMs = stairPath ? 3600 : 2800;
   const start = performance.now();
   function step(now){
     const t = clamp((now-start)/durationMs, 0, 1);
     const eased = 1 - Math.pow(1-t, 3);
-    place(eased*targetLen);
+    const len = eased*targetLen;
+    place(len);
+    if(len>=climbLen) reveal();
     if(t<1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
