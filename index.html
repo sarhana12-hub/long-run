@@ -3089,7 +3089,12 @@ function planMileageProgress(plan){
   const planStart = parseDate(plan.weeks[0].weekStart);
   const today = todayDate();
   const loggedKm = state.logs.filter(l=>{ const d=parseDate(l.date); return d>=planStart && d<=today; }).reduce((s,l)=>s+l.distanceKm,0);
-  return {loggedKm, totalPlanKm, frac: clamp(loggedKm/totalPlanKm,0,1)};
+  const rawFrac = loggedKm/totalPlanKm;
+  // `frac` stays clamped to 0-1 for anything positioning a marker on a bounded chart (the
+  // trail's y-axis, Peek the Peak's climb path - neither can physically place something
+  // past their own top edge); `rawFrac` is the real, uncapped ratio for anywhere that wants
+  // to say something honest about actually beating the plan's total mileage.
+  return {loggedKm, totalPlanKm, frac: clamp(rawFrac,0,1), rawFrac};
 }
 
 // A persistent trail map of the plan itself, not a one-off illustration: elevation is
@@ -3211,8 +3216,8 @@ function renderTrainingTrail(plan, unit){
 // startPeekAnimation() for the runtime half of this (path.getTotalLength() needs a real
 // mounted DOM node, so the animation itself can't be precomputed into static markup the way
 // everything else in this app is).
-const PEEK_CLIMB_PTS = [[40,540],[88,486],[56,444],[104,402],[72,352],[124,310],[88,258],[140,216],[108,164],[154,122],[132,80],[164,42]];
-const PEEK_DESCENT_PTS = [[205,108],[188,180],[224,252],[202,334],[240,416],[218,478],[268,540]];
+const PEEK_CLIMB_PTS = [[15,540],[70,486],[30,444],[85,402],[48,352],[105,310],[72,258],[128,216],[98,164],[145,122],[128,80],[160,42]];
+const PEEK_DESCENT_PTS = [[215,108],[195,180],[240,252],[210,334],[260,416],[225,478],[305,540]];
 function renderPeekThePeak(){
   const plan = state.plan, unit = state.setup.units;
   const progress = planMileageProgress(plan);
@@ -3221,6 +3226,12 @@ function renderPeekThePeak(){
   const capPts = PEEK_CLIMB_PTS.slice(6).concat(PEEK_DESCENT_PTS.slice(0,3));
   const capD = 'M ' + capPts.map(p=>p.join(' ')).join(' L ') + ' Z';
   const summit = PEEK_CLIMB_PTS[PEEK_CLIMB_PTS.length-1];
+  const flagLabel = plan.planKind ? 'FINISH' : 'RACE DAY';
+  const pctDisplay = Math.round(progress.rawFrac*100);
+  const overshootKm = Math.max(0, progress.loggedKm-progress.totalPlanKm);
+  const captionSub = progress.rawFrac>1
+    ? `Summit reached — ${fmtDist(overshootKm,unit,1)} beyond this plan's ${fmtDist(progress.totalPlanKm,unit,0)} planned miles`
+    : `${fmtDist(progress.loggedKm,unit,1)} of ${fmtDist(progress.totalPlanKm,unit,0)} planned miles for this plan`;
   return `<div class="overlay peek-overlay" data-act="close-modal-overlay">
     <div class="peek-card" data-stop="1">
       <button class="peek-close" data-act="close-modal" aria-label="Close">${ICONS.close}</button>
@@ -3244,6 +3255,7 @@ function renderPeekThePeak(){
         <path d="${capD}" fill="#eef3f7" opacity="0.92"/>
         <path d="M ${summit[0]} ${summit[1]} L ${summit[0]} ${summit[1]-34}" stroke="#dfe6ea" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M ${summit[0]} ${summit[1]-34} L ${summit[0]} ${summit[1]-20} L ${summit[0]+26} ${summit[1]-27} Z" fill="var(--accent-strong)"/>
+        <text x="${summit[0]+32}" y="${summit[1]-19}" fill="#fff" font-size="12" font-weight="800" letter-spacing="1" font-family="system-ui, sans-serif" stroke="#0b1120" stroke-width="3" paint-order="stroke fill">${esc(flagLabel)}</text>
         <path id="peek-climb-path" d="${climbD}" fill="none" stroke="none"/>
         <g id="peek-runner" stroke="#e0483e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0">
           <circle cx="0" cy="-15" r="2.8" fill="#e0483e" stroke="none"/>
@@ -3255,8 +3267,8 @@ function renderPeekThePeak(){
         </g>
       </svg>
       <div class="peek-caption">
-        <div class="pct">${Math.round(progress.frac*100)}% climbed</div>
-        <div class="sub">${fmtDist(progress.loggedKm,unit,1)} of ${fmtDist(progress.totalPlanKm,unit,0)} planned miles for this plan</div>
+        <div class="pct">${pctDisplay}% climbed</div>
+        <div class="sub">${esc(captionSub)}</div>
       </div>
     </div>
   </div>`;
