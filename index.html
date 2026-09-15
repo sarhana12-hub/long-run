@@ -2859,7 +2859,7 @@ function computeProgressStats(){
     unit, totalLoggedKm, totalLoggedCount,
     loggedKmToDate, plannedToDateKm, mileageDeltaKm, mileageStatusLabel,
     plannedRunDatesToDateCount: plannedRunDatesToDate.length, completedPlannedRuns, adherence,
-    totalPlanTrainingKm, pctPlanMilesLogged,
+    totalPlanTrainingKm, planScopedLoggedKm, pctPlanMilesLogged,
     raceProjection, generalProjections,
   };
 }
@@ -4142,7 +4142,7 @@ function renderStatDetailModal(statKey){
   } else if(statKey==='training-miles'){
     title = 'Training miles logged';
     content = statCompareRowHtml(
-      fmtDist(s.totalLoggedKm,unit,1), 'logged',
+      fmtDist(s.planScopedLoggedKm,unit,1), 'logged',
       fmtDist(s.totalPlanTrainingKm,unit,0), 'total plan training'
     ) + statResultHtml(`${s.pctPlanMilesLogged}%`, 'of training miles logged', 'var(--accent-strong)');
     footnote = "Race day itself isn't counted — that's the event, not training.";
