@@ -2561,6 +2561,16 @@ function computeProgressStats(){
   const plan = state.plan, unit = state.setup.units;
   const totalLoggedKm = state.logs.reduce((s,l)=>s+l.distanceKm,0);
   const totalLoggedCount = state.logs.length;
+  // Deliberately lifetime, unlike almost everything else below this line - this is the one
+  // pair of numbers actually meant to span every plan you've ever had (the "total logged"
+  // tile and the mileage-ladder achievements both want your whole running history, not just
+  // this plan's slice of it). Everything that's supposed to measure THIS plan specifically
+  // needs its own lower bound - see planStart just below - a mistake this file made once
+  // already (pctPlanMilesLogged and loggedKmToDate both used to read straight off
+  // totalLoggedKm/an unbounded log filter, so switching plans without a lot of history would
+  // silently carry old mileage into a brand new plan's "ahead of schedule" and "% of plan
+  // logged" numbers even though not a single run had been logged against it yet).
+  const planStart = parseDate(plan.weeks[0].weekStart);
   // "Behind/ahead of plan" and adherence both compare against a single as-of date, not
   // necessarily today - if nothing's logged for today yet, today gets the benefit of the
   // doubt (it's not "missed" just because it's still morning) and the cutoff holds at
@@ -2572,7 +2582,7 @@ function computeProgressStats(){
   const today = todayDate();
   const hasLoggedToday = state.logs.some(l=>parseDate(l.date).getTime()===today.getTime());
   const statusCutoff = hasLoggedToday ? today : addDays(today,-1);
-  const loggedKmToDate = state.logs.filter(l=>parseDate(l.date)<=statusCutoff).reduce((s,l)=>s+l.distanceKm,0);
+  const loggedKmToDate = state.logs.filter(l=>{ const d=parseDate(l.date); return d>=planStart && d<=statusCutoff; }).reduce((s,l)=>s+l.distanceKm,0);
   const plannedToDateWeeks = plan.weeks.filter(w=>parseDate(w.weekStart) <= statusCutoff);
   const plannedToDateKm = plannedToDateWeeks.reduce((s,w)=>{
     return s + w.days.filter(d=>parseDate(d.date)<=statusCutoff).reduce((s2,d)=>s2+d.km,0);
@@ -2596,7 +2606,8 @@ function computeProgressStats(){
   // of the whole plan's training mileage — every week, not just the ones behind you —
   // have you actually logged. Race day itself isn't "training" so it's excluded.
   const totalPlanTrainingKm = plan.weeks.reduce((s,w)=> s + w.days.filter(d=>d.type!=='race').reduce((s2,d)=>s2+d.km,0), 0);
-  const pctPlanMilesLogged = totalPlanTrainingKm>0 ? Math.round(100*Math.min(1, totalLoggedKm/totalPlanTrainingKm)) : 0;
+  const planScopedLoggedKm = state.logs.filter(l=>parseDate(l.date)>=planStart).reduce((s,l)=>s+l.distanceKm,0);
+  const pctPlanMilesLogged = totalPlanTrainingKm>0 ? Math.round(100*Math.min(1, planScopedLoggedKm/totalPlanTrainingKm)) : 0;
 
   // "What would I run right now" vs "what would I have run on day one" — current fitness
   // compared to starting fitness, not the plan's own future goal. Race plans headline their
