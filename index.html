@@ -991,6 +991,18 @@ function parsePaceInput(val, unit, fmt){
   return unit==='mi' ? secPerUnit/KM_PER_MI : secPerUnit;
 }
 
+// How much a weekly-mileage jump is safe to ask for, as a fraction of CURRENT volume -
+// tapers down as that volume climbs, since the same relative jump is a much bigger
+// absolute jolt at higher mileage (10% of 15mi/week is 1.5mi; 10% of 60mi/week is 6mi).
+// Rough, intentionally conservative figures for a recreational runner, not derived from a
+// single controlled study - the oft-quoted "10% rule" itself isn't rigorously validated
+// either (a well-known RCT on novice runners found a MORE aggressive ramp than 10%/week
+// didn't raise injury rates), so treat this as a sensible taper on a soft heuristic, not a
+// hard physiological limit.
+function weeklyGrowthRateFor(km){
+  return interp([[unitToKm(15,'mi'),0.10],[unitToKm(40,'mi'),0.07],[unitToKm(60,'mi'),0.05],[unitToKm(90,'mi'),0.03]], km);
+}
+
 function generatePlan(setup, dayOneOverride){
   const today = todayDate();
   const raceDate = parseDate(setup.raceDate);
@@ -1042,20 +1054,31 @@ function generatePlan(setup, dayOneOverride){
   // recreational runner, not a hard physiological limit - tune the table if that judgment
   // call needs revisiting.
   const sanePeakWeeklyCapKm = interp([[5,40],[10,48],[15,51],[21.0975,56],[32.19,72],[42.195,88]], raceKm);
-  // The 1.35x figure above is really a single-week growth-rate limit wearing a "final
-  // ceiling" costume - a runner with a longer build genuinely can reach further than that
-  // via ordinary ~10%/week compounding, and there's no physiological reason to deny them
-  // that just because of where their mileage happened to be on day one. Modeled as real
-  // uninterrupted 10%/week compounding over the weeks actually available to build
-  // (`buildWeeksCountForCap`), taking the more generous of that or the flat 1.35x floor so
-  // short plans behave exactly as before. Self-limiting on both ends: `sanePeakWeeklyCapKm`
-  // above still caps a high-mileage runner regardless of how long their build is, and
-  // `idealPeakWeeklyKm` (the clamp's own target value) stops this from ever demanding more
-  // growth than the race distance actually calls for once a long enough build makes it
-  // reachable.
-  const compoundedGrowthCapKm = currentKm * Math.pow(1.10, Math.max(buildWeeksCountForCap-1, 0));
-  const growthCapKm = Math.min(Math.max(currentKm*1.35, compoundedGrowthCapKm), sanePeakWeeklyCapKm);
-  let peakWeeklyKm = clamp(idealPeakWeeklyKm, currentKm*1.10, growthCapKm);
+  // A runner with a longer build genuinely can reach further than a single week's growth
+  // rate would suggest, via ordinary compounding over the weeks actually available - there's
+  // no physiological reason to deny that just because of where their mileage happened to be
+  // on day one. But naive uninterrupted compounding (`currentKm * 1.10^weeks`) assumes
+  // something no real plan would ever prescribe: the SAME weekly rate held for weeks or even
+  // months on end, with no deload. Real buildups don't work that way - it's exactly why this
+  // function's own `buildVols` ramp below only lets growth run for 3 weeks before resetting
+  // on a 4th cutback week (see the loop there) - and a rate that never comes down as volume
+  // climbs is its own problem regardless of interruptions (10% of 15mi/week and 10% of
+  // 60mi/week are very different asks). So the ceiling is simulated here the same
+  // interrupted way `buildVols` actually ramps (3-up-1-cutback, reset toward `currentKm`),
+  // using `weeklyGrowthRateFor` at each step rather than a flat rate - both effects compound
+  // together, and a plan with many build weeks naturally plateaus rather than compounding
+  // forever, so this stays sane out to 30+ weeks without needing a separate cap for that.
+  // Floored at a single real 10%-ish week of growth (never less than before this fix existed)
+  // so the clamp below always has a valid, non-degenerate range to work with.
+  let simulatedVol = currentKm;
+  for(let i=0; i<buildWeeksCountForCap; i++){
+    const isCutback = i>0 && (i % 4 === 3);
+    if(isCutback) simulatedVol = Math.max(currentKm, simulatedVol*0.8);
+    else if(i>0) simulatedVol = simulatedVol * (1 + weeklyGrowthRateFor(simulatedVol));
+  }
+  const minWeekGrowthKm = currentKm*(1+weeklyGrowthRateFor(currentKm));
+  const growthCapKm = Math.min(Math.max(minWeekGrowthKm, simulatedVol), sanePeakWeeklyCapKm);
+  let peakWeeklyKm = clamp(idealPeakWeeklyKm, minWeekGrowthKm, growthCapKm);
   // With peak week capped, let the long run be a larger share of it (up to 34%) rather
   // than silently shrinking the peak long run itself below the race-distance target.
   let achievablePeakLongKm = Math.min(peakLongKm, peakWeeklyKm*0.34*longEmphasis.fractionScale);
