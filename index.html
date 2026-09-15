@@ -1645,6 +1645,38 @@ function distanceGoalWarning(fromKm, toKm, weeks){
   return null;
 }
 
+// Same explicit-warning-not-a-silent-clamp philosophy as distanceGoalWarning above, for
+// race plans specifically: is there actually enough time to reach a proper race-ready long
+// run, or is the plan quietly going to fall well short of it? A deliberately light,
+// standalone formula (not a call into generatePlan itself) so it's cheap to re-evaluate on
+// every onboarding render, same reasoning as distanceGoalWarning's own independent
+// 10%-rule math rather than calling generateDistancePlan - mirrors generatePlan's own
+// peakLongKm/longFraction/naturalStartLongKm/increment math (see the "long run's own climb"
+// comment there), so keep the two in sync if that formula ever changes. Found via a
+// systematic sanity sweep across dozens of scenarios: a 6-7 week marathon build from a
+// modest weekly base landed on an 8-10mi peak long run with nothing telling the runner why -
+// this makes that gap visible instead of silent.
+function raceLongRunWarning(raceDistanceKm, raceDate, trainingStartDate, currentWeeklyKm, longRunEmphasis, unit){
+  if(!raceDistanceKm || !raceDate || !(currentWeeklyKm>=0)) return null;
+  const raceDateP = parseDate(raceDate);
+  const anchor = trainingStartDate ? parseDate(trainingStartDate) : todayDate();
+  if(anchor>=raceDateP) return null;
+  const totalWeeks = Math.max(1, Math.ceil((daysBetween(startOfWeek(anchor), raceDateP)+1)/7));
+  const emphasis = LONG_EMPHASIS_PARAMS[longRunEmphasis] || LONG_EMPHASIS_PARAMS.balanced;
+  const peakLongKm = interp([[5,9],[10,13],[15,14.5],[21.0975,18],[32.19,26],[42.195,32]], raceDistanceKm) * emphasis.peakScale;
+  const longFraction = interp([[5,0.35],[10,0.32],[15,0.30],[21.0975,0.30],[32.19,0.24],[42.195,0.20]], raceDistanceKm) * emphasis.fractionScale;
+  let taperWeeks = Math.round(interp([[5,1],[10,1],[15,1],[21.0975,2],[32.19,2],[42.195,3]], raceDistanceKm));
+  taperWeeks = clamp(taperWeeks, 1, Math.max(1,totalWeeks-1));
+  if(totalWeeks<=2) taperWeeks = totalWeeks;
+  const buildWeeksCount = Math.max(0, totalWeeks - taperWeeks);
+  const naturalStartLongKm = currentWeeklyKm*longFraction;
+  const incrementKm = unitToKm(1,'mi')*emphasis.fractionScale;
+  const achievableKm = Math.min(peakLongKm, naturalStartLongKm + incrementKm*Math.max(buildWeeksCount-1,0));
+  const shortfallFrac = peakLongKm>0 ? (peakLongKm-achievableKm)/peakLongKm : 0;
+  if(shortfallFrac < 0.20) return null;
+  return `${totalWeeks} weeks isn't quite enough time to safely build up to a fully race-ready long run from ${round1(kmToUnit(currentWeeklyKm,unit))}${unit}/week — this plan will realistically top out around ${round1(kmToUnit(achievableKm,unit))}${unit} instead of the usual ${round1(kmToUnit(peakLongKm,unit))}${unit}, since building distance any faster than that raises real injury risk. If you can, consider pushing your race date back — or treat this one as more of a finish-focused effort than a performance goal.`;
+}
+
 // Maintenance: deliberately flat, not progressive - the point is holding fitness
 // steady, so weekly volume doesn't ramp and there's no cutback week (nothing being
 // built up that needs unloading). One moderate tempo session a week keeps fitness
@@ -2498,12 +2530,18 @@ function renderOnboardStep2(d){
     `;
   })();
 
+  const longRunWarning = isGeneral ? null : raceLongRunWarning(
+    d.raceDistanceKm, d.raceDate, d.trainingStartDate,
+    unitToKm(Number(d.currentWeeklyMi)||0, d.units), d.longRunEmphasis, d.units
+  );
+
   return `
     <div class="section-title" style="margin-top:0;">Current fitness</div>
     <div class="field">
       <label class="field-label">Current weekly mileage (${d.units})</label>
       <input class="input" type="number" min="0" step="1" id="in-weekly" value="${d.currentWeeklyMi}">
       <div class="hint">Rough average over the last few weeks is fine.</div>
+      ${longRunWarning ? `<div class="banner" style="margin-top:10px;">${esc(longRunWarning)}</div>` : ''}
     </div>
     ${!isGeneral ? `
     <div class="field">
