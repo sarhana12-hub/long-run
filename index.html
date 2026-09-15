@@ -234,6 +234,20 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .settings-row:last-child{border-bottom:none;}
 .settings-row .lbl{font-weight:700; font-size:14px;}
 .settings-row .sub{font-size:12px; color:var(--muted); margin-top:2px;}
+
+.split-row{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line-soft);}
+.split-row:last-child{border-bottom:none;}
+.split-row .split-i{width:26px; font-size:11px; font-weight:800; color:var(--muted); flex:none;}
+.split-row .split-d{flex:1; font-weight:700; font-size:13.5px;}
+.split-row .split-p{font-size:12px; color:var(--muted); margin-top:1px;}
+.split-row .split-t{font-weight:800; flex:none;}
+.split-row.checkpoint{background:var(--accent-soft); margin:0 -16px; padding:10px 16px; border-bottom-color:transparent; border-radius:10px;}
+.split-cue{font-size:12px; color:var(--ink-soft); margin:-4px -16px 4px; padding:0 16px 10px; background:var(--accent-soft); border-radius:0 0 10px 10px;}
+@media print{
+  body *{ visibility:hidden; }
+  .pacing-print, .pacing-print *{ visibility:visible; }
+  .pacing-print{ position:absolute; left:0; top:0; width:100%; padding:20px; }
+}
 </style>
 </head>
 <body>
@@ -3393,6 +3407,7 @@ function renderSettingsTab(){
       <div class="hint" style="padding:0 0 12px;">${isGeneralPlan(s) ? 'Training paces are calibrated to your current fitness.' : 'Training paces gradually get faster as your plan builds toward peak fitness, then hold steady through the taper.'}${recal ? ` Right now they're also adjusted based on your last ${recal.count} logged tempo/interval/over-under run${recal.count===1?'':'s'}.` : ''}</div>
       ${!isGeneralPlan(s) && s.hillsMode==='hilly' && (s.strengthPerWeek||0)<2 ? `<div class="hint" style="padding:0 0 12px; color:var(--z-tempo);">Hilly course — most coaches recommend at least 2 strength sessions/week for the eccentric demand of climbs and descents. You're currently set to ${s.strengthPerWeek||0}.</div>` : ''}
     </div>
+    ${!isGeneralPlan(s) ? `<button class="btn btn-block" data-act="open-pacing-sheet" style="margin:-4px 0 20px;">${ICONS.flag} Race-day pacing sheet</button>` : ''}
 
     <div class="section-title">Your starting inputs</div>
     <div class="card" style="padding:6px 16px;">
@@ -3461,6 +3476,7 @@ function renderModal(){
   if(m.type==='stat-detail') return renderStatDetailModal(m.stat);
   if(m.type==='milestone') return modalMilestone(m.data);
   if(m.type==='achievements') return renderAchievementsScreen();
+  if(m.type==='pacing-sheet') return renderPacingSheet(m.strategy||'even');
   return '';
 }
 
@@ -3603,6 +3619,97 @@ function renderStatDetailModal(statKey){
     footnote = `Pace: ${paceOrSpeedStr(p.start.paceSecPerKm,unit,state.paceFormat)} at the start vs ${paceOrSpeedStr(p.current.paceSecPerKm,unit,state.paceFormat)} today. Based on your training paces, not a specific logged race result.`;
   }
   return modalShell(title, `${content}${footnote?`<div class="hint" style="text-align:center; margin-top:16px;">${footnote}</div>`:''}`);
+}
+
+// Race-distance-aware checkpoint cues - the same four moments in every distance, keyed to
+// how far into the race they fall rather than a fixed mile number, so a 5K and a marathon
+// each get proportionally-placed advice instead of the marathon's own landmarks (mile 20,
+// specifically) leaking into races that don't have one.
+const PACING_CHECKPOINTS = [
+  {frac:0.15, tag:'early', cue:"Still feels easy? Good — most races are lost in the first mile, not the last."},
+  {frac:0.5, tag:'half', cue:"Resist the urge to bank time here. An even effort now beats a fast start you pay for later."},
+  {frac:0.78, tag:'late', cue:"This is where the race actually starts. Trust the fitness you've banked and hold your form."},
+  {frac:1.0, tag:'finish', cue:"Empty the tank — you've already done everything this moment needed."},
+];
+// Splits + cumulative clock time for the whole race, in the runner's own display unit.
+// strategy 'even' holds goal pace flat throughout; 'negative' eases from ~3% slower than
+// goal pace at the start to ~3% faster at the finish, a well-established marathon-coaching
+// pattern - real negative splits correlate with better outcomes than an even effort that's
+// actually a fade, precisely because most runners' "even effort" drifts positive on its own.
+// The two ends of that ramp average out to exactly the stated goal pace either way.
+function computePacingSheet(plan, setup, unit, strategy){
+  const goalPaceSecPerKm = getWeekPaces(plan, findWeekForToday(plan), state.logs).racePerKm;
+  if(goalPaceSecPerKm==null) return null;
+  const raceDistUnit = kmToUnit(plan.raceDistanceKm, unit);
+  const numFull = Math.floor(raceDistUnit + 1e-9);
+  const remainder = raceDistUnit - numFull;
+  const dists = [];
+  for(let i=0;i<numFull;i++) dists.push((i===numFull-1 && remainder<=0.05) ? 1+remainder : 1);
+  if(remainder>0.05) dists.push(remainder);
+  const total = dists.length;
+  let cumDist = 0, cumSec = 0;
+  const splits = dists.map((d,i)=>{
+    // Everything pace/time stays in per-km terms throughout (same convention as every other
+    // pace value in this app), so paceOrSpeedStr can render it directly with no separate
+    // unit-conversion math duplicated here - only the split's own distance is unit-native,
+    // since "mile splits" are inherently a display-unit concept.
+    const splitPaceSecPerKm = goalPaceSecPerKm * (strategy==='negative' && total>1 ? (1.03 - 0.06*(i/(total-1))) : 1);
+    const splitSec = splitPaceSecPerKm * unitToKm(d, unit);
+    cumDist += d; cumSec += splitSec;
+    return {i, distThis:d, cumDist, splitPaceSecPerKm, cumSec};
+  });
+  // Snap each checkpoint fraction to the nearest split, skipping one that would land on a
+  // split already claimed by an earlier checkpoint - short races (a 5K, especially in km)
+  // can otherwise put "early" and "half" on the very same split.
+  const claimed = new Set();
+  const checkpoints = {};
+  PACING_CHECKPOINTS.forEach(cp=>{
+    let best=-1, bestDiff=Infinity;
+    splits.forEach(s=>{
+      if(claimed.has(s.i)) return;
+      const diff = Math.abs(s.cumDist/raceDistUnit - cp.frac);
+      if(diff<bestDiff){ bestDiff=diff; best=s.i; }
+    });
+    if(best!==-1){ claimed.add(best); checkpoints[best]=cp; }
+  });
+  return {goalPaceSecPerKm, raceDistUnit, splits, checkpoints, hasExplicitGoal: setup.goalTimeSec!=null};
+}
+
+function renderPacingSheet(strategy){
+  const plan = state.plan, setup = state.setup, unit = setup.units, fmt = state.paceFormat;
+  const sheet = computePacingSheet(plan, setup, unit, strategy);
+  if(!sheet){
+    return modalShell('Race-day pacing sheet', `<div class="hint">Set a goal time in Settings, or log a recent race, so there's a pace to build splits from.</div>`);
+  }
+  const rows = sheet.splits.map(s=>{
+    const cp = sheet.checkpoints[s.i];
+    const isLast = s.i===sheet.splits.length-1;
+    const distLabel = isLast && Math.abs(s.cumDist-Math.round(s.cumDist))>0.02 ? s.cumDist.toFixed(1) : Math.round(s.cumDist);
+    return `<div class="split-row ${cp?'checkpoint':''}">
+      <div class="split-i">${unit==='mi'?'MI':'KM'}<br>${distLabel}</div>
+      <div style="flex:1;">
+        <div class="split-p">${paceOrSpeedStr(s.splitPaceSecPerKm,unit,fmt)} this ${unit==='mi'?'mile':'km'}</div>
+      </div>
+      <div class="split-t mono">${secToClock(s.cumSec)}</div>
+    </div>${cp?`<div class="split-cue">${esc(cp.cue)}</div>`:''}`;
+  }).join('');
+  const finishSec = sheet.splits[sheet.splits.length-1].cumSec;
+  return modalShell('Race-day pacing sheet', `
+    <div class="pacing-print">
+      <div class="hint" style="margin:-8px 0 4px;">${esc(planLabel(setup))} · ${sheet.hasExplicitGoal?'your stated goal':"your current projected pace — set a goal time in Settings to target a specific one"}</div>
+      <div style="text-align:center; margin:10px 0 18px;">
+        <div class="mono" style="font-size:34px; font-weight:800;">${secToClock(finishSec)}</div>
+        <div class="hint" style="margin-top:2px;">${paceOrSpeedStr(sheet.goalPaceSecPerKm,unit,fmt)} average</div>
+      </div>
+      <div class="chip-select" style="margin-bottom:14px;">
+        <button class="chip ${strategy!=='negative'?'active':''}" data-act="set-pacing-strategy" data-strategy="even">Even effort</button>
+        <button class="chip ${strategy==='negative'?'active':''}" data-act="set-pacing-strategy" data-strategy="negative">Negative split</button>
+      </div>
+      <div class="hint" style="margin-bottom:14px;">${strategy==='negative' ? "Starts about 3% slower than goal pace and eases to about 3% faster by the finish — same average time, run smarter instead of just holding on." : "Holds your goal pace the entire way."}</div>
+      <div class="card" style="padding:0 16px; margin-bottom:14px;">${rows}</div>
+      <button class="btn btn-block" data-act="print-pacing-sheet">Print / save as PDF</button>
+    </div>
+  `);
 }
 
 function modalShell(title, innerHtml, headerButtonHtml){
@@ -3834,6 +3941,7 @@ function renderDayDetail(){
       : descriptionParts.length===1 ? `<div style="font-size:14.5px; color:var(--ink-soft); margin-bottom:16px;">${esc(descriptionParts[0])}</div>` : ''}
     ${strengthFocusNote ? `<div class="hint" style="margin:-10px 0 16px;">${esc(strengthFocusNote)}</div>` : ''}
     ${day.strength ? `<button class="btn btn-block" data-act="toggle-strength-done" data-date="${day.date}" style="margin-bottom:16px; ${isStrengthDone?'color:var(--accent-strong); border-color:var(--accent-strong);':''}">${isStrengthDone?`${ICONS.check} Strength completed`:'Mark strength completed'}</button>` : ''}
+    ${day.type==='race' ? `<button class="btn btn-primary btn-block" data-act="open-pacing-sheet" style="margin-bottom:16px;">${ICONS.flag} View pacing sheet</button>` : ''}
     ${matchedLogs.map(log=>renderLoggedComparisonHtml(day, log, state.plan, week, state.logs, unit, fmt)).join('')}
     ${purpose ? `
     <div class="field">
@@ -4149,6 +4257,15 @@ function onClick(e){
     state.modal={type:'achievements'};
     render(); return;
   }
+  if(act==='open-pacing-sheet'){
+    state.modal={type:'pacing-sheet', strategy:'even'};
+    render(); return;
+  }
+  if(act==='set-pacing-strategy'){
+    state.modal.strategy = el.dataset.strategy;
+    render(); return;
+  }
+  if(act==='print-pacing-sheet'){ window.print(); return; }
 
   if(act==='open-day'){
     const di = Number(el.dataset.i);
