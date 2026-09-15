@@ -2445,20 +2445,21 @@ function computeProgressStats(){
   const plan = state.plan, unit = state.setup.units;
   const totalLoggedKm = state.logs.reduce((s,l)=>s+l.distanceKm,0);
   const totalLoggedCount = state.logs.length;
-  // Scoped to logs dated today or earlier — otherwise a run logged ahead of schedule (or
-  // just entered against the wrong date) silently erases "behind plan", since it would
-  // count toward miles done without the corresponding day having actually happened yet.
-  // Deliberately NOT the same cutoff as "planned to date" below - today's own log still
-  // counts the moment it exists (an early run logged this morning should show up as
-  // progress right away), it's only what the plan EXPECTS by today that waits until
-  // today's actually over, so a run not yet done this morning never reads as "behind."
-  const loggedKmToDate = state.logs.filter(l=>parseDate(l.date)<=todayDate()).reduce((s,l)=>s+l.distanceKm,0);
-  const plannedToDateWeeks = plan.weeks.filter(w=>parseDate(w.weekStart) <= todayDate());
-  // "Planned to date" stops at yesterday, not today - today's planned distance doesn't
-  // count as "due" until the day is actually over, so a runner who hasn't gotten to
-  // today's run yet (it's still morning, say) never reads as behind schedule for it.
+  // "Behind/ahead of plan" and adherence both compare against a single as-of date, not
+  // necessarily today - if nothing's logged for today yet, today gets the benefit of the
+  // doubt (it's not "missed" just because it's still morning) and the cutoff holds at
+  // yesterday; the moment today has a log, the cutoff advances to today and BOTH sides
+  // (what's logged, what's planned) update together, so a logged run is never compared
+  // against a stale "planned through yesterday" total - todayDate() itself is a valid
+  // fallback since a plan never schedules dates before it, guarding future-dated logs the
+  // same way the old today-only cutoff did.
+  const today = todayDate();
+  const hasLoggedToday = state.logs.some(l=>parseDate(l.date).getTime()===today.getTime());
+  const statusCutoff = hasLoggedToday ? today : addDays(today,-1);
+  const loggedKmToDate = state.logs.filter(l=>parseDate(l.date)<=statusCutoff).reduce((s,l)=>s+l.distanceKm,0);
+  const plannedToDateWeeks = plan.weeks.filter(w=>parseDate(w.weekStart) <= statusCutoff);
   const plannedToDateKm = plannedToDateWeeks.reduce((s,w)=>{
-    return s + w.days.filter(d=>parseDate(d.date)<todayDate()).reduce((s2,d)=>s2+d.km,0);
+    return s + w.days.filter(d=>parseDate(d.date)<=statusCutoff).reduce((s2,d)=>s2+d.km,0);
   },0);
   // Positive means behind (planned more than you've logged); negative means you've
   // logged more than the plan called for so far — genuinely possible (extra volume, or
@@ -2469,10 +2470,9 @@ function computeProgressStats(){
   // least one log against that specific date — not a raw log-entry count, which would
   // double-count a day logged in two pieces and would also count logs against future or
   // rest days that were never part of what "completed so far" should be measuring. Same
-  // yesterday-cutoff as plannedToDateKm above - today's scheduled run isn't "missed" just
-  // because it's still morning, so it doesn't enter the denominator until tomorrow.
+  // statusCutoff as plannedToDateKm above.
   const plannedRunDatesToDate = [];
-  plannedToDateWeeks.forEach(w=>w.days.forEach(d=>{ if(parseDate(d.date)<todayDate() && d.km>0) plannedRunDatesToDate.push(d.date); }));
+  plannedToDateWeeks.forEach(w=>w.days.forEach(d=>{ if(parseDate(d.date)<=statusCutoff && d.km>0) plannedRunDatesToDate.push(d.date); }));
   const loggedDates = new Set(state.logs.map(l=>l.date));
   const completedPlannedRuns = plannedRunDatesToDate.filter(date=>loggedDates.has(date)).length;
   const adherence = plannedRunDatesToDate.length>0 ? Math.round(100*completedPlannedRuns/plannedRunDatesToDate.length) : 0;
@@ -3008,7 +3008,7 @@ function renderStatDetailModal(statKey){
       s.completedPlannedRuns, 'days with a run completed',
       s.plannedRunDatesToDateCount, 'days with a run scheduled'
     ) + statResultHtml(`${s.adherence}%`, 'plan adherence', 'var(--accent-strong)');
-    footnote = "Only counts days before today that the plan scheduled a run — today's own run isn't due yet, so it can't count against you.";
+    footnote = "Counts through yesterday until you log something today — once you do, today counts too, both what was scheduled and what you ran.";
   } else if(statKey==='mileage-delta'){
     title = s.mileageStatusLabel==='behind plan' ? 'Behind plan' : s.mileageStatusLabel==='ahead of plan' ? 'Ahead of plan' : 'On plan';
     const resultColor = s.mileageStatusLabel==='behind plan' ? 'var(--z-tempo)' : (s.mileageStatusLabel==='ahead of plan' ? 'var(--accent-strong)' : 'var(--muted)');
@@ -3016,7 +3016,7 @@ function renderStatDetailModal(statKey){
       fmtDist(s.plannedToDateKm,unit,1), 'planned to date',
       fmtDist(s.loggedKmToDate,unit,1), 'logged to date'
     ) + statResultHtml(fmtDist(Math.abs(s.mileageDeltaKm),unit,1), s.mileageStatusLabel, resultColor);
-    footnote = "Planned to date stops at yesterday — today's mileage isn't due yet, so it's never counted against you, but a run you've already logged today still counts in your favor.";
+    footnote = "Compares through yesterday until you log a run today — the moment you do, today's own planned distance and logged distance both count too, so it's always an apples-to-apples comparison.";
   } else if(statKey==='race-projection' || (statKey && statKey.startsWith('general-projection-'))){
     const p = statKey==='race-projection' ? s.raceProjection : s.generalProjections.find(x=>statKey===`general-projection-${x.key}`);
     title = statKey==='race-projection' ? 'Projected race performance' : `Projected ${p.label} performance`;
