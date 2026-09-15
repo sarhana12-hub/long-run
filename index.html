@@ -297,6 +297,17 @@ const QUALITY_WARMUP_KM = 1.5; // ~10-15 min easy for most paces
 // generatePlan's easyIdxs.forEach can assign strides to (easy days, plus the fartlek/
 // progression variety picks drawn from that same pool).
 const STRIDES_ELIGIBLE_TYPES = ['easy','fartlek','progression'];
+// Strides cover more real ground than it looks like on paper - 6 x 20s of near-top-speed
+// running is genuine distance, and "full recovery" between reps (60-90s+ walking/easy
+// jogging so each rep is run fresh) adds real time and distance on top, which a flat
+// per-day figure ignored entirely until now. Kept as a flat per-rep distance (not scaled
+// to the runner's own pace) for the same reason hills/cruise/overunder already use flat
+// per-rep budgets rather than pace-derived ones - simple, and this is already an
+// approximation. STRIDES_REPS is the single source of truth for the rep count shown in
+// the description text AND used in this math, so they can't drift apart if it's ever
+// changed to something other than 6.
+const STRIDES_REPS = 6;
+const STRIDES_EXTRA_KM = unitToKm(0.25, 'mi'); // ~0.25mi total for STRIDES_REPS reps incl. recovery
 // Plain-language training purpose + target effort per workout type, shown in the
 // read-only day detail view so "why does this run exist" is answered without opening edit.
 const WORKOUT_PURPOSE = {
@@ -854,6 +865,17 @@ function lowercaseFirst(s){ return s.charAt(0).toLowerCase()+s.slice(1); }
 function optionalCooldownNote(day){
   return WARMUP_ELIGIBLE_TYPES.includes(day.type) ? 'an optional easy cool-down, as preferred' : null;
 }
+// day.km already has STRIDES_EXTRA_KM baked in whenever day.strides is true (see
+// generatePlan/buildGeneralWeekDays), so this names that portion explicitly rather than
+// leaving the runner to wonder whether strides are included in the distance shown or
+// tacked on beyond it - same "all miles accounted for" principle as the warm-up/cool-down
+// clauses above.
+function stridesDetail(day, unit){
+  const extra = fmtDist(STRIDES_EXTRA_KM, unit);
+  return day.hillStrides
+    ? `${STRIDES_REPS} × 10s hard effort uphill, walk back down to recover, about ${extra} of the total above`
+    : `${STRIDES_REPS} × 20s relaxed, full recovery, about ${extra} of the total above`;
+}
 function renderWorkoutText(day, weekPaces, unit, fmt){
   if(!day.descBase) return '';
   const segs = [];
@@ -871,7 +893,7 @@ function renderWorkoutText(day, weekPaces, unit, fmt){
   if(cooldown) segs.push(cooldown);
   else { const note = optionalCooldownNote(day); if(note) segs.push(note); }
   let text = segs.join(', then ');
-  if(day.strides) text += day.hillStrides ? ' + hill strides (6 × 10s hard effort uphill, walk back down to recover)' : ' + strides (6 × 20s relaxed, full recovery)';
+  if(day.strides) text += day.hillStrides ? ` + hill strides (${stridesDetail(day, unit)})` : ` + strides (${stridesDetail(day, unit)})`;
   if(day.terrain==='hilly') text += ' — rolling hills, run by effort not pace';
   else if(day.terrain==='suggested') text += ' — seek out rolling terrain if you can, it still builds strength and economy';
   return text;
@@ -906,7 +928,7 @@ function workoutPartsFor(day, weekPaces, unit, fmt){
   const cooldown = cooldownClause(day, weekPaces, unit, fmt);
   if(cooldown) parts.push(cooldown.charAt(0).toUpperCase()+cooldown.slice(1));
   else { const note = optionalCooldownNote(day); if(note) parts.push(note.charAt(0).toUpperCase()+note.slice(1)); }
-  if(day.strides) parts.push(day.hillStrides ? 'Finish with hill strides — 6 × 10s hard effort uphill, walk back down to recover' : 'Finish with strides — 6 × 20s relaxed, full recovery');
+  if(day.strides) parts.push((day.hillStrides ? 'Finish with hill strides — ' : 'Finish with strides — ') + stridesDetail(day, unit));
   if(day.terrain==='hilly') parts.push('Course: rolling hills — run by effort, not pace');
   else if(day.terrain==='suggested') parts.push('Course: seek out rolling terrain if you can — still builds strength and economy');
   return parts;
@@ -1161,6 +1183,11 @@ function generatePlan(setup){
     const stridesIdxs = [];
     if(aerobicIdx!=null) stridesIdxs.push(aerobicIdx);
     stridesEligible.forEach(i=>{ if(stridesIdxs.length<2 && !stridesIdxs.includes(i)) stridesIdxs.push(i); });
+    // Strides cover real extra ground once recovery is counted (see STRIDES_EXTRA_KM) -
+    // funded the same way the tempo/cruise/intervals warm-up is: trimmed from this week's
+    // easy-day pool before it's split up, then credited back onto the specific day(s) that
+    // actually get strides, so the week's total and every other day's share stay correct.
+    remaining = Math.max(0, remaining - stridesIdxs.length*STRIDES_EXTRA_KM);
 
     // A workout doesn't have to be a dedicated hill session to build hill fitness - the
     // long run and the week's longer "aerobic" easy run always carry a terrain note (the
@@ -1181,7 +1208,7 @@ function generatePlan(setup){
       days[i] = {
         ...days[i],
         type: isVariety ? varietyType : 'easy',
-        km: easyKmFor(i),
+        km: round1(easyKmFor(i) + (stridesIdxs.includes(i) ? STRIDES_EXTRA_KM : 0)),
         label: isVariety ? TYPE_META[varietyType].label : easyLabelFor(i),
         easyRole: easyRoleFor(i),
         strides: stridesIdxs.includes(i),
@@ -1280,8 +1307,12 @@ function buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, str
   const easyDaysNeeded = Math.max(0, runsPerWeek-usedRunDays);
   const candidateIdxs = days.map((x,i)=>i).filter(i=>i!==longIdx && !qualityIdxs.includes(i));
   const easyIdxs = candidateIdxs.slice(0, easyDaysNeeded);
+  // Same strides-funding treatment as race plans - trimmed from the shared easy-day pool
+  // before it's split up, credited back onto whichever single easy day (n===0) actually
+  // gets strides.
+  if(addStrides) remaining = Math.max(0, remaining - STRIDES_EXTRA_KM);
   const easyKmEach = easyIdxs.length ? round1(remaining/easyIdxs.length) : 0;
-  easyIdxs.forEach((i,n)=>{ days[i] = {...days[i], type:'easy', km:easyKmEach, label:'Easy Run', easyRole:'easy', strides: addStrides && n===0}; });
+  easyIdxs.forEach((i,n)=>{ const hasStrides = addStrides && n===0; days[i] = {...days[i], type:'easy', km: hasStrides ? round1(easyKmEach+STRIDES_EXTRA_KM) : easyKmEach, label:'Easy Run', easyRole:'easy', strides: hasStrides}; });
 
   days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run'};
 
