@@ -286,6 +286,18 @@ const QUALITY_TYPES = ['long','tempo','intervals','hills','fartlek','overunder',
 // cases), not a real hard effort, so they're excluded here even though their bare `type`
 // is in QUALITY_TYPES.
 function isLegDemandingDay(day){ return day.type==='long' || (QUALITY_TYPES.includes(day.type) && !day.easyVariety); }
+// Re-derives strengthFocus for every strength day in a week against its (possibly just-
+// changed) neighbor - same rule generatePlan/buildGeneralWeekDays apply once at creation
+// time, but a manual day swap (see move-target) can move a leg-demanding day next to a
+// strength day that was never flagged, or move one away from a day that was - so this has
+// to run again after any swap, not just once at generation.
+function recomputeStrengthFocus(days){
+  days.forEach((day,i)=>{
+    if(!day.strength) return;
+    const next = days[(i+1)%days.length];
+    day.strengthFocus = (isLegDemandingDay(day) || isLegDemandingDay(next)) ? 'upper' : null;
+  });
+}
 // Continuous/structured hard-pace efforts get a guaranteed warm-up (jumping into
 // threshold/interval pace cold hurts both quality and injury risk); hills already gets
 // one for free from its own capped-reps leftover, so it's deliberately not in this list.
@@ -3885,6 +3897,7 @@ function onClick(e){
       const keepA = {date:da.date, dow:da.dow, id:da.id}, keepB = {date:db_.date, dow:db_.dow, id:db_.id};
       week.days[a] = {...db_, ...keepA};
       week.days[b] = {...da, ...keepB};
+      recomputeStrengthFocus(week.days);
       Store.setPlan(state.plan);
       state.moveFrom=null;
       showToast('Swapped');
@@ -3914,6 +3927,7 @@ function onClick(e){
     state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0, easyVariety:false, terrain: terrainEligible ? day.terrain : null, hillStrides: hillStridesEligible ? day.hillStrides : false};
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
+    recomputeStrengthFocus(week.days);
     Store.setPlan(state.plan);
     state.modal=null; showToast('Day updated'); return;
   }
