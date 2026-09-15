@@ -3325,10 +3325,14 @@ function renderTrainingFlashback(unit, fmt){
 // logged so far (through today, scoped to this plan's own start date the same way every
 // other plan-relative stat in this app is) - the one shared "how far along is the climb,
 // really" figure, so the trail chart and Peek the Peak can never quietly disagree with
-// each other over what should be the same number.
+// each other over what should be the same number. Respects trackingStartDate (see
+// computeProgressStats) the same way that function does: for a backdated plan tracked from
+// today, the total is scoped down to only what's actually being tracked, so 100% is a real,
+// reachable number - not permanently out of reach because of training weeks that were never
+// going to be logged in the first place.
 function planMileageProgress(plan){
-  const totalPlanKm = Math.max(1, plan.weeks.reduce((s,w)=>s+w.targetKm,0));
-  const planStart = parseDate(plan.weeks[0].weekStart);
+  const planStart = state.setup.trackingStartDate ? parseDate(state.setup.trackingStartDate) : parseDate(plan.weeks[0].weekStart);
+  const totalPlanKm = Math.max(1, plan.weeks.reduce((s,w)=> s + w.days.filter(d=>parseDate(d.date)>=planStart).reduce((s2,d)=>s2+d.km,0), 0));
   const today = todayDate();
   const loggedKm = state.logs.filter(l=>{ const d=parseDate(l.date); return d>=planStart && d<=today; }).reduce((s,l)=>s+l.distanceKm,0);
   const rawFrac = loggedKm/totalPlanKm;
@@ -3360,9 +3364,14 @@ function renderTrainingTrail(plan, unit, stats){
   // "how hard is this week," which is a different thing and reasonably got called out as
   // reading like backsliding during a cutback - this fixes that by making the climb
   // strictly cumulative, while still keeping the terrain shaped by real numbers: steeper
-  // where the weeks are bigger, flatter where they're lighter.)
+  // where the weeks are bigger, flatter where they're lighter.) Filtered the same way
+  // planMileageProgress's own totalPlanKm is - a week entirely before trackingStartDate
+  // (see computeProgressStats) contributes nothing to the climb, so a backdated plan
+  // tracked from today reads as a flat stretch through the untracked weeks, then a real
+  // climb starting exactly where tracking does, reaching the same total either way.
+  const trackingStart = state.setup.trackingStartDate ? parseDate(state.setup.trackingStartDate) : parseDate(weeks[0].weekStart);
   let running = 0;
-  const plannedCum = weeks.map(w => (running += w.targetKm));
+  const plannedCum = weeks.map(w => (running += w.days.filter(d=>parseDate(d.date)>=trackingStart).reduce((s,d)=>s+d.km,0)));
   const totalPlanKm = planMileageProgress(plan).totalPlanKm;
   const yFor = km => baseY - clamp(km/totalPlanKm,0,1) * (baseY-topY);
   const plannedPts = weeks.map((w,i)=>({x:xFor(i), y:yFor(plannedCum[i])}));
