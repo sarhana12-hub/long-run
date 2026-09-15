@@ -404,7 +404,10 @@ function fmtDate(d){ const dt = (d instanceof Date)? d : new Date(d+'T00:00:00')
 function parseDate(s){ return new Date(s+'T00:00:00'); }
 function addDays(d,n){ const nd = new Date(d); nd.setDate(nd.getDate()+n); return nd; }
 function daysBetween(a,b){ return Math.round((b-a)/86400000); }
-function startOfWeek(d){ const nd=new Date(d); const dow=nd.getDay(); return addDays(nd,-dow); }
+// startDow: 0=Sunday (default, unchanged for every existing caller that doesn't pass one)
+// or 1=Monday, per setup.weekStartDow - how far back to walk from `d`'s real calendar day
+// to reach that week's first day.
+function startOfWeek(d, startDow){ const nd=new Date(d); const dow=nd.getDay(); const sd=startDow||0; return addDays(nd,-((dow-sd+7)%7)); }
 function todayDate(){ const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
 function niceDate(d){ return d.toLocaleDateString(undefined,{month:'short', day:'numeric'}); }
 function niceDateFull(d){ return d.toLocaleDateString(undefined,{weekday:'long', month:'short', day:'numeric', year:'numeric'}); }
@@ -991,7 +994,7 @@ function generatePlan(setup, dayOneOverride){
   // dayOneOverride lets a plan reconfigure resume from the ORIGINAL plan's day one instead
   // of always starting week 1 today - see submitOnboarding's resumeAnchor logic, which
   // freezes already-elapsed weeks from the old plan onto whatever this function generates.
-  const weekStart0 = startOfWeek(dayOneOverride || today);
+  const weekStart0 = startOfWeek(dayOneOverride || today, setup.weekStartDow);
   const totalDays = daysBetween(weekStart0, raceDate);
   const totalWeeks = Math.max(1, Math.ceil((totalDays+1)/7));
   const currentKm = setup.currentWeeklyKm;
@@ -1451,7 +1454,7 @@ function generateSpeedPlan(setup, dayOneOverride){
   const runsPerWeek = setup.runsPerWeek || runsPerWeekFor(currentKm);
   const startVdot = baseVdot(setup);
   const endVdot = startVdot * (1 + clamp(weeks*0.006, 0, 0.06));
-  const weekStart0 = startOfWeek(dayOneOverride || todayDate());
+  const weekStart0 = startOfWeek(dayOneOverride || todayDate(), setup.weekStartDow);
 
   // Constant across the whole plan (a function of longDow/speedDow only), so computed
   // once rather than re-derived every week.
@@ -1519,7 +1522,7 @@ function generateDistancePlan(setup, dayOneOverride){
   const longDow = setup.longDow ?? 0;
   const strengthDows = setup.strengthDows ?? [1,4];
   const startVdot = baseVdot(setup);
-  const weekStart0 = startOfWeek(dayOneOverride || todayDate());
+  const weekStart0 = startOfWeek(dayOneOverride || todayDate(), setup.weekStartDow);
   const metric = setup.distanceGoalMetric;
   const fromKm = setup.distanceGoalCurrentKm, toKm = setup.distanceGoalTargetKm;
 
@@ -1573,7 +1576,7 @@ function generateMaintenancePlan(setup, dayOneOverride){
   const strengthDows = setup.strengthDows ?? [1,4];
   const runsPerWeek = setup.runsPerWeek || runsPerWeekFor(currentKm);
   const startVdot = baseVdot(setup);
-  const weekStart0 = startOfWeek(dayOneOverride || todayDate());
+  const weekStart0 = startOfWeek(dayOneOverride || todayDate(), setup.weekStartDow);
   const longKm = round1(currentKm*DISTANCE_LONG_FRACTION);
   const weekPaces = paceZonesFromVdot(startVdot);
   weekPaces.racePerKm = null;
@@ -1600,7 +1603,7 @@ function generateRecoveryPlan(setup, dayOneOverride){
   const baselineKm = setup.currentWeeklyKm;
   const longDow = setup.longDow ?? 0;
   const startVdot = baseVdot(setup);
-  const weekStart0 = startOfWeek(dayOneOverride || todayDate());
+  const weekStart0 = startOfWeek(dayOneOverride || todayDate(), setup.weekStartDow);
   const runsPerWeek = clamp((setup.runsPerWeek || runsPerWeekFor(baselineKm))-1, 3, 4);
   const weekPaces = paceZonesFromVdot(startVdot);
   weekPaces.racePerKm = null;
@@ -1897,7 +1900,7 @@ function defaultDraft(){
     goalMode: 'race', // 'race' | 'general'
     raceKey:'half', raceDistanceKm:21.0975, raceDate:'', currentWeeklyMi: 20,
     units:'mi', recentDistanceKey:'5k', recentTime:'', goalTime:'',
-    longDow:0,
+    longDow:0, weekStartDow:0,
     restDays: clamp(7 - runsPerWeekFor(unitToKm(20,'mi')), 1, 4),
     maxLongRunMi: '', maxWeeklyMi: '',
     longRunEmphasis: 'balanced', speedEmphasis: 'balanced', strengthPerWeek: 2,
@@ -1919,7 +1922,7 @@ function draftFromSetup(setup){
     currentWeeklyMi: round1(kmToUnit(setup.currentWeeklyKm, setup.units)),
     recentDistanceKey: matchedRecent ? matchedRecent.key : '5k',
     recentTime: setup.recentTimeSec ? secToClock(setup.recentTimeSec) : '',
-    longDow: setup.longDow,
+    longDow: setup.longDow, weekStartDow: setup.weekStartDow || 0,
     restDays: clamp(7 - (setup.runsPerWeek || runsPerWeekFor(setup.currentWeeklyKm)), 1, 4),
   };
   if(isGeneralPlan(setup)){
@@ -1987,7 +1990,7 @@ function submitOnboarding(){
       currentWeeklyKm: unitToKm(Number(d.currentWeeklyMi)||0, d.units),
       recentDistanceKm: recentPreset? recentPreset.km : null,
       recentTimeSec: recentSec,
-      longDow: d.longDow, ...deriveScheduleFromLongDow(d.longDow, d.planKind==='speed'?2:1),
+      longDow: d.longDow, weekStartDow: d.weekStartDow||0, ...deriveScheduleFromLongDow(d.longDow, d.planKind==='speed'?2:1),
       runsPerWeek: clamp(7 - d.restDays, 3, 6),
     };
     if(d.planKind==='distance'){
@@ -2010,7 +2013,7 @@ function submitOnboarding(){
       recentDistanceKm: recentPreset? recentPreset.km : null,
       recentTimeSec: recentSec,
       goalTimeSec: goalSec,
-      longDow: d.longDow, ...deriveScheduleFromLongDow(d.longDow, d.strengthPerWeek),
+      longDow: d.longDow, weekStartDow: d.weekStartDow||0, ...deriveScheduleFromLongDow(d.longDow, d.strengthPerWeek),
       runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: d.strengthPerWeek,
       maxLongRunKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxLongRunMi) ? unitToKm(Number(d.maxLongRunMi), d.units) : null,
       maxWeeklyKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxWeeklyMi) ? unitToKm(Number(d.maxWeeklyMi), d.units) : null,
@@ -2034,7 +2037,7 @@ function submitOnboarding(){
       // objects, same phase/cutback labels, nothing reinterpreted through the new settings.
       // Only today's week and everything after gets the freshly generated structure.
       const oldByStart = Object.fromEntries(oldPlan.weeks.map(w=>[w.weekStart, w]));
-      const todayWeekStart = startOfWeek(today);
+      const todayWeekStart = startOfWeek(today, setup.weekStartDow);
       plan.weeks = plan.weeks.map(w => (parseDate(w.weekStart)<todayWeekStart && oldByStart[w.weekStart]) ? oldByStart[w.weekStart] : w);
     }
   }
@@ -2132,6 +2135,10 @@ function emphasisChipsHtml(value, act){
 }
 function strengthCountChipsHtml(value, act){
   return [0,1,2,3].map(n=>`<button class="chip ${value===n?'active':''}" data-act="${act}" data-n="${n}">${n===0?'None':n}</button>`).join('');
+}
+const WEEK_START_OPTIONS = [{n:0, label:'Sunday'}, {n:1, label:'Monday'}];
+function weekStartChipsHtml(value, act){
+  return WEEK_START_OPTIONS.map(o=>`<button class="chip ${ (value||0)===o.n?'active':''}" data-act="${act}" data-n="${o.n}">${o.label}</button>`).join('');
 }
 
 /* ============================= render: onboarding ============================= */
@@ -2387,6 +2394,11 @@ function renderOnboardStep3(d){
         <div class="dow-grid">${dowGrid('longDow', d.longDow, false)}</div>
         <div class="hint">Everything else — speed work, strength — is placed automatically around this.</div>
       </div>
+      <div class="field">
+        <label class="field-label">Week starts on</label>
+        <div class="chip-select">${weekStartChipsHtml(d.weekStartDow, 'pick-week-start')}</div>
+        <div class="hint">Just changes how weeks are laid out on the Plan tab and in the trail chart — your schedule itself doesn't change.</div>
+      </div>
     `;
   }
   return `
@@ -2418,6 +2430,11 @@ function renderOnboardStep3(d){
       <label class="field-label">Long run day</label>
       <div class="dow-grid">${dowGrid('longDow', d.longDow, false)}</div>
       <div class="hint">Speed work and strength days are placed automatically for proper recovery spacing — move any day later from the plan itself if you'd rather.</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Week starts on</label>
+      <div class="chip-select">${weekStartChipsHtml(d.weekStartDow, 'pick-week-start')}</div>
+      <div class="hint">Just changes how weeks are laid out on the Plan tab and in the trail chart — your schedule itself doesn't change.</div>
     </div>
 
     ${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM ? `
@@ -3741,6 +3758,7 @@ function renderSettingsTab(){
       <div class="settings-row"><div><div class="lbl">Recent race</div><div class="sub">${recentRace ? esc(recentRace) : 'Not provided'}</div></div></div>
       ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Goal time</div><div class="sub">${s.goalTimeSec ? secToClock(s.goalTimeSec) : 'None set — paces follow your fitness'}</div></div></div>` : ''}
       <div class="settings-row"><div><div class="lbl">Long run day</div><div class="sub">${DOW_LABELS[s.longDow]}</div></div></div>
+      <div class="settings-row"><div><div class="lbl">Week starts on</div><div class="sub">${(s.weekStartDow||0)===1?'Monday':'Sunday'}</div></div></div>
       <div class="settings-row"><div><div class="lbl">Rest days per week</div><div class="sub">${restDaysVal} (${runsPerWeekVal} running day${runsPerWeekVal===1?'':'s'}/week)</div></div></div>
       ${!isGeneralPlan(s) ? `
       <div class="settings-row"><div><div class="lbl">Long run emphasis</div><div class="sub">${emphasisLabel(s.longRunEmphasis)}</div></div></div>
@@ -4626,6 +4644,7 @@ function onClick(e){
   }
   if(act==='pick-distance-metric'){ state.onboardDraft.distanceGoalMetric = el.dataset.m; render(); return; }
   if(act==='pick-restdays'){ state.onboardDraft.restDays = Number(el.dataset.n); render(); return; }
+  if(act==='pick-week-start'){ state.onboardDraft.weekStartDow = Number(el.dataset.n); render(); return; }
   if(act==='pick-long-emphasis'){ state.onboardDraft.longRunEmphasis = el.dataset.key; render(); return; }
   if(act==='pick-speed-emphasis'){ state.onboardDraft.speedEmphasis = el.dataset.key; render(); return; }
   if(act==='pick-strength-count'){ state.onboardDraft.strengthPerWeek = Number(el.dataset.n); render(); return; }
