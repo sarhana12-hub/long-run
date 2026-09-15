@@ -985,10 +985,14 @@ function parsePaceInput(val, unit, fmt){
   return unit==='mi' ? secPerUnit/KM_PER_MI : secPerUnit;
 }
 
-function generatePlan(setup){
+function generatePlan(setup, dayOneOverride){
   const today = todayDate();
   const raceDate = parseDate(setup.raceDate);
-  const totalDays = daysBetween(startOfWeek(today), raceDate);
+  // dayOneOverride lets a plan reconfigure resume from the ORIGINAL plan's day one instead
+  // of always starting week 1 today - see submitOnboarding's resumeAnchor logic, which
+  // freezes already-elapsed weeks from the old plan onto whatever this function generates.
+  const weekStart0 = startOfWeek(dayOneOverride || today);
+  const totalDays = daysBetween(weekStart0, raceDate);
   const totalWeeks = Math.max(1, Math.ceil((totalDays+1)/7));
   const currentKm = setup.currentWeeklyKm;
   const raceKm = setup.raceDistanceKm;
@@ -1102,7 +1106,6 @@ function generatePlan(setup){
   const speedDow = setup.speedDow ?? 3;
   const strengthDows = setup.strengthDows ?? [1,4];
   const runsPerWeek = setup.runsPerWeek || runsPerWeekFor(currentKm);
-  const weekStart0 = startOfWeek(today);
 
   const weeks = [];
   for(let w=0; w<totalWeeks; w++){
@@ -1403,7 +1406,7 @@ function furthestDow(hardDows, exclude){
   return best;
 }
 
-function generateSpeedPlan(setup){
+function generateSpeedPlan(setup, dayOneOverride){
   const currentKm = setup.currentWeeklyKm;
   const weeks = setup.weeks;
   const longDow = setup.longDow ?? 0;
@@ -1411,7 +1414,7 @@ function generateSpeedPlan(setup){
   const runsPerWeek = setup.runsPerWeek || runsPerWeekFor(currentKm);
   const startVdot = baseVdot(setup);
   const endVdot = startVdot * (1 + clamp(weeks*0.006, 0, 0.06));
-  const weekStart0 = startOfWeek(todayDate());
+  const weekStart0 = startOfWeek(dayOneOverride || todayDate());
 
   // Constant across the whole plan (a function of longDow/speedDow only), so computed
   // once rather than re-derived every week.
@@ -1474,12 +1477,12 @@ function generateSpeedPlan(setup){
 // that curve, not resetting it. The metric NOT chosen as primary still moves in step
 // underneath it - a long run can't grow in isolation from weekly volume, and vice versa.
 const DISTANCE_LONG_FRACTION = 0.28;
-function generateDistancePlan(setup){
+function generateDistancePlan(setup, dayOneOverride){
   const weeks = setup.weeks;
   const longDow = setup.longDow ?? 0;
   const strengthDows = setup.strengthDows ?? [1,4];
   const startVdot = baseVdot(setup);
-  const weekStart0 = startOfWeek(todayDate());
+  const weekStart0 = startOfWeek(dayOneOverride || todayDate());
   const metric = setup.distanceGoalMetric;
   const fromKm = setup.distanceGoalCurrentKm, toKm = setup.distanceGoalTargetKm;
 
@@ -1525,7 +1528,7 @@ function distanceGoalWarning(fromKm, toKm, weeks){
 // steady, so weekly volume doesn't ramp and there's no cutback week (nothing being
 // built up that needs unloading). One moderate tempo session a week keeps fitness
 // markers from eroding without asking for anything new.
-function generateMaintenancePlan(setup){
+function generateMaintenancePlan(setup, dayOneOverride){
   const weeks = setup.weeks;
   const currentKm = setup.currentWeeklyKm;
   const longDow = setup.longDow ?? 0;
@@ -1533,7 +1536,7 @@ function generateMaintenancePlan(setup){
   const strengthDows = setup.strengthDows ?? [1,4];
   const runsPerWeek = setup.runsPerWeek || runsPerWeekFor(currentKm);
   const startVdot = baseVdot(setup);
-  const weekStart0 = startOfWeek(todayDate());
+  const weekStart0 = startOfWeek(dayOneOverride || todayDate());
   const longKm = round1(currentKm*DISTANCE_LONG_FRACTION);
   const weekPaces = paceZonesFromVdot(startVdot);
   weekPaces.racePerKm = null;
@@ -1555,12 +1558,12 @@ function generateMaintenancePlan(setup){
 // around 55% of pre-recovery mileage and steps gently back up toward ~75% by the end,
 // rather than staying flat the whole block or ramping back to full volume - the point is
 // full recovery, not a compressed return-to-training plan.
-function generateRecoveryPlan(setup){
+function generateRecoveryPlan(setup, dayOneOverride){
   const weeks = setup.weeks;
   const baselineKm = setup.currentWeeklyKm;
   const longDow = setup.longDow ?? 0;
   const startVdot = baseVdot(setup);
-  const weekStart0 = startOfWeek(todayDate());
+  const weekStart0 = startOfWeek(dayOneOverride || todayDate());
   const runsPerWeek = clamp((setup.runsPerWeek || runsPerWeekFor(baselineKm))-1, 3, 4);
   const weekPaces = paceZonesFromVdot(startVdot);
   weekPaces.racePerKm = null;
@@ -1582,12 +1585,12 @@ function generateRecoveryPlan(setup){
   return finishGeneralPlan(setup, weekList, startVdot, startVdot);
 }
 
-function generateGeneralPlan(setup){
-  if(setup.planKind==='speed') return generateSpeedPlan(setup);
-  if(setup.planKind==='distance') return generateDistancePlan(setup);
-  if(setup.planKind==='maintenance') return generateMaintenancePlan(setup);
-  if(setup.planKind==='recovery') return generateRecoveryPlan(setup);
-  return generatePlan(setup);
+function generateGeneralPlan(setup, dayOneOverride){
+  if(setup.planKind==='speed') return generateSpeedPlan(setup, dayOneOverride);
+  if(setup.planKind==='distance') return generateDistancePlan(setup, dayOneOverride);
+  if(setup.planKind==='maintenance') return generateMaintenancePlan(setup, dayOneOverride);
+  if(setup.planKind==='recovery') return generateRecoveryPlan(setup, dayOneOverride);
+  return generatePlan(setup, dayOneOverride);
 }
 
 /* ============================= storage layer (local only) ============================= */
@@ -1932,6 +1935,13 @@ function submitOnboarding(){
   const recentPreset = RACE_PRESETS.find(r=>r.key===d.recentDistanceKey);
   const recentSec = parseDurationToSec(d.recentTime);
   let setup, plan;
+  // Reconfiguring (not a first-time plan, not Start over) resumes from the OLD plan's own
+  // day one instead of always starting week 1 today, so someone five weeks into training
+  // doesn't get dropped back into a beginner base phase just for tweaking a setting - see
+  // the fallback/splice step below this if/else for what actually makes that real.
+  const isSwitch = state.onboardMode==='switch';
+  const oldPlan = isSwitch ? state.plan : null;
+  const dayOneOverride = (oldPlan && oldPlan.weeks && oldPlan.weeks.length) ? parseDate(oldPlan.weeks[0].weekStart) : null;
 
   if(d.goalMode==='general'){
     const weeks = clamp(Number(d.weeks)||PLAN_KIND_META[d.planKind].weeksDefault, PLAN_KIND_META[d.planKind].weeksMin, PLAN_KIND_META[d.planKind].weeksMax);
@@ -1950,7 +1960,7 @@ function submitOnboarding(){
       setup.distanceGoalCurrentKm = unitToKm(Number(currentVal)||0, d.units);
       setup.distanceGoalTargetKm = unitToKm(Number(d.distanceGoalTargetMi)||0, d.units);
     }
-    plan = generateGeneralPlan(setup);
+    plan = generateGeneralPlan(setup, dayOneOverride);
   } else {
     if(!d.raceDate){ showToast('Pick a race date first'); return; }
     const goalSec = parseDurationToSec(d.goalTime);
@@ -1970,7 +1980,26 @@ function submitOnboarding(){
       longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis,
       hillsMode: d.hillsMode, skipBase: d.skipBase,
     };
-    plan = generatePlan(setup);
+    plan = generatePlan(setup, dayOneOverride);
+  }
+  if(dayOneOverride){
+    const today = todayDate();
+    const todayInRange = plan.weeks.some(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
+    if(!todayInRange){
+      // The new settings don't leave room for today within a plan anchored to the old
+      // start - e.g. the race date moved in close enough that "N weeks already elapsed"
+      // would already be past where the new plan should end. Resuming mid-plan doesn't
+      // make sense here, so fall back to exactly today's plain behavior: a clean restart
+      // from today, no frozen weeks, same as a first-time plan.
+      plan = d.goalMode==='general' ? generateGeneralPlan(setup) : generatePlan(setup);
+    } else {
+      // Freeze every already-elapsed week exactly as it was actually lived - the same day
+      // objects, same phase/cutback labels, nothing reinterpreted through the new settings.
+      // Only today's week and everything after gets the freshly generated structure.
+      const oldByStart = Object.fromEntries(oldPlan.weeks.map(w=>[w.weekStart, w]));
+      const todayWeekStart = startOfWeek(today);
+      plan.weeks = plan.weeks.map(w => (parseDate(w.weekStart)<todayWeekStart && oldByStart[w.weekStart]) ? oldByStart[w.weekStart] : w);
+    }
   }
   state.name = d.name.trim();
   Store.setName(state.name);
