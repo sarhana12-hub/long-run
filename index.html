@@ -1575,8 +1575,21 @@ const Store = {
     this._set('lr_logs', logs);
   },
   setLogs(logs){ this._set('lr_logs', logs); },
+  // Legacy boolean-flag milestone tracker, superseded by getAchievementLog below - kept
+  // only so loadState can migrate a device that already has one into the new system
+  // without re-firing popups for things already celebrated once.
   getMilestonesShown(){ return this._get('lr_milestones', {halfway:false, arrived:false, firstRun:false, weeksHit:[]}); },
-  setMilestonesShown(v){ this._set('lr_milestones', v); },
+  // Dates (YYYY-MM-DD) the user has explicitly marked a strength session as actually
+  // completed - day.strength on the plan itself only ever means "scheduled," this is the
+  // separate "did it happen" record, since a strength day (including a rest day with
+  // strength attached) has no run to log against.
+  getStrengthDone(){ return this._get('lr_strength_done', []); },
+  setStrengthDone(v){ this._set('lr_strength_done', v); },
+  // One entry per time an achievement fires: {key, date, detail?}. Repeatable
+  // achievements (a new PR, a new week hit) simply get another entry with the same key -
+  // this is a log, not a set, so the gallery can show full history if it ever wants to.
+  getAchievementLog(){ return this._get('lr_achievement_log', []); },
+  setAchievementLog(v){ this._set('lr_achievement_log', v); },
   getStravaAuth(){ return this._get('lr_strava_auth', null); },
   setStravaAuth(auth){ this._set('lr_strava_auth', auth); },
   clearStravaAuth(){ localStorage.removeItem('lr_strava_auth'); },
@@ -1586,6 +1599,8 @@ const Store = {
     localStorage.removeItem('lr_plan');
     localStorage.removeItem('lr_logs');
     localStorage.removeItem('lr_milestones');
+    localStorage.removeItem('lr_strength_done');
+    localStorage.removeItem('lr_achievement_log');
     localStorage.removeItem('lr_strava_auth');
   }
 };
@@ -1604,6 +1619,15 @@ const ICONS = {
   bolt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>',
   move:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>',
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  // Small category glyphs for the badge-tier achievement gallery, so a grid of many
+  // earned badges reads as visually distinct groups rather than 17 identical circles -
+  // see badgeGlyph() below for the key-to-glyph mapping.
+  flame:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1 3-3 4-3 8a3 3 0 0 0 6 0c0-1-1-2-1-2 2 1 3 3 3 5a5 5 0 0 1-10 0c0-5 3-6 5-11z"/></svg>',
+  medal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="15" r="6"/><path d="M9 10.5 6 3M15 10.5 18 3"/><path d="M12 12v6M9.5 15h5"/></svg>',
+  flag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h13l-3 4 3 4H5"/></svg>',
+  dumbbell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6M20 9v6"/><path d="M7 7v10M17 7v10"/><path d="M7 12h10"/></svg>',
+  calendarCheck:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8.5 15.5 11 18l4.5-5"/></svg>',
+  trophy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 5H4a3 3 0 0 0 3 4M17 5h3a3 3 0 0 1-3 4"/><path d="M12 14v3M9 21h6M10 17h4v4h-4z"/></svg>',
 };
 
 /* ============================= state ============================= */
@@ -1623,7 +1647,8 @@ const state = {
   onboardMode:'new', // 'new' | 'switch' - 'switch' means re-entering onboarding to change an
                       // existing plan from Settings; keeps logs, resets only plan-specific milestones.
   toast:null,
-  milestonesShown:{halfway:false, arrived:false, firstRun:false, weeksHit:[]},
+  strengthDone:[], // dates (YYYY-MM-DD) explicitly marked as strength-completed
+  achievementLog:[], // {key, date, detail?} - see Store.getAchievementLog
   stravaAuth:null,
 };
 
@@ -1669,7 +1694,22 @@ function boot(){
   const setup = Store.getSetup();
   const plan = Store.getPlan();
   state.logs = Store.getLogs();
-  state.milestonesShown = Store.getMilestonesShown();
+  state.strengthDone = Store.getStrengthDone();
+  state.achievementLog = Store.getAchievementLog();
+  // One-time migration from the old boolean-flag milestone tracker: a device that already
+  // celebrated these under the old system shouldn't see them pop up again just because the
+  // new achievement log starts empty. Backfilled entries use today's date as a stand-in
+  // since the old system never recorded when something was actually earned.
+  if(state.achievementLog.length===0){
+    const legacy = Store.getMilestonesShown();
+    const todayStr = fmtDate(todayDate());
+    const migrated = [];
+    if(legacy.firstRun) migrated.push({key:'first-run', date:todayStr});
+    if(legacy.halfway) migrated.push({key:'halfway', date:todayStr});
+    if(legacy.arrived) migrated.push({key:'plan-complete', date:todayStr});
+    (legacy.weeksHit||[]).forEach(ws=>migrated.push({key:'week-fully-hit', date:ws}));
+    if(migrated.length){ state.achievementLog = migrated; Store.setAchievementLog(migrated); }
+  }
   state.stravaAuth = Store.getStravaAuth();
   if(setup && plan){
     state.setup = setup; state.plan = plan;
@@ -1898,14 +1938,12 @@ function submitOnboarding(){
   let idx = plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
   state.currentWeekIndex = idx===-1?0:idx;
   // Switching plans (not a first-time/Start-over onboarding) keeps every logged run as-is -
-  // nothing above touches state.logs or Store's saved logs. Only the milestones tied to
-  // THIS plan's own volume/timeline reset, since they're meaningless against a new plan;
-  // "first run logged" stays true since that's genuinely already happened.
+  // nothing above touches state.logs or Store's saved logs. Plan-scoped achievements (see
+  // isAchievementEarned) naturally become re-earnable against the new plan without any
+  // reset here, since they're checked against entries dated on/after the new plan's own
+  // generatedAt - "first run logged" and every other lifetime achievement stay earned,
+  // since that's genuinely already happened regardless of which plan is active.
   const wasSwitch = state.onboardMode==='switch';
-  if(wasSwitch){
-    state.milestonesShown = {...state.milestonesShown, halfway:false, arrived:false, weeksHit:[]};
-    Store.setMilestonesShown(state.milestonesShown);
-  }
   state.onboardMode = 'new';
   state.view='app'; state.tab='plan';
   window.scrollTo(0,0);
@@ -2510,110 +2548,309 @@ function computeProgressStats(){
 }
 
 // Shared by manual entry and Strava import — both end up with the same log shape, so
-// both should go through the same save + milestone/badge check rather than duplicating it.
+// both should go through the same save + achievement check rather than duplicating it.
 function commitLogEntry(logData){
   const item = Store.addLog(logData);
   state.logs = [item, ...state.logs];
   state.modal = null;
-  const milestoneFired = checkAndTriggerMilestones(item) || checkAndTriggerBadges(item);
-  if(milestoneFired) render(); else showToast('Run logged');
+  const fired = evaluateAndTriggerAchievements(item);
+  if(fired) render(); else showToast('Run logged');
 }
 
-// Checks the two summit-tier milestones (50% of plan volume logged, race day reached)
-// against the run just saved. Each fires at most once per plan — the "already shown"
-// flags persist so re-opening the app or logging more runs afterward never repeats them.
-// Race day takes priority over the halfway mark on the rare chance both would fire off
-// the same log (e.g. a big last-minute catch-up logged on race day itself).
-function checkAndTriggerMilestones(newLog){
-  const shown = state.milestonesShown;
-  const plan = state.plan;
-  if(!shown.arrived && plan && plan.raceDate && parseDate(newLog.date) >= parseDate(plan.raceDate)){
-    shown.arrived = true;
-    Store.setMilestonesShown(shown);
-    state.modal = {type:'milestone', data: plan.planKind ? {
-      hero: ICONS.summitArrived,
-      title:'Plan complete',
-      message:"You made it through every week. However this stretch went, you earned this."
-    } : {
-      hero: ICONS.summitArrived,
-      title:'You made it to race day',
-      message:"Every training week led here. However today went, you earned this."
-    }};
-    return true;
+// The full catalog of every earnable achievement - the single source of truth for both
+// the popup celebrations and the persistent gallery (renderAchievementsScreen).
+// tier: 'summit' (rare, plan-defining, the big hero illustration) or 'badge' (frequent,
+// small icon - see badgeGlyph()).
+// scope: 'plan' (only counts as earned using log entries dated on/after the CURRENT
+// plan's own generatedAt, so switching plans - Change plan in Settings - makes these
+// re-earnable against the new one without deleting history) or 'lifetime' (counts
+// forever regardless of plan changes, since it's really about the runner's own history -
+// PRs, streaks, and totals all fall here).
+// repeatable: can fire more than once (a new week hit, a new PR) - tracked by a distinct
+// `instance` value per occurrence, rather than "has this key ever fired."
+const ACHIEVEMENTS = [
+  {key:'plan-complete', tier:'summit', scope:'plan', hero:'summitArrived', title:'Plan complete', locked:'Reach the end of this plan.'},
+  {key:'beat-goal', tier:'summit', scope:'plan', hero:'summitArrived', title:'Beat your goal', locked:'Beat your stated goal pace on race day.'},
+  {key:'halfway', tier:'summit', scope:'plan', hero:'summitHalfway', title:'Halfway up the mountain', locked:"Log half of this plan's training miles."},
+  {key:'base-complete', tier:'summit', scope:'plan', hero:'summitBadge', title:'Base phase complete', locked:'Finish every week of your base phase.'},
+  {key:'build-complete', tier:'summit', scope:'plan', hero:'summitBadge', title:'Build phase complete', locked:'Finish every week of your build phase.'},
+  {key:'peak-complete', tier:'summit', scope:'plan', hero:'summitBadge', title:'Peak phase complete', locked:'Finish every week of your peak phase.'},
+  {key:'peak-long-run', tier:'summit', scope:'plan', hero:'summitBadge', title:'Peak long run conquered', locked:"Complete this plan's single longest scheduled long run."},
+  {key:'full-house', tier:'summit', scope:'plan', hero:'summitBadge', title:'Full house', locked:'Log at least one of every workout type this plan uses.'},
+
+  {key:'first-run', tier:'badge', scope:'lifetime', glyph:'flag', title:'First run logged', locked:'Log your very first run.'},
+  {key:'week-fully-hit', tier:'badge', scope:'plan', repeatable:true, glyph:'calendarCheck', title:'Week fully hit', locked:"Log at least as much as a completed week's mileage target."},
+  {key:'perfect-week', tier:'badge', scope:'plan', repeatable:true, glyph:'calendarCheck', title:'Perfect week', locked:'Run every single day the plan scheduled a run, for one full week.'},
+  {key:'fastest-tempo', tier:'badge', scope:'lifetime', repeatable:true, glyph:'medal', title:'New fastest tempo run', locked:'Beat your own best tempo pace.'},
+  {key:'fastest-long-run', tier:'badge', scope:'lifetime', repeatable:true, glyph:'medal', title:'New fastest long run', locked:'Beat your own best long run pace.'},
+  {key:'longest-run', tier:'badge', scope:'lifetime', repeatable:true, glyph:'medal', title:'New longest run', locked:'Log a run longer than any you have logged before.'},
+  {key:'double-digit-run', tier:'badge', scope:'lifetime', glyph:'flag', title:'First double-digit run', locked:'Log a run of 10+ miles (about 16km).'},
+  {key:'miles-50', tier:'badge', scope:'lifetime', glyph:'trophy', title:'50 miles logged', locked:'Log 50 lifetime miles.'},
+  {key:'miles-100', tier:'badge', scope:'lifetime', glyph:'trophy', title:'100 miles logged', locked:'Log 100 lifetime miles.'},
+  {key:'miles-250', tier:'badge', scope:'lifetime', glyph:'trophy', title:'250 miles logged', locked:'Log 250 lifetime miles.'},
+  {key:'miles-500', tier:'badge', scope:'lifetime', glyph:'trophy', title:'500 miles logged', locked:'Log 500 lifetime miles.'},
+  {key:'streak-7', tier:'badge', scope:'lifetime', glyph:'flame', title:'7-day streak', locked:'Log a run on 7 consecutive days.'},
+  {key:'hill-climber', tier:'badge', scope:'lifetime', glyph:'peak', title:'Hill climber', locked:'Complete your first Hill Repeats session.'},
+  {key:'bounced-back', tier:'badge', scope:'lifetime', repeatable:true, glyph:'flame', title:'Bounced back', locked:'Log a run within 2 days of missing a scheduled one.'},
+  {key:'fitness-gains', tier:'badge', scope:'plan', glyph:'chart', title:'Fitness gains', locked:"Improve your current fitness meaningfully since this plan's start."},
+  {key:'strength-logged', tier:'badge', scope:'lifetime', glyph:'dumbbell', title:'Strength session logged', locked:'Mark a strength session as completed.'},
+  {key:'strength-streak', tier:'badge', scope:'lifetime', repeatable:true, glyph:'dumbbell', title:'Strength streak', locked:'Complete 4 scheduled strength sessions in a row.'},
+];
+const ACHIEVEMENTS_BY_KEY = Object.fromEntries(ACHIEVEMENTS.map(a=>[a.key,a]));
+function badgeGlyph(key){ return ICONS[ACHIEVEMENTS_BY_KEY[key] && ACHIEVEMENTS_BY_KEY[key].glyph || 'summitBadge']; }
+
+function isAchievementEarned(key){
+  const def = ACHIEVEMENTS_BY_KEY[key];
+  if(!def) return false;
+  const entries = state.achievementLog.filter(e=>e.key===key);
+  if(!entries.length) return false;
+  if(def.scope!=='plan') return true;
+  const planStart = state.plan && state.plan.generatedAt ? state.plan.generatedAt.slice(0,10) : null;
+  return planStart==null || entries.some(e=>e.date>=planStart);
+}
+// Most recent qualifying date for a key, honoring the same plan-scope rule as
+// isAchievementEarned - used by the gallery to show "earned Sep 14" under a badge.
+function achievementEarnedDate(key){
+  const def = ACHIEVEMENTS_BY_KEY[key];
+  let entries = state.achievementLog.filter(e=>e.key===key);
+  if(def && def.scope==='plan' && state.plan && state.plan.generatedAt){
+    const planStart = state.plan.generatedAt.slice(0,10);
+    entries = entries.filter(e=>e.date>=planStart);
   }
-  const stats = computeProgressStats();
-  if(!shown.halfway && stats.pctPlanMilesLogged >= 50){
-    shown.halfway = true;
-    Store.setMilestonesShown(shown);
-    state.modal = {type:'milestone', data:{
-      hero: ICONS.summitHalfway,
-      title:'Halfway up the mountain',
-      message:"You've logged half of this plan's training miles. The summit is closer than the trailhead now."
-    }};
-    return true;
-  }
-  return false;
+  if(!entries.length) return null;
+  return entries.map(e=>e.date).sort().slice(-1)[0];
+}
+function recordAchievement(key, date, message, instance){
+  state.achievementLog = [...state.achievementLog, {key, date, message, instance: instance || date}];
+  Store.setAchievementLog(state.achievementLog);
 }
 
-// Badge-tier celebrations (frequent, small — the badge-ring icon, not a hero illustration).
-// Unlike the summit milestones these can recur across a single plan (a new week hit, a new
-// tempo PR), with two exceptions that are naturally one-shot: "first run logged" can only
-// ever be true once, and each individual week can only be credited for hitting its target
-// once (tracked by weekStart date in shown.weeksHit).
-function checkAndTriggerBadges(newLog){
-  const shown = state.milestonesShown;
-  const unit = state.setup.units;
-
-  if(!shown.firstRun && state.logs.length===1){
-    shown.firstRun = true;
-    Store.setMilestonesShown(shown);
-    state.modal = {type:'milestone', data:{
-      title:'First run logged',
-      message:"You've started tracking. Every run from here builds toward the plan."
-    }};
-    return true;
+// Longest run of consecutive calendar days with at least one log - powers the 7-day
+// streak badge.
+function longestLoggingStreakDays(){
+  const dates = [...new Set(state.logs.map(l=>l.date))].map(d=>parseDate(d)).sort((a,b)=>a-b);
+  let best=0, cur=0, prev=null;
+  for(const d of dates){
+    cur = (prev && daysBetween(prev,d)===1) ? cur+1 : 1;
+    best = Math.max(best,cur);
+    prev = d;
   }
-
-  // "Completed week" means the week's date range has fully passed — not the week in
-  // progress, even if this week's mileage already happens to be on target.
-  const week = state.plan.weeks.find(w=>{
+  return best;
+}
+function findWeekForLog(log){
+  return state.plan.weeks.find(w=>{
     const ws = parseDate(w.weekStart);
-    return parseDate(newLog.date) >= ws && parseDate(newLog.date) < addDays(ws,7);
+    return parseDate(log.date) >= ws && parseDate(log.date) < addDays(ws,7);
   });
-  if(week && !shown.weeksHit.includes(week.weekStart) && todayDate() >= addDays(parseDate(week.weekStart),7)){
-    const actual = weekActualKm(week);
-    if(actual >= week.targetKm){
-      shown.weeksHit.push(week.weekStart);
-      Store.setMilestonesShown(shown);
-      state.modal = {type:'milestone', data:{
-        title:'Week fully hit',
-        message:`You logged ${fmtDist(actual,unit,1)} against a ${fmtDist(week.targetKm,unit,1)} target for the week of ${niceDate(parseDate(week.weekStart))}.`
-      }};
-      return true;
-    }
-  }
+}
+// A completed week (its date range has fully passed) whose phase is `phaseName`, or null
+// if that phase hasn't finished yet - or the plan never has one (general plans have no
+// 'peak' phase, for instance, so this naturally never fires for them).
+function phaseCompleteCheck(phaseName, message){
+  const weeksInPhase = state.plan.weeks.filter(w=>w.phase===phaseName);
+  if(!weeksInPhase.length) return null;
+  const lastWeek = weeksInPhase[weeksInPhase.length-1];
+  if(todayDate() < addDays(parseDate(lastWeek.weekStart),7)) return null;
+  return {message};
+}
 
-  // A "new fastest" requires an earlier tempo run to beat — the very first one ever
-  // logged has nothing to compare against yet, so it's excluded rather than trivially
-  // counted as a PR.
-  const day = week ? week.days.find(d=>d.date===newLog.date) : null;
-  if(day && day.type==='tempo' && day.paceKey){
-    const tempoRuns = paceRunsForType('tempo');
-    const todayRun = tempoRuns.find(r=>r.date===newLog.date);
-    const priorRuns = tempoRuns.filter(r=>r.date!==newLog.date);
-    if(todayRun && priorRuns.length){
-      const bestPriorSecPerKm = Math.min(...priorRuns.map(r=>r.actualPaceSecPerKm));
-      if(todayRun.actualPaceSecPerKm < bestPriorSecPerKm){
-        state.modal = {type:'milestone', data:{
-          title:'New fastest tempo run',
-          message:`You ran today's tempo effort at ${paceOrSpeedStr(todayRun.actualPaceSecPerKm,unit,state.paceFormat)} — your best yet.`
-        }};
-        return true;
+// Each check takes the just-logged run (null when triggered by something else, like
+// marking strength done) and returns null or {message, date?} when its condition newly
+// holds - `date` is only needed for repeatable achievements, as the instance key that
+// tells a later, different occurrence apart from this one.
+const ACHIEVEMENT_CHECKS = {
+  'plan-complete': (newLog)=>{
+    const plan = state.plan;
+    if(!newLog || !plan.raceDate || parseDate(newLog.date) < parseDate(plan.raceDate)) return null;
+    return plan.planKind
+      ? {message:"You made it through every week. However this stretch went, you earned this."}
+      : {message:"Every training week led here. However today went, you earned this."};
+  },
+  'beat-goal': (newLog)=>{
+    const setup = state.setup, plan = state.plan;
+    if(!newLog || isGeneralPlan(setup) || !setup.goalTimeSec || !plan.raceDate || newLog.date!==plan.raceDate) return null;
+    if(!(newLog.distanceKm>0)) return null;
+    const actualPace = newLog.durationSec/newLog.distanceKm;
+    const goalPace = setup.goalTimeSec/plan.raceDistanceKm;
+    if(actualPace>=goalPace) return null;
+    return {message:`You crossed the line at ${paceOrSpeedStr(actualPace,setup.units,state.paceFormat)} — faster than the goal pace you set out with.`};
+  },
+  'halfway': ()=>{
+    if(computeProgressStats().pctPlanMilesLogged<50) return null;
+    return {message:"You've logged half of this plan's training miles. The summit is closer than the trailhead now."};
+  },
+  'base-complete': ()=>phaseCompleteCheck('base', "Every base week, done — the real building starts now."),
+  'build-complete': ()=>phaseCompleteCheck('build', "Build phase complete — peak weeks are next."),
+  'peak-complete': ()=>phaseCompleteCheck('peak', "Peak phase complete. Taper time — the hard work is already banked."),
+  'peak-long-run': ()=>{
+    const longRuns = state.plan.weeks.flatMap(w=>w.days).filter(d=>d.type==='long' && d.km>0);
+    if(!longRuns.length) return null;
+    const maxKm = Math.max(...longRuns.map(d=>d.km));
+    const peakDay = longRuns.find(d=>d.km===maxKm);
+    if(!state.logs.some(l=>l.date===peakDay.date)) return null;
+    return {message:`You completed this plan's longest scheduled long run — ${fmtDist(maxKm,state.setup.units,1)}.`};
+  },
+  'full-house': ()=>{
+    const planTypes = new Set();
+    state.plan.weeks.forEach(w=>w.days.forEach(d=>{ if(d.type!=='rest' && d.km>0) planTypes.add(d.type); }));
+    if(planTypes.size<2) return null;
+    const loggedDates = new Set(state.logs.map(l=>l.date));
+    const loggedTypes = new Set();
+    state.plan.weeks.forEach(w=>w.days.forEach(d=>{ if(loggedDates.has(d.date)) loggedTypes.add(d.type); }));
+    if(![...planTypes].every(t=>loggedTypes.has(t))) return null;
+    return {message:"You've now logged every workout type this plan calls for."};
+  },
+  'first-run': ()=>{
+    if(state.logs.length!==1) return null;
+    return {message:"You've started tracking. Every run from here builds toward the plan."};
+  },
+  'week-fully-hit': (newLog)=>{
+    if(!newLog) return null;
+    const week = findWeekForLog(newLog);
+    if(!week || todayDate() < addDays(parseDate(week.weekStart),7)) return null;
+    const actual = weekActualKm(week);
+    if(actual < week.targetKm) return null;
+    return {message:`You logged ${fmtDist(actual,state.setup.units,1)} against a ${fmtDist(week.targetKm,state.setup.units,1)} target for the week of ${niceDate(parseDate(week.weekStart))}.`, date: week.weekStart};
+  },
+  'perfect-week': (newLog)=>{
+    if(!newLog) return null;
+    const week = findWeekForLog(newLog);
+    if(!week || todayDate() < addDays(parseDate(week.weekStart),7)) return null;
+    const scheduledDates = week.days.filter(d=>d.km>0).map(d=>d.date);
+    if(!scheduledDates.length) return null;
+    const loggedDates = new Set(state.logs.map(l=>l.date));
+    if(!scheduledDates.every(d=>loggedDates.has(d))) return null;
+    return {message:`You ran every single scheduled day for the week of ${niceDate(parseDate(week.weekStart))} — nothing skipped.`, date: week.weekStart};
+  },
+  // A "new fastest"/"new longest" requires an earlier run of the same kind to beat - the
+  // very first one ever logged has nothing to compare against, so it's excluded rather
+  // than trivially counted as a PR.
+  'fastest-tempo': (newLog)=>{
+    if(!newLog) return null;
+    const week = findWeekForLog(newLog);
+    const day = week ? week.days.find(d=>d.date===newLog.date) : null;
+    if(!day || day.type!=='tempo' || !day.paceKey) return null;
+    const runs = paceRunsForType('tempo');
+    const todayRun = runs.find(r=>r.date===newLog.date);
+    const priorRuns = runs.filter(r=>r.date!==newLog.date);
+    if(!todayRun || !priorRuns.length) return null;
+    const bestPrior = Math.min(...priorRuns.map(r=>r.actualPaceSecPerKm));
+    if(todayRun.actualPaceSecPerKm>=bestPrior) return null;
+    return {message:`You ran today's tempo effort at ${paceOrSpeedStr(todayRun.actualPaceSecPerKm,state.setup.units,state.paceFormat)} — your best yet.`, date: newLog.date};
+  },
+  'fastest-long-run': (newLog)=>{
+    if(!newLog) return null;
+    const week = findWeekForLog(newLog);
+    const day = week ? week.days.find(d=>d.date===newLog.date) : null;
+    if(!day || day.type!=='long' || !day.paceKey) return null;
+    const runs = paceRunsForType('long');
+    const todayRun = runs.find(r=>r.date===newLog.date);
+    const priorRuns = runs.filter(r=>r.date!==newLog.date);
+    if(!todayRun || !priorRuns.length) return null;
+    const bestPrior = Math.min(...priorRuns.map(r=>r.actualPaceSecPerKm));
+    if(todayRun.actualPaceSecPerKm>=bestPrior) return null;
+    return {message:`You ran today's long run at ${paceOrSpeedStr(todayRun.actualPaceSecPerKm,state.setup.units,state.paceFormat)} — your best yet.`, date: newLog.date};
+  },
+  'longest-run': (newLog)=>{
+    if(!newLog || !(newLog.distanceKm>0)) return null;
+    const priorMax = Math.max(0, ...state.logs.filter(l=>l.id!==newLog.id).map(l=>l.distanceKm));
+    if(!priorMax || newLog.distanceKm<=priorMax) return null;
+    return {message:`${fmtDist(newLog.distanceKm,state.setup.units,1)} — longer than anything you've logged before.`, date: newLog.date};
+  },
+  'double-digit-run': (newLog)=>{
+    if(!newLog || !(newLog.distanceKm>0)) return null;
+    if(newLog.distanceKm < unitToKm(10,'mi')) return null;
+    return {message:`You logged ${fmtDist(newLog.distanceKm,state.setup.units,1)} — your first double-digit-mile run.`};
+  },
+  'miles-500': ()=>mileageMilestoneCheck(500),
+  'miles-250': ()=>mileageMilestoneCheck(250),
+  'miles-100': ()=>mileageMilestoneCheck(100),
+  'miles-50': ()=>mileageMilestoneCheck(50),
+  'streak-7': ()=>{
+    if(longestLoggingStreakDays()<7) return null;
+    return {message:"Seven days in a row, logged. That's a real habit forming."};
+  },
+  'hill-climber': ()=>{
+    const loggedDates = new Set(state.logs.map(l=>l.date));
+    const hillDay = state.plan.weeks.flatMap(w=>w.days).find(d=>d.type==='hills' && loggedDates.has(d.date));
+    if(!hillDay) return null;
+    return {message:"You completed your first dedicated Hill Repeats session."};
+  },
+  'bounced-back': (newLog)=>{
+    if(!newLog) return null;
+    const loggedDates = new Set(state.logs.map(l=>l.date));
+    // Only a genuine "miss" if a run was already logged before it - otherwise this fires
+    // trivially on day one of a brand-new plan (the very first scheduled day almost never
+    // gets logged, since the plan didn't exist yet when that day started), which isn't a
+    // real bounce-back, just onboarding timing.
+    const missedDays = state.plan.weeks.flatMap(w=>w.days).filter(d=>
+      d.km>0 && parseDate(d.date)<todayDate() && !loggedDates.has(d.date)
+      && state.logs.some(l=>l.date<d.date)
+    );
+    for(const d of missedDays){
+      for(let offset=1; offset<=2; offset++){
+        if(fmtDate(addDays(parseDate(d.date),offset))===newLog.date){
+          return {message:'A day got missed, and you got right back to it within two days. That consistency is what actually builds fitness.', date: newLog.date};
+        }
       }
     }
-  }
+    return null;
+  },
+  'fitness-gains': ()=>{
+    const plan = state.plan;
+    if(plan.startVdot==null) return null;
+    const currentVdot = currentEffectiveVdot(plan, state.logs);
+    if(currentVdot==null || currentVdot < plan.startVdot*1.03) return null;
+    return {message:"Your current fitness has meaningfully improved since this plan's first day."};
+  },
+  'strength-logged': ()=>{
+    if(!state.strengthDone.length) return null;
+    return {message:"You marked a strength session complete. The unglamorous work counts too."};
+  },
+  'strength-streak': ()=>{
+    const strengthDays = state.plan.weeks.flatMap(w=>w.days).filter(d=>d.strength).map(d=>d.date).sort();
+    const done = new Set(state.strengthDone);
+    let best=0, cur=0, endDate=null;
+    for(const date of strengthDays){
+      if(parseDate(date)>=todayDate()) break;
+      if(done.has(date)){ cur++; if(cur>=4) endDate=date; } else cur=0;
+      best = Math.max(best,cur);
+    }
+    if(best<4 || !endDate) return null;
+    return {message:'Four scheduled strength sessions in a row, completed. That consistency is what actually prevents injury.', date: endDate};
+  },
+};
+function mileageMilestoneCheck(miles){
+  if(computeProgressStats().totalLoggedKm < unitToKm(miles,'mi')) return null;
+  return {message:`You've logged ${miles} lifetime miles across every run you've tracked in this app.`};
+}
 
-  return false;
+// Runs every achievement check in catalog order (biggest/rarest first), records every one
+// that newly qualifies (so nothing is ever silently lost even if one action satisfies
+// several at once), but only pops up a celebration for the first - the rest are still
+// earned and visible in the gallery, just without their own modal this time.
+function evaluateAndTriggerAchievements(newLog){
+  const earned = [];
+  for(const def of ACHIEVEMENTS){
+    const check = ACHIEVEMENT_CHECKS[def.key];
+    if(!check) continue;
+    if(!def.repeatable && isAchievementEarned(def.key)) continue;
+    const result = check(newLog);
+    if(!result) continue;
+    const instance = result.date || fmtDate(todayDate());
+    if(def.repeatable && state.achievementLog.some(e=>e.key===def.key && e.instance===instance)) continue;
+    recordAchievement(def.key, fmtDate(todayDate()), result.message, instance);
+    earned.push({def, message: result.message});
+  }
+  if(!earned.length) return false;
+  const top = earned[0];
+  state.modal = {type:'milestone', data:{
+    hero: top.def.tier==='summit' ? ICONS[top.def.hero] : null,
+    icon: top.def.tier==='badge' ? badgeGlyph(top.def.key) : null,
+    title: top.def.title,
+    message: top.message,
+  }};
+  return true;
 }
 
 // "X faster/slower than at the start" — shared phrasing for every current-vs-start
@@ -2677,6 +2914,7 @@ function renderProgressTab(){
     </div>`;
   }).join('');
 
+  const earnedAchievements = ACHIEVEMENTS.filter(a=>isAchievementEarned(a.key)).length;
   const recentLogs = state.logs.slice(0,12);
   const logRows = recentLogs.length ? recentLogs.map(l=>{
     const pace = l.durationSec/l.distanceKm;
@@ -2701,6 +2939,16 @@ function renderProgressTab(){
     <button class="card stat-tile" data-act="open-stat-detail" data-stat="training-miles"><div class="v">${stats.pctPlanMilesLogged}%</div><div class="l">training miles logged</div></button>
     <button class="card stat-tile" data-act="open-stat-detail" data-stat="adherence"><div class="v">${stats.adherence}%</div><div class="l">plan adherence</div></button>
     <button class="card stat-tile" data-act="open-stat-detail" data-stat="mileage-delta"><div class="v">${fmtDist(Math.abs(stats.mileageDeltaKm),unit,0)}</div><div class="l">${stats.mileageStatusLabel}</div></button>
+  </div>
+  <div class="container">
+    <button class="card" data-act="open-achievements" style="display:flex; align-items:center; gap:12px; padding:14px 16px; width:100%; text-align:left; margin-bottom:16px;">
+      <div style="width:40px; height:40px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; flex-shrink:0;"><div style="width:22px; height:22px;">${ICONS.summitBadge}</div></div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:700; font-size:14px;">Milestones &amp; badges</div>
+        <div style="font-size:12.5px; color:var(--muted);">${earnedAchievements} of ${ACHIEVEMENTS.length} earned</div>
+      </div>
+      <div style="color:var(--muted); font-size:18px;">›</div>
+    </button>
   </div>
   <div class="section-title" style="padding:0 20px;">Weekly mileage — planned vs. actual</div>
   <div class="card chart-card">
@@ -2932,17 +3180,20 @@ function renderModal(){
   if(m.type==='confirm-import') return modalConfirmImport(m.data);
   if(m.type==='stat-detail') return renderStatDetailModal(m.stat);
   if(m.type==='milestone') return modalMilestone(m.data);
+  if(m.type==='achievements') return renderAchievementsScreen();
   return '';
 }
 
 // Badge-tier celebrations (frequent, small) pass no `hero` and get the 84px badge-ring
-// with the line-icon summitBadge; summit-tier celebrations (rare, plan-defining) pass a
-// hero illustration shown larger in its place. Same sheet either way.
+// with a category glyph (see badgeGlyph) instead of always the plain mountain icon, so a
+// streak feels visually distinct from a PR or a strength badge even in the popup, not
+// just in the gallery; summit-tier celebrations (rare, plan-defining) pass a hero
+// illustration shown larger in its place. Same sheet either way.
 function modalMilestone(data){
-  const { hero, title, message } = data;
+  const { hero, icon, title, message } = data;
   const artHtml = hero
     ? `<div class="milestone-hero">${hero}</div>`
-    : `<div class="badge-ring">${ICONS.summitBadge}</div>`;
+    : `<div class="badge-ring">${icon || ICONS.summitBadge}</div>`;
   return `<div class="overlay" data-act="close-modal-overlay">
     <div class="sheet milestone" data-stop="1">
       <div class="sheet-handle"></div>
@@ -2953,6 +3204,37 @@ function modalMilestone(data){
       <button class="btn btn-primary btn-block" data-act="close-modal">Nice!</button>
     </div>
   </div>`;
+}
+
+// The persistent gallery of every achievement - earned ones show their date, locked ones
+// show how to earn them, so nothing that pops up once is ever gone for good afterward.
+function renderAchievementsScreen(){
+  const summit = ACHIEVEMENTS.filter(a=>a.tier==='summit');
+  const badges = ACHIEVEMENTS.filter(a=>a.tier==='badge');
+  const earnedCount = ACHIEVEMENTS.filter(a=>isAchievementEarned(a.key)).length;
+  const rowFor = (a, i, arr, big) => {
+    const earned = isAchievementEarned(a.key);
+    const date = earned ? achievementEarnedDate(a.key) : null;
+    const icon = big ? (ICONS[a.hero] || ICONS.summitBadge) : badgeGlyph(a.key);
+    const size = big ? 50 : 38, iconSize = big ? 26 : 20;
+    return `<div style="display:flex; align-items:center; gap:12px; padding:12px 0; ${i<arr.length-1?'border-bottom:1px solid var(--line-soft);':''} opacity:${earned?1:0.5};">
+      <div style="width:${size}px; height:${size}px; border-radius:50%; background:${earned?'var(--accent)':'var(--surface-2)'}; color:${earned?'var(--accent-ink)':'var(--muted)'}; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+        <div style="width:${iconSize}px; height:${iconSize}px;">${icon}</div>
+      </div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:700; font-size:14px;">${esc(a.title)}</div>
+        <div style="font-size:12.5px; color:var(--muted);">${earned ? `Earned${date?' '+niceDate(parseDate(date)):''}` : esc(a.locked)}</div>
+      </div>
+    </div>`;
+  };
+  return modalShell('Milestones &amp; badges', `
+    <div class="hint" style="margin:-8px 0 16px;">${earnedCount} of ${ACHIEVEMENTS.length} earned so far.</div>
+    <div class="section-title" style="margin-top:0;">Summit milestones</div>
+    <div class="card" style="padding:0 16px;">${summit.map((a,i)=>rowFor(a,i,summit,true)).join('')}</div>
+    <div class="section-title">Badges</div>
+    <div class="card" style="padding:0 16px;">${badges.map((a,i)=>rowFor(a,i,badges,false)).join('')}</div>
+    <div style="height:12px"></div>
+  `);
 }
 
 // A big number with a small caption under it — the building block for the stat detail
@@ -3248,6 +3530,7 @@ function renderDayDetail(){
       ? `Upper body/core focus today — this day already carries a demanding run, so keep legs light.`
       : `Upper body/core focus — keeps legs fresh for ${week.days[(dayIndex+1)%7].label} (${DOW_LABELS[week.days[(dayIndex+1)%7].dow]}).`)
     : null;
+  const isStrengthDone = state.strengthDone.includes(day.date);
   const editBtn = `<button class="btn" data-act="open-day-edit" style="position:absolute; top:14px; right:62px; padding:9px 16px; font-size:13.5px;">Edit</button>`;
 
   return modalShell(`${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}`, `
@@ -3260,6 +3543,7 @@ function renderDayDetail(){
       ? `<ul style="font-size:14.5px; color:var(--ink-soft); margin:0 0 16px; padding-left:20px; line-height:1.5;">${descriptionParts.map(p=>`<li style="margin-bottom:4px;">${esc(p)}</li>`).join('')}</ul>`
       : descriptionParts.length===1 ? `<div style="font-size:14.5px; color:var(--ink-soft); margin-bottom:16px;">${esc(descriptionParts[0])}</div>` : ''}
     ${strengthFocusNote ? `<div class="hint" style="margin:-10px 0 16px;">${esc(strengthFocusNote)}</div>` : ''}
+    ${day.strength ? `<button class="btn btn-block" data-act="toggle-strength-done" data-date="${day.date}" style="margin-bottom:16px; ${isStrengthDone?'color:var(--accent-strong); border-color:var(--accent-strong);':''}">${isStrengthDone?`${ICONS.check} Strength completed`:'Mark strength completed'}</button>` : ''}
     ${matchedLogs.map(log=>renderLoggedComparisonHtml(day, log, state.plan, week, state.logs, unit, fmt)).join('')}
     ${purpose ? `
     <div class="field">
@@ -3374,7 +3658,8 @@ function exportBackupData(){
     paceFormat: state.paceFormat,
     setup: state.setup,
     logs: state.logs,
-    milestonesShown: state.milestonesShown,
+    strengthDone: state.strengthDone,
+    achievementLog: state.achievementLog,
   };
   const json = JSON.stringify(payload, null, 2);
   const blob = new Blob([json], {type:'application/json'});
@@ -3412,13 +3697,15 @@ function doImportBackup(data){
   state.setup = data.setup;
   state.plan = plan;
   state.logs = data.logs;
-  state.milestonesShown = data.milestonesShown || {halfway:false, arrived:false, firstRun:false, weeksHit:[]};
+  state.strengthDone = data.strengthDone || [];
+  state.achievementLog = data.achievementLog || [];
   Store.setName(state.name);
   Store.setPaceFormat(state.paceFormat);
   Store.setSetup(state.setup);
   Store.setPlan(state.plan);
   Store.setLogs(state.logs);
-  Store.setMilestonesShown(state.milestonesShown);
+  Store.setStrengthDone(state.strengthDone);
+  Store.setAchievementLog(state.achievementLog);
   const today = todayDate();
   const idx = plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
   state.currentWeekIndex = idx===-1?0:idx;
@@ -3543,6 +3830,10 @@ function onClick(e){
     state.modal={type:'stat-detail', stat: el.dataset.stat};
     render(); return;
   }
+  if(act==='open-achievements'){
+    state.modal={type:'achievements'};
+    render(); return;
+  }
 
   if(act==='open-day'){
     const di = Number(el.dataset.i);
@@ -3564,6 +3855,21 @@ function onClick(e){
     const day = state.plan.weeks[weekIndex].days[dayIndex];
     state.modal={type:'log-run', data:{date:day.date, dist:'', time:'', notes:''}};
     render(); return;
+  }
+  if(act==='toggle-strength-done'){
+    const date = el.dataset.date;
+    state.strengthDone = state.strengthDone.includes(date)
+      ? state.strengthDone.filter(d=>d!==date)
+      : [...state.strengthDone, date];
+    Store.setStrengthDone(state.strengthDone);
+    // Marking done (not un-marking) can itself earn an achievement (Strength Session
+    // Logged, Strength Streak) - checked the same way a logged run is, just with no
+    // specific run to pass through. evaluateAndTriggerAchievements sets state.modal to
+    // the celebration when something fires, which the render() below then shows in place
+    // of this day-detail view - exactly like logging a run does.
+    if(state.strengthDone.includes(date)) evaluateAndTriggerAchievements(null);
+    render();
+    return;
   }
   if(act==='reset-day-pace'){
     state.modal.draft.paceOverrideSecPerKm = null;
@@ -3643,7 +3949,7 @@ function onClick(e){
   if(act==='do-reset'){
     Store.resetAll();
     state.name=''; state.setup=null; state.plan=null; state.logs=[]; state.modal=null;
-    state.milestonesShown = {halfway:false, arrived:false, firstRun:false, weeksHit:[]};
+    state.strengthDone = []; state.achievementLog = [];
     state.stravaAuth = null;
     state.view='onboarding'; state.onboardDraft = defaultDraft(); state.onboardStep = 1;
     render(); window.scrollTo(0,0); return;
