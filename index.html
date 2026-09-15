@@ -3691,7 +3691,7 @@ function handleImportFile(file){
 }
 
 function doImportBackup(data){
-  const plan = generateGeneralPlan(data.setup);
+  const plan = isGeneralPlan(data.setup) ? generateGeneralPlan(data.setup) : generatePlan(data.setup);
   state.name = data.name || '';
   state.paceFormat = data.paceFormat || 'pace';
   state.setup = data.setup;
