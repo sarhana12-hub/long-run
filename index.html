@@ -2266,6 +2266,11 @@ const PLAN_KIND_DESC = {
   recovery: 'Reduced volume and zero hard efforts — get back on your feet.',
 };
 function renderOnboardStep1(d){
+  // "Already been training for this?" only matters for a genuine first-time plan - a
+  // reconfigure (Change plan) already resumes from the OLD plan's own real day one
+  // automatically (see submitOnboarding's oldPlan-based dayOneOverride), so this field
+  // would just be silently ignored there if shown - hidden instead of shown-but-inert.
+  const isSwitch = state.onboardMode==='switch';
   const presetChips = RACE_PRESETS.map(r=>`<button class="chip ${d.raceKey===r.key?'active':''}" data-act="pick-race" data-key="${r.key}">${r.label}</button>`).join('');
   const unitChips = ['mi','km'].map(u=>`<button class="chip ${d.units===u?'active':''}" data-act="pick-unit" data-u="${u}">${u==='mi'?'Miles':'Kilometers'}</button>`).join('');
   const weeksToRace = d.raceDate ? Math.max(1,Math.ceil((parseDate(d.raceDate)-todayDate())/86400000/7)) : null;
@@ -2299,6 +2304,7 @@ function renderOnboardStep1(d){
       <div class="hint" id="race-date-hint" style="display:${weeksToRace?'':'none'};">${weeksToRace? `${weeksToRace} week${weeksToRace===1?'':'s'} from today.` : ''}</div>
     </div>
 
+    ${!isSwitch ? `
     <div class="field">
       <label class="field-label">Already been training for this? (optional)</label>
       <input class="input" type="date" id="in-training-start" value="${d.trainingStartDate}" max="${fmtDate(todayDate())}">
@@ -2309,7 +2315,8 @@ function renderOnboardStep1(d){
       <label class="field-label">Track progress from</label>
       <div class="chip-select">${trackFromChipsHtml(d.trackFromToday, d.trainingStartDate)}</div>
       <div class="hint">${d.trackFromToday ? "Plan adherence and ahead/behind only count from today on — those earlier weeks won't count against you, but they won't count toward your progress total either." : "Plan adherence and ahead/behind compare against the full plan from your real start date, so they'll be accurate only once you've logged those earlier runs too."}</div>
-    </div>` : ''}
+    </div>` : ''}` : `
+    <div class="hint" style="margin:-6px 0 16px;">This resumes from your plan's real start date automatically — you'll land on the correct current week, not week one.</div>`}
 
     <div class="section-title">Course profile</div>
     <div class="field">
@@ -2342,6 +2349,7 @@ function renderOnboardStep1(d){
       <input class="input" type="number" min="1" step="1" id="in-weeks" value="${d.weeks}">
       <div class="hint">${kindMeta.hint} (typical: ${kindMeta.weeksMin}–${kindMeta.weeksMax}, we default to ${kindMeta.weeksDefault}).</div>
     </div>
+    ${!isSwitch ? `
     <div class="field">
       <label class="field-label">Already been training for this? (optional)</label>
       <input class="input" type="date" id="in-training-start" value="${d.trainingStartDate}" max="${fmtDate(todayDate())}">
@@ -2352,7 +2360,8 @@ function renderOnboardStep1(d){
       <label class="field-label">Track progress from</label>
       <div class="chip-select">${trackFromChipsHtml(d.trackFromToday, d.trainingStartDate)}</div>
       <div class="hint">${d.trackFromToday ? "Plan adherence and ahead/behind only count from today on — those earlier weeks won't count against you, but they won't count toward your progress total either." : "Plan adherence and ahead/behind compare against the full plan from your real start date, so they'll be accurate only once you've logged those earlier runs too."}</div>
-    </div>` : ''}`;
+    </div>` : ''}` : `
+    <div class="hint" style="margin:-6px 0 16px;">This resumes from your plan's real start date automatically — you'll land on the correct current week, not week one.</div>`}`;
 
   return `
     <div class="section-title" style="margin-top:0; display:flex; align-items:center; gap:8px;">
