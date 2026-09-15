@@ -1080,9 +1080,26 @@ function generatePlan(setup, dayOneOverride){
     if(isCutback) simulatedVol = Math.max(currentKm, simulatedVol*0.8);
     else if(i>0) simulatedVol = simulatedVol * (1 + weeklyGrowthRateFor(simulatedVol));
   }
-  const minWeekGrowthKm = currentKm*(1+weeklyGrowthRateFor(currentKm));
+  // Capped at sanePeakWeeklyCapKm too: for a runner already at high mileage in a shorter
+  // race (45mi/week going into a half marathon, say), even ONE single-week's worth of
+  // growth from where they already are can exceed what that race distance ever calls for -
+  // without this cap, the clamp below would get a lower bound ABOVE its own upper bound
+  // (`growthCapKm`, which stays capped), and clamp(v,lo,hi) with lo>hi silently returns lo
+  // instead of a real range - the exact bug that let a 45mi/week half marathon runner land
+  // on a flat ~44-47mi/week plan every single week, no periodization at all, sailing straight
+  // past the sane cap this was supposed to enforce.
+  const minWeekGrowthKm = Math.min(currentKm*(1+weeklyGrowthRateFor(currentKm)), sanePeakWeeklyCapKm);
   const growthCapKm = Math.min(Math.max(minWeekGrowthKm, simulatedVol), sanePeakWeeklyCapKm);
   let peakWeeklyKm = clamp(idealPeakWeeklyKm, minWeekGrowthKm, growthCapKm);
+  // Never below currentKm: sanePeakWeeklyCapKm exists to stop the plan pushing someone's
+  // volume UP past what their race distance calls for, not to tell a runner who's already
+  // above it to cut back just because a shorter race's typical guidance says less. A
+  // 45mi/week runner training for a half marathon isn't being asked to grow into that
+  // volume - they already run it - so there's nothing unsafe about the plan simply holding
+  // them there throughout, and every week (including week one and cutback resets, both of
+  // which start from currentKm directly) needs peakWeeklyKm to actually be their real peak,
+  // not a lower number those weeks silently exceed.
+  peakWeeklyKm = Math.max(peakWeeklyKm, currentKm);
   // The long run's own climb is deliberately NOT derived from peakWeeklyKm above, and not
   // run through the same cutback-interrupted simulation either. Those model CUMULATIVE
   // weekly load, which is a real, different kind of fatigue than one session's distance -
