@@ -2944,17 +2944,34 @@ function recordAchievement(key, date, message, instance, logId){
   state.achievementLog = [...state.achievementLog, {key, date, message, instance: instance || date, logId: logId || null}];
   Store.setAchievementLog(state.achievementLog);
 }
-// Un-earns anything that was recorded as a direct result of a since-deleted run, so a
-// badge earned by a specific log doesn't linger after that log is gone - it can always be
-// earned again for real if the same condition still holds without it (mileage ladders,
-// streaks, etc. naturally re-fire next time evaluateAndTriggerAchievements runs, since
-// isAchievementEarned just goes false again). Achievements not tied to any one log (no
-// logId — e.g. strength-completion ones) are untouched, since deleting a run never affects
-// what they're measuring.
-function revokeAchievementsForLog(logId){
-  const before = state.achievementLog.length;
-  state.achievementLog = state.achievementLog.filter(e=>e.logId!==logId);
-  if(state.achievementLog.length!==before) Store.setAchievementLog(state.achievementLog);
+// Re-checks every currently-earned, log-tied achievement against the CURRENT set of logs,
+// rather than only ever un-earning the exact log each was originally tagged with. That
+// narrower approach missed real cases - e.g. a "week fully hit" earned by one log in a
+// week, where a DIFFERENT log from that same week gets deleted and the week's total no
+// longer clears the target: the achievement's own tagged logId is untouched, but the
+// condition it represents no longer holds. Run after every deletion. For each log-tied
+// entry, re-runs that achievement's own check function against every remaining log (plus
+// once with no log, for checks that only look at aggregate state) - if none reproduce a
+// matching result, the entry is dropped; it can always be earned again for real later,
+// since isAchievementEarned just goes false. Entries with no logId (not tied to any one
+// run - strength-completion ones) are left untouched, since deleting a run never affects
+// what those measure.
+function revalidateAchievements(){
+  const candidates = [...state.logs, null];
+  const stillValid = state.achievementLog.filter(entry=>{
+    const def = ACHIEVEMENTS_BY_KEY[entry.key];
+    const check = ACHIEVEMENT_CHECKS[entry.key];
+    if(!entry.logId || !def || !check) return true;
+    return candidates.some(log=>{
+      const result = check(log);
+      if(!result) return false;
+      return !def.repeatable || (result.date || fmtDate(todayDate())) === entry.instance;
+    });
+  });
+  if(stillValid.length!==state.achievementLog.length){
+    state.achievementLog = stillValid;
+    Store.setAchievementLog(state.achievementLog);
+  }
 }
 
 // Longest run of consecutive calendar days with at least one log - powers the 7-day
@@ -4901,14 +4918,14 @@ function onClick(e){
     const id = el.dataset.id;
     Store.deleteLog(id);
     state.logs = state.logs.filter(l=>l.id!==id);
-    revokeAchievementsForLog(id);
+    revalidateAchievements();
     render(); return;
   }
   if(act==='undo-log'){
     const id = el.dataset.id;
     Store.deleteLog(id);
     state.logs = state.logs.filter(l=>l.id!==id);
-    revokeAchievementsForLog(id);
+    revalidateAchievements();
     showToast('Run removed');
     return;
   }
