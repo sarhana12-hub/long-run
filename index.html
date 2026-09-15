@@ -2741,9 +2741,21 @@ function achievementEarnedDate(key){
   if(!entries.length) return null;
   return entries.map(e=>e.date).sort().slice(-1)[0];
 }
-function recordAchievement(key, date, message, instance){
-  state.achievementLog = [...state.achievementLog, {key, date, message, instance: instance || date}];
+function recordAchievement(key, date, message, instance, logId){
+  state.achievementLog = [...state.achievementLog, {key, date, message, instance: instance || date, logId: logId || null}];
   Store.setAchievementLog(state.achievementLog);
+}
+// Un-earns anything that was recorded as a direct result of a since-deleted run, so a
+// badge earned by a specific log doesn't linger after that log is gone - it can always be
+// earned again for real if the same condition still holds without it (mileage ladders,
+// streaks, etc. naturally re-fire next time evaluateAndTriggerAchievements runs, since
+// isAchievementEarned just goes false again). Achievements not tied to any one log (no
+// logId — e.g. strength-completion ones) are untouched, since deleting a run never affects
+// what they're measuring.
+function revokeAchievementsForLog(logId){
+  const before = state.achievementLog.length;
+  state.achievementLog = state.achievementLog.filter(e=>e.logId!==logId);
+  if(state.achievementLog.length!==before) Store.setAchievementLog(state.achievementLog);
 }
 
 // Longest run of consecutive calendar days with at least one log - powers the 7-day
@@ -3017,7 +3029,7 @@ function evaluateAndTriggerAchievements(newLog){
     if(!result) continue;
     const instance = result.date || fmtDate(todayDate());
     if(def.repeatable && state.achievementLog.some(e=>e.key===def.key && e.instance===instance)) continue;
-    recordAchievement(def.key, fmtDate(todayDate()), result.message, instance);
+    recordAchievement(def.key, fmtDate(todayDate()), result.message, instance, newLog ? newLog.id : null);
     earned.push({def, message: result.message});
   }
   if(!earned.length) return false;
@@ -4589,12 +4601,14 @@ function onClick(e){
     const id = el.dataset.id;
     Store.deleteLog(id);
     state.logs = state.logs.filter(l=>l.id!==id);
+    revokeAchievementsForLog(id);
     render(); return;
   }
   if(act==='undo-log'){
     const id = el.dataset.id;
     Store.deleteLog(id);
     state.logs = state.logs.filter(l=>l.id!==id);
+    revokeAchievementsForLog(id);
     showToast('Run removed');
     return;
   }
