@@ -2625,7 +2625,16 @@ function renderOnboardStep3(d){
       <div class="hint">Just changes how weeks are laid out on the Plan tab and in the trail chart — your schedule itself doesn't change.</div>
     </div>
 
-    ${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM ? `
+    ${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM ? (()=>{
+      const raceDistInUnits = round1(kmToUnit(d.raceDistanceKm, d.units));
+      const maxWeeklyVal = Number(d.maxWeeklyMi)||0;
+      // Race week always includes actually running the race - a cap set below the race
+      // distance itself is asking for something no plan can honor without either shrinking
+      // race day or silently ignoring the cap that one week. Same explicit-warning
+      // philosophy as distanceGoalWarning/raceLongRunWarning above rather than a silent
+      // surprise the runner only notices by opening race week.
+      const capBelowRace = maxWeeklyVal>0 && maxWeeklyVal < raceDistInUnits;
+      return `
     <div class="section-title">Caps (optional)</div>
     <div class="row">
       <div class="field">
@@ -2638,7 +2647,9 @@ function renderOnboardStep3(d){
       </div>
     </div>
     <div class="hint" style="margin-top:-8px; margin-bottom:16px;">If the plan would otherwise go higher, it scales back down to stay under whichever caps you set here.</div>
-    ` : ''}
+    ${capBelowRace ? `<div class="banner" style="margin:-8px 0 16px;">Your max weekly mileage (${maxWeeklyVal}${d.units}) is below the race distance itself (${raceDistInUnits}${d.units}) — race week will still go over this cap, since it includes actually running the race.</div>` : ''}
+    `;
+    })() : ''}
   `;
 }
 
@@ -5247,7 +5258,7 @@ function onChange(e){
   if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; render(); return; }
   if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; }
   if(e.target.id==='in-max-long'){ state.onboardDraft.maxLongRunMi = e.target.value; }
-  if(e.target.id==='in-max-weekly'){ state.onboardDraft.maxWeeklyMi = e.target.value; }
+  if(e.target.id==='in-max-weekly'){ state.onboardDraft.maxWeeklyMi = e.target.value; render(); return; }
   if(e.target.id==='in-weeks'){ state.onboardDraft.weeks = e.target.value; render(); return; }
   if(e.target.id==='in-distance-current'){ state.onboardDraft.distanceGoalCurrentMi = e.target.value; render(); return; }
   if(e.target.id==='in-distance-target'){ state.onboardDraft.distanceGoalTargetMi = e.target.value; render(); return; }
