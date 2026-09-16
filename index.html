@@ -94,6 +94,8 @@ input,select,textarea{font-family:inherit; font-size:15px;}
 .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow);}
 .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-weight:700; font-size:14px; padding:11px 16px; transition:transform .1s ease;}
 .btn:active{transform:scale(.97);}
+.btn[disabled]{opacity:.45; cursor:not-allowed;}
+.btn[disabled]:active{transform:none;}
 /* An inline icon SVG with no width/height of its own sizes unpredictably in a flex
    button — fine in a narrow, content-width button, but a wide .btn-block with short
    text can blow it up to fill the available space. Pin it explicitly everywhere. */
@@ -4783,11 +4785,28 @@ function modalConfirmSwap(data){
   const week = state.plan.weeks[data.weekIndex];
   const da = week.days[data.dayIndexA], db_ = week.days[data.dayIndexB];
   const lineFor = d => `${DOW_LABELS[d.dow]}, ${niceDate(parseDate(d.date))} — ${TYPE_META[d.type].label}`;
+  // Same scheduleWarnings check modalEditDay already runs live while changing a single
+  // day's type, but computed against what this SWAP would actually produce (both days'
+  // workouts trading places) - previously a swap could land a long run and a quality
+  // session back-to-back, or strength right before a hard effort, with zero warning
+  // until the user happened to reopen one of the affected days afterward. Mirrors
+  // do-swap-days' own mutation exactly (date/dow/id stay put, everything else trades)
+  // so this preview never disagrees with what actually gets saved.
+  const keepA = {date:da.date, dow:da.dow, id:da.id}, keepB = {date:db_.date, dow:db_.dow, id:db_.id};
+  const previewDays = week.days.map((d,i)=> i===data.dayIndexA ? {...db_, ...keepA} : i===data.dayIndexB ? {...da, ...keepB} : d);
+  const swapWarnings = scheduleWarnings({...week, days:previewDays});
+  const ack = !!data.ack;
   return modalShell('Swap these two days?', `
     <div class="hint" style="margin:-8px 0 14px;">Each day keeps its own date — only the workouts trade places.</div>
     <div class="settings-row"><div class="lbl">${esc(lineFor(da))}</div></div>
     <div class="settings-row" style="border-bottom:none;"><div class="lbl">${esc(lineFor(db_))}</div></div>
-    <div class="row" style="margin-top:18px;"><button class="btn btn-block" data-act="close-modal">Cancel</button><button class="btn btn-primary btn-block" data-act="do-swap-days">Swap</button></div>
+    ${swapWarnings.length ? `
+    <div class="banner" style="margin:16px 0 0;">${ICONS.bolt}<span>${swapWarnings.map(w=>esc(w)).join('<br>')}</span></div>
+    <label class="field" style="display:flex; align-items:center; gap:10px; margin:14px 0 0; cursor:pointer;">
+      <input type="checkbox" id="swap-ack" ${ack?'checked':''} style="width:20px; height:20px; flex:none;">
+      <span style="font-size:13.5px; color:var(--ink-soft);">I understand, swap anyway</span>
+    </label>` : ''}
+    <div class="row" style="margin-top:18px;"><button class="btn btn-block" data-act="close-modal">Cancel</button><button class="btn btn-primary btn-block" data-act="do-swap-days" ${swapWarnings.length && !ack ? 'disabled':''}>Swap</button></div>
   `);
 }
 
@@ -5296,6 +5315,10 @@ function onChange(e){
   }
   if(state.modal && state.modal.type==='log-run' && e.target.id==='lr-strava-date' && state.modal.strava && state.modal.strava.confirm){
     state.modal.strava.confirm.date = e.target.value;
+    render(); return;
+  }
+  if(state.modal && state.modal.type==='confirm-swap' && e.target.id==='swap-ack'){
+    state.modal.data.ack = e.target.checked;
     render(); return;
   }
   if(state.modal && state.modal.type==='edit-day'){
