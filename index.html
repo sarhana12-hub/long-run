@@ -4574,9 +4574,29 @@ function modalLogFromStravaHtml(strava){
     return `<div class="hint" style="padding:6px 0 16px;">No new runs found on Strava — anything recent may already be imported.</div>
       <button class="btn btn-block" data-act="log-mode-manual">Enter manually instead</button>`;
   }
+  // Picking a row doesn't import immediately anymore - it opens this one-field confirm
+  // step first, defaulted to the date Strava itself reports for the activity (real data,
+  // not a guess) but editable, since Strava's date can be wrong for the runner's own
+  // purposes (a treadmill run logged the next morning, watch clock drift, etc.) and there
+  // was previously no way to see or correct it before it got saved.
+  if(strava.confirm){
+    const a = strava.confirm.item;
+    const paceSecPerKm = a.distanceKm>0 ? a.durationSec/a.distanceKm : null;
+    return `
+      <div class="log-row" style="margin-bottom:14px;">
+        <div class="log-date">${niceDate(parseDate(a.date))}</div>
+        <div class="log-mid"><div class="d">${fmtDist(a.distanceKm,unit)} · ${secToClock(a.durationSec)}</div>${a.name?`<div class="t">${esc(a.name)}</div>`:''}</div>
+        <div class="log-pace mono">${paceSecPerKm!=null?paceOrSpeedStr(paceSecPerKm,unit,state.paceFormat):''}</div>
+      </div>
+      <div class="field"><label class="field-label">Log this run as</label><input class="input" type="date" id="lr-strava-date" value="${strava.confirm.date}"></div>
+      <div class="hint" style="margin-bottom:14px;">${strava.confirm.date===a.date ? "This is the date Strava recorded for this run." : "Changed from the date Strava recorded for this run."}</div>
+      <button class="btn btn-primary btn-block" data-act="confirm-import-strava" style="margin-bottom:8px; padding:13px;">Log run</button>
+      <button class="btn btn-block" data-act="cancel-import-strava">Back to list</button>
+    `;
+  }
   const rows = strava.items.map(a=>{
     const paceSecPerKm = a.distanceKm>0 ? a.durationSec/a.distanceKm : null;
-    return `<div class="log-row" data-act="import-strava-activity" data-id="${a.id}">
+    return `<div class="log-row" data-act="pick-strava-activity" data-id="${a.id}">
       <div class="log-date">${niceDate(parseDate(a.date))}</div>
       <div class="log-mid"><div class="d">${fmtDist(a.distanceKm,unit)} · ${secToClock(a.durationSec)}</div>${a.name?`<div class="t">${esc(a.name)}</div>`:''}</div>
       <div class="log-pace mono">${paceSecPerKm!=null?paceOrSpeedStr(paceSecPerKm,unit,state.paceFormat):''}</div>
@@ -4967,12 +4987,21 @@ function onClick(e){
     commitLogEntry({date:d.date, distanceKm:unitToKm(distV,unit), durationSec:durSec, notes:d.notes, createdAt:new Date().toISOString()});
     return;
   }
-  if(act==='import-strava-activity'){
+  if(act==='pick-strava-activity'){
     const id = Number(el.dataset.id);
     const items = (state.modal.strava && state.modal.strava.items) || [];
     const a = items.find(x=>x.id===id);
     if(!a) return;
-    commitLogEntry({date:a.date, distanceKm:a.distanceKm, durationSec:a.durationSec, notes:a.name||'', createdAt:new Date().toISOString(), stravaId:a.id});
+    state.modal.strava.confirm = {item:a, date:a.date};
+    render(); return;
+  }
+  if(act==='cancel-import-strava'){
+    state.modal.strava.confirm = null;
+    render(); return;
+  }
+  if(act==='confirm-import-strava'){
+    const {item:a, date} = state.modal.strava.confirm;
+    commitLogEntry({date, distanceKm:a.distanceKm, durationSec:a.durationSec, notes:a.name||'', createdAt:new Date().toISOString(), stravaId:a.id});
     return;
   }
   if(act==='delete-log'){
@@ -5263,6 +5292,10 @@ function onChange(e){
   }
   if(state.modal && state.modal.type==='log-run' && e.target.id==='lr-date'){
     state.modal.data.date = e.target.value;
+    render(); return;
+  }
+  if(state.modal && state.modal.type==='log-run' && e.target.id==='lr-strava-date' && state.modal.strava && state.modal.strava.confirm){
+    state.modal.strava.confirm.date = e.target.value;
     render(); return;
   }
   if(state.modal && state.modal.type==='edit-day'){
