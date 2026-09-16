@@ -1133,13 +1133,19 @@ function generatePlan(setup, dayOneOverride){
 
   const taperWeeks = taperWeeksForCap, buildWeeksCount = buildWeeksCountForCap;
 
+  // A user-supplied maxWeeklyKm can legitimately sit BELOW currentKm (someone already
+  // running 35mi/week deliberately capping this plan at 30, say) - week one and every
+  // cutback-week reset below still need a floor that respects that cap too, not raw
+  // currentKm, or the cap silently gets ignored on exactly the weeks a runner most expects
+  // it to hold (the cap existing to protect against high-volume weeks in the first place).
+  const effectiveCurrentKm = setup.maxWeeklyKm ? Math.min(currentKm, setup.maxWeeklyKm) : currentKm;
   const buildVols = [];
   const cutbackFlags = [];
-  let vol = currentKm;
+  let vol = effectiveCurrentKm;
   for(let i=0;i<buildWeeksCount;i++){
     const isCutback = i>0 && (i % 4 === 3);
     if(isCutback){
-      vol = Math.max(currentKm, buildVols[i-1]*0.8);
+      vol = Math.max(effectiveCurrentKm, buildVols[i-1]*0.8);
     } else if(i>0){
       vol = Math.min(buildVols[i-1]*1.10, peakWeeklyKm);
     }
@@ -1148,10 +1154,10 @@ function generatePlan(setup, dayOneOverride){
   }
   const taperCurves = {1:[0.55], 2:[0.7,0.45], 3:[0.75,0.6,0.4]};
   const taperCurve = taperCurves[taperWeeks] || taperCurves[3].slice(-taperWeeks);
-  const lastBuild = buildVols.length ? buildVols[buildVols.length-1] : Math.max(currentKm, peakWeeklyKm*0.5);
+  const lastBuild = buildVols.length ? buildVols[buildVols.length-1] : Math.max(effectiveCurrentKm, peakWeeklyKm*0.5);
   const taperVols = taperCurve.map(m=>round1(lastBuild*m));
   const weeklyVols = buildVols.concat(taperVols).slice(0, totalWeeks);
-  while(weeklyVols.length<totalWeeks) weeklyVols.push(weeklyVols[weeklyVols.length-1]||currentKm);
+  while(weeklyVols.length<totalWeeks) weeklyVols.push(weeklyVols[weeklyVols.length-1]||effectiveCurrentKm);
 
   // How much base-building someone needs depends on how close their CURRENT mileage
   // already is to the race's IDEAL peak (uncapped) — a runner already at 75%+ of that
@@ -2625,16 +2631,7 @@ function renderOnboardStep3(d){
       <div class="hint">Just changes how weeks are laid out on the Plan tab and in the trail chart — your schedule itself doesn't change.</div>
     </div>
 
-    ${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM ? (()=>{
-      const raceDistInUnits = round1(kmToUnit(d.raceDistanceKm, d.units));
-      const maxWeeklyVal = Number(d.maxWeeklyMi)||0;
-      // Race week always includes actually running the race - a cap set below the race
-      // distance itself is asking for something no plan can honor without either shrinking
-      // race day or silently ignoring the cap that one week. Same explicit-warning
-      // philosophy as distanceGoalWarning/raceLongRunWarning above rather than a silent
-      // surprise the runner only notices by opening race week.
-      const capBelowRace = maxWeeklyVal>0 && maxWeeklyVal < raceDistInUnits;
-      return `
+    ${d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM ? `
     <div class="section-title">Caps (optional)</div>
     <div class="row">
       <div class="field">
@@ -2646,10 +2643,8 @@ function renderOnboardStep3(d){
         <input class="input" type="number" min="0" step="1" id="in-max-weekly" placeholder="no cap" value="${d.maxWeeklyMi}">
       </div>
     </div>
-    <div class="hint" style="margin-top:-8px; margin-bottom:16px;">If the plan would otherwise go higher, it scales back down to stay under whichever caps you set here.</div>
-    ${capBelowRace ? `<div class="banner" style="margin:-8px 0 16px;">Your max weekly mileage (${maxWeeklyVal}${d.units}) is below the race distance itself (${raceDistInUnits}${d.units}) — race week will still go over this cap, since it includes actually running the race.</div>` : ''}
-    `;
-    })() : ''}
+    <div class="hint" style="margin-top:-8px; margin-bottom:16px;">If the plan would otherwise go higher, it scales back down to stay under whichever caps you set here — training weeks only. Race week always still includes your full race distance, same as it would for anyone: that's the event itself, not training mileage.</div>
+    ` : ''}
   `;
 }
 
