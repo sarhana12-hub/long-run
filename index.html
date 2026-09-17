@@ -3761,7 +3761,15 @@ function renderProgressTab(){
   const daysToRace = daysBetween(todayDate(), raceDate);
   const stats = computeProgressStats();
 
-  const chartWeeks = plan.weeks.filter(w=>parseDate(w.weekStart)<=addDays(todayDate(),7)).slice(-8);
+  // Scoped to trackingStartDate the same way planMileageProgress/the trail chart already
+  // are (see computeProgressStats) - a week entirely before tracking started never got
+  // logged by design (that's the whole point of choosing "track from today" over a
+  // backdated plan's real start), so showing it here as a permanent 0/planned bar just
+  // restates the same "behind" signal those other views deliberately stopped showing.
+  // A week straddling trackingStartDate (the current week, most of the time) still
+  // keeps its bar - only weeks that ended before tracking began are dropped.
+  const trackingStart = state.setup.trackingStartDate ? parseDate(state.setup.trackingStartDate) : parseDate(plan.weeks[0].weekStart);
+  const chartWeeks = plan.weeks.filter(w=>parseDate(w.weekStart)<=addDays(todayDate(),7) && addDays(parseDate(w.weekStart),6)>=trackingStart).slice(-8);
   const maxKm = Math.max(1, ...chartWeeks.map(w=>Math.max(w.targetKm, weekActualKm(w))));
   const bars = chartWeeks.map(w=>{
     const actual = weekActualKm(w);
