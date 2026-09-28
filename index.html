@@ -341,6 +341,134 @@ function recomputeStrengthFocus(days){
     day.strengthFocus = (day.type==='rest' || isLegDemandingDay(day) || isLegDemandingDay(next)) ? 'upper' : null;
   });
 }
+// Strength exercise library, grouped into rotation pools by the role each fills in a
+// workout (a machine can share a pool with a free-weight compound lift when they serve
+// the same practical purpose that week) rather than strict biomechanical taxonomy. Every
+// entry names one specific, well-known exercise - nothing esoteric - and states its own
+// equipment plainly, offering a real substitute inline ("or push-ups") wherever one
+// genuinely exists, so a runner reading this on their phone never has to guess what an
+// exercise is supposed to be loaded with. unit:'hold' means the prescribed amount is
+// seconds held, not reps - the two aren't interchangeable in a sentence, so every
+// exercise commits to one or the other. `per` (leg/arm/side) marks a unilateral exercise
+// so strengthSetLine can suffix it correctly.
+const STRENGTH_EXERCISES = {
+  backSquat: {name:'Back squat', equip:'barbell, or goblet squat holding one dumbbell/kettlebell at your chest', unit:'reps'},
+  legPress: {name:'Leg press', equip:'machine', unit:'reps'},
+  deadlift: {name:'Deadlift', equip:'trap bar or barbell, or dumbbell Romanian deadlift if you don’t have a bar', unit:'reps'},
+  singleLegRDL: {name:'Single-leg Romanian deadlift', equip:'a dumbbell in each hand', unit:'reps', per:'leg'},
+  hipThrust: {name:'Barbell hip thrust', equip:'barbell across your hips, shoulders on a bench', unit:'reps'},
+  walkingLunges: {name:'Walking lunges', equip:'a dumbbell in each hand', unit:'reps', per:'leg'},
+  bulgarianSplitSquat: {name:'Bulgarian split squat', equip:'rear foot elevated on a bench, a dumbbell in each hand', unit:'reps', per:'leg'},
+  stepUps: {name:'Step-ups', equip:'onto a bench or box, a dumbbell in each hand', unit:'reps', per:'leg'},
+  legExtension: {name:'Leg extension', equip:'machine', unit:'reps'},
+  hamstringCurl: {name:'Hamstring curl', equip:'machine', unit:'reps'},
+  standingCalfRaise: {name:'Standing single-leg calf raise', equip:'bodyweight, hold a wall or rail for balance - add a dumbbell if it feels too easy', unit:'reps', per:'leg'},
+  seatedCalfRaise: {name:'Seated calf raise', equip:'a dumbbell resting on your knee, or a machine if you have one', unit:'reps'},
+  gluteBridge: {name:'Glute bridge', equip:'bodyweight - feet flat, squeeze at the top', unit:'reps'},
+  bodyweightSquat: {name:'Bodyweight squat', equip:'bodyweight, or hold one light dumbbell at your chest for a touch of load', unit:'reps'},
+  sidePlank: {name:'Side plank', equip:'bodyweight', unit:'hold', per:'side'},
+  pallofPress: {name:'Pallof press', equip:'resistance band or cable - press straight out from your chest and resist rotating', unit:'reps', per:'side'},
+  cableRotation: {name:'Standing cable rotation (wood-chop)', equip:'cable machine', unit:'reps', per:'side'},
+  plank: {name:'Plank', equip:'forearms on the ground, bodyweight', unit:'hold'},
+  deadBug: {name:'Dead bug', equip:'bodyweight, lying on your back', unit:'reps', per:'side'},
+  benchPress: {name:'Dumbbell bench press', equip:'a bench and a pair of dumbbells, or push-ups, or a chest press machine', unit:'reps'},
+  shoulderPress: {name:'Dumbbell shoulder press', equip:'seated or standing, a pair of dumbbells, or a shoulder press machine', unit:'reps'},
+  singleArmRow: {name:'Single-arm dumbbell row', equip:'one hand and knee on a bench, row the dumbbell to your hip', unit:'reps', per:'arm'},
+  cableRow: {name:'Standing cable row', equip:'cable machine', unit:'reps'},
+  latPulldown: {name:'Lat pulldown', equip:'cable machine, or pull-ups if you’d rather go bodyweight', unit:'reps'},
+};
+// Which exercises can fill a given slot, in rotation order - kept separate from the
+// definitions above so one exercise (e.g. hip thrust) can sit in more than one pool
+// without duplicating its data. Deliberately excludes the two pure arm-isolation
+// exercises (cable tricep pushdown/bicep curl) from every pool - real equipment options,
+// discussed and kept out on purpose, since they have essentially no running-specific
+// performance or injury-prevention value unlike everything actually used here, and the
+// upper-body session's time budget is better spent on push/pull/core.
+const PRIMARY_LOWER_POOL = ['backSquat','legPress','deadlift','singleLegRDL','hipThrust'];
+const SECONDARY_LOWER_POOL = ['walkingLunges','bulgarianSplitSquat','stepUps','legExtension','hamstringCurl'];
+const CALF_POOL = ['standingCalfRaise','seatedCalfRaise'];
+const LOWER_CORE_POOL = ['sidePlank','pallofPress','cableRotation'];
+const UPPER_PULL_POOL = ['singleArmRow','cableRow','latPulldown'];
+const UPPER_CORE_POOL = ['plank','deadBug'];
+function pickFromPool(pool, weekIndex){ return STRENGTH_EXERCISES[pool[((weekIndex%pool.length)+pool.length)%pool.length]]; }
+
+// One line of a strength workout - sets, reps-or-hold, exercise, equipment, effort (reps-
+// in-reserve language, never an actual weight, since the app has no way to know what any
+// user can lift), and rest before the next set of THIS exercise. Matches the flowing,
+// concrete style already used for run-day descriptions rather than reading like a
+// spreadsheet.
+function strengthSetLine(ex, sets, amount, restSec, effort){
+  const numSuffix = ex.per==='leg' ? '/leg' : ex.per==='arm' ? '/arm' : '';
+  const nameSuffix = ex.per==='side' ? ' each side' : '';
+  const amountStr = ex.unit==='hold' ? `${amount}s${numSuffix}` : `${amount}${numSuffix}`;
+  // A single set has no "between sets" to rest for - only say so when there's more than one.
+  const restClause = sets>1 ? ` Rest ${(restSec>=120 && restSec%60===0) ? (restSec/60)+' min' : restSec+'s'} between sets.` : '';
+  return `${sets}×${amountStr} ${ex.name}${nameSuffix} (${ex.equip}) — ${effort}.${restClause}`;
+}
+// Builds the lower-body session for one of the three tiers real coaching guidance backs
+// (see the strength-guidance conversation this was built from): Build gets real volume
+// and load since running-specific recovery demand is still moderate; Peak trims sets and
+// backs off load since running itself is now supplying most of the training stress;
+// Taper drops to light, bodyweight-only maintenance so nothing new is being built this
+// close to race day. Each phase call rotates which specific exercise fills its multi-
+// option slots by week (see pickFromPool) so the same session doesn't repeat identically
+// for the whole phase.
+function buildLowerStrengthWorkout(tier, weekIndex){
+  const core = pickFromPool(LOWER_CORE_POOL, weekIndex);
+  const coreReps = core.unit==='hold' ? 30 : 10;
+  if(tier==='taper'){
+    return [
+      strengthSetLine(STRENGTH_EXERCISES.bodyweightSquat, 2, 8, 45, 'easy, plenty left in the tank every set'),
+      strengthSetLine(STRENGTH_EXERCISES.gluteBridge, 2, 10, 30, 'easy effort'),
+      strengthSetLine(core, 1, core.unit==='hold'?30:8, 0, core.unit==='hold' ? 'comfortably sustainable, not a struggle' : 'easy, controlled'),
+    ];
+  }
+  if(tier==='peak'){
+    const primary = pickFromPool(PRIMARY_LOWER_POOL, weekIndex);
+    const calf = pickFromPool(CALF_POOL, weekIndex);
+    return [
+      strengthSetLine(primary, 3, 5, 120, 'moderate load, stop well short of failure, 3–4 reps left in the tank — this is about maintaining strength, not testing it'),
+      strengthSetLine(calf, 2, 10, 45, 'moderate-easy effort'),
+      strengthSetLine(core, 2, coreReps, 30, core.unit==='hold' ? 'comfortably sustainable' : 'controlled, comfortably sustainable'),
+    ];
+  }
+  // build (and base/cutback/maintenance, which use the same tier - see
+  // lowerStrengthTierForPhase)
+  const primary = pickFromPool(PRIMARY_LOWER_POOL, weekIndex);
+  const secondary = pickFromPool(SECONDARY_LOWER_POOL, weekIndex);
+  const calf = pickFromPool(CALF_POOL, weekIndex);
+  return [
+    strengthSetLine(primary, 4, 6, 120, 'about 2 reps left in the tank'),
+    strengthSetLine(secondary, 3, secondary.unit==='hold'?30:8, 60, 'moderate effort, closer to fatigue by the last few reps'),
+    strengthSetLine(calf, 3, 10, 45, 'moderate effort, closer to fatigue by the last few reps'),
+    strengthSetLine(core, 3, coreReps, 30, core.unit==='hold' ? 'hold until it’s genuinely hard to keep good form' : 'controlled - resist letting your hips twist'),
+  ];
+}
+// The upper-body/core session run on an actual rest day (see placeStrengthDays/
+// recomputeStrengthFocus) - fixed volume and load regardless of training phase, since it
+// doesn't compete with the same running-specific recovery demands the lower-body session
+// does. Bench press and shoulder press stay fixed every week (distinct push patterns,
+// both worth keeping); the pull and core slots rotate for variety.
+function buildUpperStrengthWorkout(weekIndex){
+  const pull = pickFromPool(UPPER_PULL_POOL, weekIndex);
+  const core = pickFromPool(UPPER_CORE_POOL, weekIndex);
+  return [
+    strengthSetLine(STRENGTH_EXERCISES.benchPress, 3, 8, 90, 'challenging by the last couple reps of each set, 1–2 reps left in the tank'),
+    strengthSetLine(pull, 3, 8, 90, 'same moderate-hard effort'),
+    strengthSetLine(STRENGTH_EXERCISES.shoulderPress, 3, 10, 90, 'same moderate-hard effort'),
+    strengthSetLine(core, 3, core.unit==='hold'?30:10, 30, core.unit==='hold' ? 'hold until form starts to break' : 'controlled, challenging by the last few reps'),
+  ];
+}
+// Real total time, verified line-by-line against strengthSetLine's own sets/rest values
+// (warm-up + each exercise's work+rest + a transition between exercises) rather than
+// restated as a round guess - see the time-accounting conversation this came from.
+const STRENGTH_TIME_MIN = {build:33, peak:18, taper:10, upper:26};
+function lowerStrengthTierForPhase(phase){
+  if(phase==='taper' || phase==='recovery') return 'taper';
+  if(phase==='peak') return 'peak';
+  return 'build'; // base, build, cutback, and maintenance all use build-tier volume
+}
+
 // Decides which days in one already-typed week get a strength session (mutates `days` in
 // place), then derives strengthFocus for all of them via recomputeStrengthFocus. The first
 // configured strength day (strengthDows[0], from deriveScheduleFromLongDow - the day right
@@ -356,7 +484,7 @@ function recomputeStrengthFocus(days){
 // the way strengthDows itself is. Anything still left over after that (more sessions
 // requested than rest days available) falls back to the remaining onboarding-chosen days,
 // same as this app's behavior before rest-day placement existed.
-function placeStrengthDays(days, strengthDows, strengthPerWeek){
+function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex){
   let strengthLeft = strengthPerWeek==null ? 2 : strengthPerWeek;
   const apply = idx => { days[idx].strength = true; strengthLeft--; };
   if(strengthLeft>0 && strengthDows.length){
@@ -374,6 +502,22 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek){
     });
   }
   recomputeStrengthFocus(days);
+  refreshStrengthWorkouts(days, phase, weekIndex);
+}
+// Attaches the actual exercise content to every strength day, based on its CURRENT
+// strengthFocus - a day marked upper-only (an actual rest day, or reactively next to a
+// hard run) gets the fixed upper-body session; everything else gets the phase-tapered
+// lower-body one. Called once at generation time (see placeStrengthDays) and again after
+// anything that can change strengthFocus post-generation - a manual day swap, or editing
+// a day's type - via recomputeStrengthFocus, so the displayed exercises never drift out
+// of sync with whichever focus is actually showing.
+function refreshStrengthWorkouts(days, phase, weekIndex){
+  const tier = lowerStrengthTierForPhase(phase);
+  days.forEach(d=>{
+    if(!d.strength) return;
+    d.strengthExercises = d.strengthFocus==='upper' ? buildUpperStrengthWorkout(weekIndex) : buildLowerStrengthWorkout(tier, weekIndex);
+    d.strengthTimeMin = d.strengthFocus==='upper' ? STRENGTH_TIME_MIN.upper : STRENGTH_TIME_MIN[tier];
+  });
 }
 // Continuous/structured hard-pace efforts get a guaranteed warm-up (jumping into
 // threshold/interval pace cold hurts both quality and injury risk); hills already gets
@@ -1460,7 +1604,7 @@ function generatePlan(setup, dayOneOverride){
       };
     });
 
-    placeStrengthDays(days, strengthDows, setup.strengthPerWeek);
+    placeStrengthDays(days, strengthDows, setup.strengthPerWeek, phase, w);
 
     if(isRaceWeek){
       const raceIdx = days.findIndex(x=>x.date===fmtDate(raceDate));
@@ -1511,7 +1655,7 @@ const PLAN_KIND_META = {
 // decided long-run km, splitting whatever's left over evenly across easy days (a simpler
 // split than the race generator's recovery/aerobic distinction — appropriate here since
 // these plans don't have a single race-specific long run to protect the day after).
-function buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, strengthDows, strengthPerWeek, runsPerWeek, addStrides){
+function buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, strengthDows, strengthPerWeek, runsPerWeek, addStrides, phase, weekIndex){
   const days = [];
   for(let d=0; d<7; d++){
     const date = addDays(weekStart, d);
@@ -1555,7 +1699,7 @@ function buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, str
 
   days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run'};
 
-  placeStrengthDays(days, strengthDows, strengthPerWeek);
+  placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex);
 
   return days;
 }
@@ -1648,7 +1792,7 @@ function generateSpeedPlan(setup, dayOneOverride){
       quality.push({dow:secondDow, type:secondType, km:round1(primaryKm*0.6)});
     }
 
-    const days = buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, strengthDows, 2, runsPerWeek, true);
+    const days = buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, strengthDows, 2, runsPerWeek, true, isCutback?'cutback':'build', w);
     days.forEach(day=>{ Object.assign(day, buildWorkoutMeta(day, 10)); });
     weekPaces.racePerKm = null;
     weekList.push({weekIndex:w, phase:isCutback?'cutback':'build', isCutback, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), paces:weekPaces, days});
@@ -1690,7 +1834,7 @@ function generateDistancePlan(setup, dayOneOverride){
     }
     const runsPerWeek = setup.runsPerWeek || runsPerWeekFor(weeklyKm);
 
-    const days = buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, [], strengthDows, 1, runsPerWeek, true);
+    const days = buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, [], strengthDows, 1, runsPerWeek, true, isCutback?'cutback':'base', w);
     days.forEach(day=>{ Object.assign(day, buildWorkoutMeta(day, 10)); });
     const weekPaces = paceZonesFromVdot(startVdot);
     weekPaces.racePerKm = null;
@@ -1763,7 +1907,7 @@ function generateMaintenancePlan(setup, dayOneOverride){
   for(let w=0; w<weeks; w++){
     const weekStart = addDays(weekStart0, w*7);
     const quality = [{dow:speedDow, type:'tempo', km:round1(Math.min((currentKm-longKm)*0.3, 6))}];
-    const days = buildGeneralWeekDays(weekStart, currentKm, longKm, longDow, quality, strengthDows, 1, runsPerWeek, false);
+    const days = buildGeneralWeekDays(weekStart, currentKm, longKm, longDow, quality, strengthDows, 1, runsPerWeek, false, 'maintenance', w);
     days.forEach(day=>{ Object.assign(day, buildWorkoutMeta(day, 10)); });
     weekList.push({weekIndex:w, phase:'maintenance', isCutback:false, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), paces:weekPaces, days});
   }
@@ -1792,7 +1936,7 @@ function generateRecoveryPlan(setup, dayOneOverride){
     const t = weeks<=1 ? 1 : w/(weeks-1);
     const weeklyKm = round1(baselineKm*(0.55+0.20*t));
     const longKm = round1(weeklyKm*DISTANCE_LONG_FRACTION);
-    const days = buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, [], [], 0, runsPerWeek, false);
+    const days = buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, [], [], 0, runsPerWeek, false, 'recovery', w);
     days.forEach(day=>{
       if(day.type==='long') day.paceKeyOverride = true; // easy-pace long run, not marathon-adjacent
       Object.assign(day, buildWorkoutMeta(day, 10));
@@ -4772,6 +4916,10 @@ function renderDayDetail(){
       ? `<ul style="font-size:14.5px; color:var(--ink-soft); margin:0 0 16px; padding-left:20px; line-height:1.5;">${descriptionParts.map(p=>`<li style="margin-bottom:4px;">${esc(p)}</li>`).join('')}</ul>`
       : descriptionParts.length===1 ? `<div style="font-size:14.5px; color:var(--ink-soft); margin-bottom:16px;">${esc(descriptionParts[0])}</div>` : ''}
     ${strengthFocusNote ? `<div class="hint" style="margin:-10px 0 16px;">${esc(strengthFocusNote)}</div>` : ''}
+    ${day.strength && day.strengthExercises && day.strengthExercises.length ? `
+    <div class="field-label" style="margin-bottom:8px;">Strength${day.strengthTimeMin ? ` — about ${day.strengthTimeMin} min` : ''}</div>
+    <ul style="font-size:14.5px; color:var(--ink-soft); margin:0 0 16px; padding-left:20px; line-height:1.5;">${day.strengthExercises.map(p=>`<li style="margin-bottom:6px;">${esc(p)}</li>`).join('')}</ul>
+    ` : ''}
     ${day.strength ? `<button class="btn btn-block" data-act="toggle-strength-done" data-date="${day.date}" style="margin-bottom:16px; ${isStrengthDone?'color:var(--accent-strong); border-color:var(--accent-strong);':''}">${isStrengthDone?`${ICONS.check} Strength completed`:'Mark strength completed'}</button>` : ''}
     ${day.type==='race' ? `<button class="btn btn-primary btn-block" data-act="open-pacing-sheet" style="margin-bottom:16px;">${ICONS.flag} View pacing sheet</button>` : ''}
     ${matchedLogs.map(log=>renderLoggedComparisonHtml(day, log, state.plan, week, state.logs, unit, fmt)).join('')}
@@ -5203,6 +5351,7 @@ function onClick(e){
     week.days[a] = {...db_, ...keepA};
     week.days[b] = {...da, ...keepB};
     recomputeStrengthFocus(week.days);
+    refreshStrengthWorkouts(week.days, week.phase, week.weekIndex);
     Store.setPlan(state.plan);
     state.modal = null;
     showToast('Swapped');
@@ -5232,6 +5381,7 @@ function onClick(e){
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     recomputeStrengthFocus(week.days);
+    refreshStrengthWorkouts(week.days, week.phase, week.weekIndex);
     Store.setPlan(state.plan);
     state.modal=null; showToast('Day updated'); return;
   }
