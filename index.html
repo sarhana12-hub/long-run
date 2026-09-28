@@ -2788,8 +2788,20 @@ function renderOnboardStep2(d){
     `;
   })();
 
+  // In switch/reconfigure mode the "already been training?" field is deliberately hidden
+  // (see renderOnboardStep1) - the plan actually resumes from the OLD plan's own real start
+  // date via a separate mechanism (submitOnboarding's dayOneOverride), not this field, so
+  // d.trainingStartDate stays empty here. This warning needs that same real anchor though,
+  // or it silently computes "weeks available" as just today-to-race-day - the remaining
+  // runway only - ignoring every week already actually trained, making a mid-plan
+  // reconfigure look like a far shorter, riskier build than it really is (e.g. warning that
+  // "5 weeks isn't enough" when 5 weeks is only what's left, not the whole build).
+  const isSwitch = state.onboardMode==='switch';
+  const effectiveTrainingStart = (isSwitch && state.plan && state.plan.weeks && state.plan.weeks.length)
+    ? state.plan.weeks[0].weekStart
+    : d.trainingStartDate;
   const longRunWarning = isGeneral ? null : raceLongRunWarning(
-    d.raceDistanceKm, d.raceDate, d.trainingStartDate,
+    d.raceDistanceKm, d.raceDate, effectiveTrainingStart,
     unitToKm(Number(d.currentWeeklyMi)||0, d.units), d.longRunEmphasis, d.units
   );
 
