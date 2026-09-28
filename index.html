@@ -535,6 +535,17 @@ function deriveScheduleFromLongDow(longDow, strengthPerWeek){
 
 function circularDayDist(a,b){ const diff=Math.abs(a-b); return Math.min(diff,7-diff); }
 
+// Chooses k positions out of n, spread as evenly as possible (the standard even-
+// distribution/Bresenham formula) - used to decide which of a week's remaining candidate
+// days become rest days, so two or more rest days land spread across the week instead of
+// clustering whenever a plain day-order slice happens to leave them at the tail end.
+function evenlySpacedPositions(n, k){
+  if(k<=0 || n<=0) return [];
+  const positions = [];
+  for(let i=0;i<k;i++) positions.push(Math.floor((i*n)/k + n/(2*k)));
+  return positions;
+}
+
 /* Flags — never blocks — spacing that runs against common coaching guidance: hard
    efforts (the long run and any quality workout) less than 48h apart, and strength
    sessions landing the day before a hard effort (or stacked onto one) rather than
@@ -1311,7 +1322,19 @@ function generatePlan(setup, dayOneOverride){
     const usedRunDays = 1 + (wantsSpeed?1:0) + (secondSpeedIdx!==-1?1:0);
     const easyDaysNeeded = Math.max(0, runsPerWeek-usedRunDays);
     const candidateIdxs = days.map((x,i)=>i).filter(i=>i!==longIdx && i!==speedIdx && i!==secondSpeedIdx);
-    const easyIdxs = candidateIdxs.slice(0, easyDaysNeeded);
+    // Whichever candidates don't become easy days stay 'rest' - previously that was just
+    // whatever a plain day-order slice left at the tail of candidateIdxs, which could bunch
+    // two+ rest days back-to-back (e.g. always the week's last two available days) with no
+    // real reason for them to be adjacent. Spread them evenly instead via
+    // evenlySpacedPositions, while still protecting the day right after the long run as an
+    // easy (recovery) day whenever there's room - the recovery-run placement just below
+    // depends on that day actually being in easyIdxs.
+    const restDaysNeeded = candidateIdxs.length - easyDaysNeeded;
+    const recoveryCandidateIdx = easyDaysNeeded>0 ? candidateIdxs.find(i=>days[i].dow===(longDow+1)%7) : undefined;
+    const restEligible = candidateIdxs.filter(i=>i!==recoveryCandidateIdx);
+    const restPositions = new Set(evenlySpacedPositions(restEligible.length, Math.min(restDaysNeeded, restEligible.length)));
+    const restIdxs = restEligible.filter((_,pos)=>restPositions.has(pos));
+    const easyIdxs = candidateIdxs.filter(i=>!restIdxs.includes(i));
 
     // Easy days aren't run at one flat distance: the day right after the long run is a
     // short recovery jog, and (when there's a third easy day) the one placed farthest from
@@ -1491,7 +1514,13 @@ function buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, str
   const usedRunDays = 1 + qualityIdxs.length;
   const easyDaysNeeded = Math.max(0, runsPerWeek-usedRunDays);
   const candidateIdxs = days.map((x,i)=>i).filter(i=>i!==longIdx && !qualityIdxs.includes(i));
-  const easyIdxs = candidateIdxs.slice(0, easyDaysNeeded);
+  // Same even-spread rest-day placement as generatePlan (see evenlySpacedPositions) -
+  // previously the leftover rest days were just whatever a plain slice left at the tail of
+  // candidateIdxs, which could bunch multiple rest days back-to-back.
+  const restDaysNeeded = candidateIdxs.length - easyDaysNeeded;
+  const restPositions = new Set(evenlySpacedPositions(candidateIdxs.length, restDaysNeeded));
+  const restIdxs = candidateIdxs.filter((_,pos)=>restPositions.has(pos));
+  const easyIdxs = candidateIdxs.filter(i=>!restIdxs.includes(i));
   // Same strides-funding treatment as race plans - trimmed from the shared easy-day pool
   // before it's split up, credited back onto whichever single easy day (n===0) actually
   // gets strides.
