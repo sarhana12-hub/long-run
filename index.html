@@ -1482,7 +1482,11 @@ function generatePlan(setup, dayOneOverride){
     const days = [];
     for(let d=0; d<7; d++){
       const date = addDays(weekStart, d);
-      days.push({id:uid(), date:fmtDate(date), dow:date.getDay(), type:'rest', km:0, strength:false, label:'Rest', notesOverride:null, treadmillHills: !!setup.treadmillHills});
+      // treadmillHills is a per-workout choice, not a plan-wide setting - defaults to
+      // outdoor here and is only ever changed per-day, from that specific day's Edit
+      // screen (see modalEditDay/save-day), since real hill access can vary week to week
+      // rather than being one fixed fact about the runner for the whole plan.
+      days.push({id:uid(), date:fmtDate(date), dow:date.getDay(), type:'rest', km:0, strength:false, label:'Rest', notesOverride:null, treadmillHills:false});
     }
     const longIdx = days.findIndex(x=>x.dow===longDow);
     let speedIdx = days.findIndex(x=>x.dow===speedDow);
@@ -2267,7 +2271,6 @@ function defaultDraft(){
     maxLongRunMi: '', maxWeeklyMi: '',
     longRunEmphasis: 'balanced', speedEmphasis: 'balanced', strengthPerWeek: 2,
     hillsMode: 'flat', // 'flat' | 'hilly' - race plans only, see generatePlan()
-    treadmillHills: false, // race plans only - swaps incline/speed/recovery guidance into hill workouts
     skipBase: false, // race plans only - skip straight to build phase, see generatePlan()
     // General (non-race) plan fields
     planKind: 'speed', weeks: PLAN_KIND_META.speed.weeksDefault,
@@ -2306,7 +2309,6 @@ function draftFromSetup(setup){
     longRunEmphasis: setup.longRunEmphasis || 'balanced', speedEmphasis: setup.speedEmphasis || 'balanced',
     strengthPerWeek: setup.strengthPerWeek==null ? 2 : setup.strengthPerWeek,
     hillsMode: setup.hillsMode || 'flat',
-    treadmillHills: !!setup.treadmillHills,
     skipBase: !!setup.skipBase,
   };
 }
@@ -2390,7 +2392,7 @@ function submitOnboarding(){
       maxLongRunKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxLongRunMi) ? unitToKm(Number(d.maxLongRunMi), d.units) : null,
       maxWeeklyKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxWeeklyMi) ? unitToKm(Number(d.maxWeeklyMi), d.units) : null,
       longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis,
-      hillsMode: d.hillsMode, treadmillHills: !!d.treadmillHills, skipBase: d.skipBase,
+      hillsMode: d.hillsMode, skipBase: d.skipBase,
     };
     plan = generatePlan(setup, dayOneOverride);
   }
@@ -2624,14 +2626,6 @@ function renderOnboardStep1(d){
         <button class="chip ${d.hillsMode==='hilly'?'active':''}" data-act="pick-hills-mode" data-mode="hilly">Hilly</button>
       </div>
       <div class="hint">Hilly adds dedicated hill-repeat sessions, marks your long run and one easy run each week as rolling terrain, and recommends extra strength work for the eccentric demand of climbs and descents.</div>
-    </div>
-    <div class="field">
-      <label class="field-label">Hill workouts</label>
-      <div class="chip-select">
-        <button class="chip ${!d.treadmillHills?'active':''}" data-act="pick-treadmill-hills" data-mode="0">Real hills</button>
-        <button class="chip ${d.treadmillHills?'active':''}" data-act="pick-treadmill-hills" data-mode="1">Treadmill only</button>
-      </div>
-      <div class="hint">Every race plan includes some hill-repeat and hill-stride work, regardless of course profile above. Treadmill swaps in incline/speed/recovery guidance instead of assuming a real hill to run and walk back down.</div>
     </div>`;
 
   const kindCards = Object.keys(PLAN_KIND_META).map(k=>{
@@ -4248,7 +4242,6 @@ function renderSettingsTab(){
         ? `<div class="settings-row"><div><div class="lbl">${esc(planLabel(s))}</div><div class="sub">${s.weeks} week${s.weeks===1?'':'s'} total</div></div></div>`
         : `<div class="settings-row"><div><div class="lbl">${esc(planLabel(s))}</div><div class="sub">${niceDateFull(parseDate(s.raceDate))}</div></div></div>`}
       ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Course profile</div><div class="sub">${s.hillsMode==='hilly'?'Hilly':'Flat / rolling'}</div></div></div>` : ''}
-      ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Hill workouts</div><div class="sub">${s.treadmillHills?'Treadmill':'Real hills'}</div></div></div>` : ''}
       ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Base phase</div><div class="sub">${s.skipBase?'Skipped — straight to speed work':'Build up gradually'}</div></div></div>` : ''}
       <div class="settings-row"><div><div class="lbl">Weekly mileage used to build plan</div><div class="sub">${fmtDist(s.currentWeeklyKm,unit,1)}/week</div></div></div>
       <div class="settings-row"><div><div class="lbl">This week's paces</div><div class="sub">Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)}${isGeneralPlan(s) ? '' : ` · Goal race pace ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}`}</div></div></div>
@@ -5006,7 +4999,7 @@ function modalEditDay(){
   const matchedLogs = state.logs.filter(l=>l.date===day.date);
   const typeOpts = Object.keys(TYPE_META).map(t=>`<option value="${t}" ${draft.type===t?'selected':''}>${TYPE_META[t].label}</option>`).join('');
   const weekPaces = getWeekPaces(state.plan, week, state.logs);
-  const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy:draft.progressionEasy, warmupKm:draft.warmupKm, cooldownKm:draft.cooldownKm, treadmillHills: day.treadmillHills}, state.plan.raceDistanceKm);
+  const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy:draft.progressionEasy, warmupKm:draft.warmupKm, cooldownKm:draft.cooldownKm, treadmillHills: draft.treadmillHills}, state.plan.raceDistanceKm);
   // Same strides/terrain/hillStrides eligibility as the save handler (see save-day) - the
   // live preview shouldn't show a stale strides or terrain note for a type the user has
   // switched to but not saved yet either (previously it used draft.strides raw here,
@@ -5014,7 +5007,13 @@ function modalEditDay(){
   const previewStrides = STRIDES_ELIGIBLE_TYPES.includes(draft.type) && !!draft.strides;
   const previewTerrainEligible = draft.type==='long' || (draft.type==='easy' && day.easyRole==='aerobic');
   const previewHillStridesEligible = draft.type==='easy' && day.easyRole==='aerobic' && previewStrides;
-  const previewDay = {...meta, type:draft.type, km:draft.km, paceOverrideSecPerKm: draft.paceOverrideSecPerKm, strides:previewStrides, hillStrides: previewHillStridesEligible ? day.hillStrides : false, terrain: previewTerrainEligible ? day.terrain : null, treadmillHills: day.treadmillHills};
+  const previewDay = {...meta, type:draft.type, km:draft.km, paceOverrideSecPerKm: draft.paceOverrideSecPerKm, strides:previewStrides, hillStrides: previewHillStridesEligible ? day.hillStrides : false, terrain: previewTerrainEligible ? day.terrain : null, treadmillHills: draft.treadmillHills};
+  // Treadmill is a per-workout choice (see the day-skeleton comment in generatePlan) -
+  // only surfaced here when this specific day could actually show hill-specific content:
+  // a dedicated Hill Repeats session, or the week's aerobic easy day (the one hill strides
+  // can land on). Every other day type never reads treadmillHills at all, so showing the
+  // toggle there would just be a control with no visible effect.
+  const treadmillEligible = draft.type==='hills' || (draft.type==='easy' && day.easyRole==='aerobic');
   const description = renderWorkoutText(previewDay, weekPaces, unit, fmt) || 'No planned distance for this day.';
   const recommendedSecPerKm = meta.paceKey ? weekPaces[meta.paceKey] : null;
   const effectiveSecPerKm = draft.paceOverrideSecPerKm!=null ? draft.paceOverrideSecPerKm : recommendedSecPerKm;
@@ -5044,6 +5043,11 @@ function modalEditDay(){
     <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
       <label class="field-label" style="margin:0;">Add strides</label>
       <input type="checkbox" id="ed-strides" ${draft.strides?'checked':''} style="width:20px; height:20px;">
+    </div>` : ''}
+    ${treadmillEligible ? `
+    <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
+      <label class="field-label" style="margin:0;">Treadmill (no real hills for this one)</label>
+      <input type="checkbox" id="ed-treadmill-hills" ${draft.treadmillHills?'checked':''} style="width:20px; height:20px;">
     </div>` : ''}
     ${draft.type==='progression' ? `
     <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
@@ -5223,7 +5227,6 @@ function onClick(e){
   if(act==='pick-recent'){ state.onboardDraft.recentDistanceKey = el.dataset.key; render(); return; }
   if(act==='pick-goal-mode'){ state.onboardDraft.goalMode = el.dataset.mode; render(); return; }
   if(act==='pick-hills-mode'){ state.onboardDraft.hillsMode = el.dataset.mode; render(); return; }
-  if(act==='pick-treadmill-hills'){ state.onboardDraft.treadmillHills = el.dataset.mode==='1'; render(); return; }
   if(act==='pick-skip-base'){ state.onboardDraft.skipBase = el.dataset.mode==='1'; render(); return; }
   if(act==='pick-plan-kind'){
     const kind = el.dataset.kind;
@@ -5362,7 +5365,7 @@ function onClick(e){
     state.modal={type:'edit-day', weekIndex, dayIndex, draft:{
       type: day.type, km: day.km, strength: day.strength, strides: !!day.strides, easyRole: day.easyRole ?? null,
       paceOverrideSecPerKm: day.paceOverrideSecPerKm ?? null, progressionEasy: !!day.progressionEasy,
-      warmupKm: day.warmupKm ?? 0, cooldownKm: day.cooldownKm ?? 0,
+      warmupKm: day.warmupKm ?? 0, cooldownKm: day.cooldownKm ?? 0, treadmillHills: !!day.treadmillHills,
     }};
     render(); return;
   }
@@ -5431,7 +5434,13 @@ function onClick(e){
     const day = state.plan.weeks[wi].days[di];
     const strides = STRIDES_ELIGIBLE_TYPES.includes(draft.type) && !!draft.strides;
     const progressionEasy = draft.type==='progression' && !!draft.progressionEasy;
-    const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy, warmupKm:draft.warmupKm, cooldownKm:draft.cooldownKm, treadmillHills: day.treadmillHills}, state.plan.raceDistanceKm);
+    // treadmillHills is only ever editable when treadmillEligible would show its checkbox
+    // (see modalEditDay) - for any other type, draft.treadmillHills is whatever it was
+    // initialized to and was never presented as a choice, so fall back to the day's
+    // existing value rather than accidentally reset it via an untouched draft field.
+    const treadmillEligible = draft.type==='hills' || (draft.type==='easy' && day.easyRole==='aerobic');
+    const treadmillHills = treadmillEligible ? !!draft.treadmillHills : !!day.treadmillHills;
+    const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy, warmupKm:draft.warmupKm, cooldownKm:draft.cooldownKm, treadmillHills}, state.plan.raceDistanceKm);
     // terrain/hillStrides are generatePlan-assigned, role-based fields (the long run, and
     // the week's "aerobic" easy day - see easyIdxs.forEach), not something the edit modal
     // lets the user set directly. Only keep them when the day's (possibly just-changed)
@@ -5440,7 +5449,7 @@ function onClick(e){
     // instead of carrying it forward onto a workout it no longer describes.
     const terrainEligible = draft.type==='long' || (draft.type==='easy' && day.easyRole==='aerobic');
     const hillStridesEligible = draft.type==='easy' && day.easyRole==='aerobic' && strides;
-    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0, easyVariety:false, terrain: terrainEligible ? day.terrain : null, hillStrides: hillStridesEligible ? day.hillStrides : false};
+    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0, easyVariety:false, terrain: terrainEligible ? day.terrain : null, hillStrides: hillStridesEligible ? day.hillStrides : false, treadmillHills};
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     recomputeStrengthFocus(week.days);
@@ -5608,6 +5617,7 @@ function onChange(e){
     if(e.target.id==='ed-km'){ draft.km = unitToKm(Number(e.target.value)||0, unit); render(); return; }
     if(e.target.id==='ed-strength'){ draft.strength = e.target.checked; render(); return; }
     if(e.target.id==='ed-strides'){ draft.strides = e.target.checked; render(); return; }
+    if(e.target.id==='ed-treadmill-hills'){ draft.treadmillHills = e.target.checked; render(); return; }
     if(e.target.id==='ed-progression-easy'){ draft.progressionEasy = e.target.checked; render(); return; }
     if(e.target.id==='ed-pace'){
       const secPerKm = parsePaceInput(e.target.value, unit, state.paceFormat);
