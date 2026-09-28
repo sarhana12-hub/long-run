@@ -325,17 +325,55 @@ const QUALITY_TYPES = ['long','tempo','intervals','hills','fartlek','overunder',
 // cases), not a real hard effort, so they're excluded here even though their bare `type`
 // is in QUALITY_TYPES.
 function isLegDemandingDay(day){ return day.type==='long' || (QUALITY_TYPES.includes(day.type) && !day.easyVariety); }
-// Re-derives strengthFocus for every strength day in a week against its (possibly just-
-// changed) neighbor - same rule generatePlan/buildGeneralWeekDays apply once at creation
-// time, but a manual day swap (see move-target) can move a leg-demanding day next to a
-// strength day that was never flagged, or move one away from a day that was - so this has
-// to run again after any swap, not just once at generation.
+// Re-derives strengthFocus for every strength day in a week against its current type and
+// (possibly just-changed) neighbor - same rule generatePlan/buildGeneralWeekDays apply
+// once at creation time (see placeStrengthDays), but a manual day swap (see move-target)
+// can move a leg-demanding day next to a strength day that was never flagged, move one
+// away from a day that was, or land strength on an actual rest day - so this has to run
+// again after any swap, not just once at generation. A rest day is upper-only regardless
+// of neighbors: there's no run that day for lower-body work to pair with, so there's
+// nothing to "keep fresh" by skipping legs - it's just that legs have no reason to be
+// loaded on the one day they're meant to fully recover.
 function recomputeStrengthFocus(days){
   days.forEach((day,i)=>{
     if(!day.strength) return;
     const next = days[(i+1)%days.length];
-    day.strengthFocus = (isLegDemandingDay(day) || isLegDemandingDay(next)) ? 'upper' : null;
+    day.strengthFocus = (day.type==='rest' || isLegDemandingDay(day) || isLegDemandingDay(next)) ? 'upper' : null;
   });
+}
+// Decides which days in one already-typed week get a strength session (mutates `days` in
+// place), then derives strengthFocus for all of them via recomputeStrengthFocus. The first
+// configured strength day (strengthDows[0], from deriveScheduleFromLongDow - the day right
+// after the long run or speed day) stays anchored there, paired with an easy run day: real
+// lower-body strength work is real physiological load on the same muscles/tendons running
+// already stresses, so it belongs on a day the runner is training anyway, not on the one
+// day meant to be genuinely low-stress. Any additional session(s) beyond the first prefer
+// an actual rest day this week instead of stacking onto another running day - upper-
+// body/core work doesn't compete with those same running-specific tissues, so it doesn't
+// need to be paired with a run at all, and "easy run + strength" was making for a long day
+// for anyone short on time. Which days are rest shifts week to week (see
+// evenlySpacedPositions), so this picks fresh each week rather than reusing a fixed dow
+// the way strengthDows itself is. Anything still left over after that (more sessions
+// requested than rest days available) falls back to the remaining onboarding-chosen days,
+// same as this app's behavior before rest-day placement existed.
+function placeStrengthDays(days, strengthDows, strengthPerWeek){
+  let strengthLeft = strengthPerWeek==null ? 2 : strengthPerWeek;
+  const apply = idx => { days[idx].strength = true; strengthLeft--; };
+  if(strengthLeft>0 && strengthDows.length){
+    const idx = days.findIndex(x=>x.dow===strengthDows[0] && !QUALITY_TYPES.includes(x.type));
+    if(idx!==-1) apply(idx);
+  }
+  if(strengthLeft>0){
+    days.forEach((d,i)=>{ if(strengthLeft>0 && d.type==='rest' && !d.strength) apply(i); });
+  }
+  if(strengthLeft>0){
+    strengthDows.slice(1).forEach(dw=>{
+      if(strengthLeft<=0) return;
+      const idx = days.findIndex(x=>x.dow===dw && !QUALITY_TYPES.includes(x.type) && !x.strength);
+      if(idx!==-1) apply(idx);
+    });
+  }
+  recomputeStrengthFocus(days);
 }
 // Continuous/structured hard-pace efforts get a guaranteed warm-up (jumping into
 // threshold/interval pace cold hurts both quality and injury risk); hills already gets
@@ -1422,20 +1460,7 @@ function generatePlan(setup, dayOneOverride){
       };
     });
 
-    let strengthLeft = setup.strengthPerWeek==null?2:setup.strengthPerWeek;
-    strengthDows.forEach(dw=>{
-      if(strengthLeft<=0) return;
-      const idx = days.findIndex(x=>x.dow===dw && !QUALITY_TYPES.includes(x.type));
-      if(idx!==-1){
-        days[idx].strength = true;
-        // Can't always avoid landing next to a leg-demanding day (strengthDows is fixed
-        // once at onboarding, but the base-phase variety pick's weekday shifts week to
-        // week) - so instead of just avoiding it, tell the runner to keep legs light
-        // when it happens, which neutralizes the actual concern either way.
-        if(isLegDemandingDay(days[idx]) || isLegDemandingDay(days[(idx+1)%7])) days[idx].strengthFocus = 'upper';
-        strengthLeft--;
-      }
-    });
+    placeStrengthDays(days, strengthDows, setup.strengthPerWeek);
 
     if(isRaceWeek){
       const raceIdx = days.findIndex(x=>x.date===fmtDate(raceDate));
@@ -1530,16 +1555,7 @@ function buildGeneralWeekDays(weekStart, weeklyKm, longKm, longDow, quality, str
 
   days[longIdx] = {...days[longIdx], type:'long', km:round1(longKm), label:'Long Run'};
 
-  let strengthLeft = strengthPerWeek;
-  strengthDows.forEach(dw=>{
-    if(strengthLeft<=0) return;
-    const idx = days.findIndex(x=>x.dow===dw && !QUALITY_TYPES.includes(x.type));
-    if(idx!==-1){
-      days[idx].strength = true;
-      if(isLegDemandingDay(days[idx]) || isLegDemandingDay(days[(idx+1)%7])) days[idx].strengthFocus = 'upper';
-      strengthLeft--;
-    }
-  });
+  placeStrengthDays(days, strengthDows, strengthPerWeek);
 
   return days;
 }
@@ -2653,7 +2669,7 @@ function renderOnboardStep3(d){
     <div class="field">
       <label class="field-label">Strength days per week</label>
       <div class="chip-select">${strengthCountChipsHtml(d.strengthPerWeek, 'pick-strength-count')}</div>
-      <div class="hint">Placed the day after your long run and/or speed day, so it pairs with recovery instead of adding to a hard day.</div>
+      <div class="hint">The first session pairs with a recovery day after your long run or speed day. Additional sessions land on a true rest day when one's available that week — upper body/core, so legs still get a genuine day off — rather than stacking onto another run.</div>
       ${d.hillsMode==='hilly' && (d.strengthPerWeek||0)<2 ? `<div class="banner" style="margin-top:10px;">${ICONS.bolt}<span>Hilly courses put heavy eccentric load on your quads and glutes, especially on descents — most coaches recommend at least 2 strength sessions/week to build that tolerance. You can still pick fewer, but it's worth the extra session here.</span></div>` : ''}
     </div>
 
@@ -4737,9 +4753,11 @@ function renderDayDetail(){
   const descriptionParts = (day.descBase==null && day.notes!=null) ? [day.notes] : workoutPartsFor(day, weekPaces, unit, fmt);
   const purpose = WORKOUT_PURPOSE[day.type];
   const strengthFocusNote = day.strengthFocus==='upper'
-    ? (isLegDemandingDay(day)
-      ? `Upper body/core focus today — this day already carries a demanding run, so keep legs light.`
-      : `Upper body/core focus — keeps legs fresh for ${week.days[(dayIndex+1)%7].label} (${DOW_LABELS[week.days[(dayIndex+1)%7].dow]}).`)
+    ? (day.type==='rest'
+      ? `Upper body/core focus — no run today, so it's still a genuine day off for your legs.`
+      : isLegDemandingDay(day)
+        ? `Upper body/core focus today — this day already carries a demanding run, so keep legs light.`
+        : `Upper body/core focus — keeps legs fresh for ${week.days[(dayIndex+1)%7].label} (${DOW_LABELS[week.days[(dayIndex+1)%7].dow]}).`)
     : null;
   const isStrengthDone = state.strengthDone.includes(day.date);
   const editBtn = `<button class="btn" data-act="open-day-edit" style="position:absolute; top:14px; right:62px; padding:9px 16px; font-size:13.5px;">Edit</button>`;
