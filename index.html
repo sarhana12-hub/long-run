@@ -984,9 +984,14 @@ function structuredEffort(type, qualityKm, raceDistanceKm, treadmillHills){
       // comes first in the sentence (not trailing, like the outdoor version's "jog back
       // down to recover") because the pace this paceKey supplies gets appended at the very
       // end of descBase - trailing it after a recovery clause would misread as the pace
-      // for the WALK, not the climb.
+      // for the WALK, not the climb. 6% is the calibrated grade: real hill-repeat hills
+      // (the kind runners specifically seek out for a sustained 60-90s hard effort, not
+      // just a rolling-terrain feature) are commonly in the 6-8% range - below that reads
+      // as rolling terrain, above roughly 10-12% gait mechanics break down toward a power-
+      // hike well before 60-90s is up for most runners, which stops being comparable to
+      // actual hill running.
       const descBase = treadmillHills
-        ? `${reps} hill reps, flat and an easy walk to recover between each — 60–90s at 5% incline, roughly tempo effort`
+        ? `${reps} hill reps, flat and an easy walk to recover between each — 60–90s at 6% incline, roughly tempo effort`
         : `${reps} hill reps — 60–90s hard uphill effort, jog back down to recover`;
       return {structuredKm: reps*0.3, descBase, paceKey: treadmillHills ? 'tempoPerKm' : null};
     }
@@ -1142,8 +1147,13 @@ function optionalCooldownNote(day){
 function stridesDetail(day, unit){
   if(day.hillStrides){
     const extra = fmtDist(HILL_STRIDES_EXTRA_KM, unit);
+    // One notch steeper than the Hill Repeats grade (see structuredEffort's hills case) -
+    // real practice supports going steeper for a short, sharp rep than a sustained 60-90s
+    // one, since a 10s rep never runs into the "unsustainable at this grade" problem a
+    // longer effort would - part of how short hill sprints get their power-focused
+    // stimulus in the first place.
     return day.treadmillHills
-      ? `${STRIDES_REPS} × 10s hard effort at 6% incline, then flat and an easy walk to recover, about ${extra} of the total above`
+      ? `${STRIDES_REPS} × 10s hard effort at 7% incline, then flat and an easy walk to recover, about ${extra} of the total above`
       : `${STRIDES_REPS} × 10s hard effort uphill, walk back down to recover, about ${extra} of the total above`;
   }
   const extra = fmtDist(STRIDES_EXTRA_KM, unit);
