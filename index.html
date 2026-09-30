@@ -184,6 +184,21 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .day-check svg{width:11px; height:11px;}
 .strength-badge{font-size:10px; font-weight:700; color:var(--z-strength); background:var(--z-strength-bg); border-radius:6px; padding:2px 6px;}
 
+/* ---------- pace tracker: then-vs-now + trend bars ---------- */
+.tn-row{display:flex; align-items:center; justify-content:center; gap:10px; margin:2px 0 10px;}
+.tn-col{flex:1; text-align:center; min-width:0;}
+.tn-label{font-size:9.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); margin-bottom:3px;}
+.tn-pace{font-size:19px; font-weight:700;}
+.tn-date{font-size:10.5px; color:var(--muted); margin-top:1px;}
+.tn-arrow{color:var(--muted); flex:none; width:18px; height:18px;}
+.tn-badge{text-align:center; border-radius:10px; padding:7px; font-weight:700; font-size:12.5px; margin-bottom:12px;}
+.trend-bar-row{display:grid; grid-template-columns:40px 1fr 56px; align-items:center; gap:8px; padding:3px 0;}
+.trend-bar-date{font-size:10.5px; color:var(--muted);}
+.trend-bar-track{position:relative; height:14px; background:var(--surface-2); border-radius:5px;}
+.trend-bar-zero{position:absolute; left:50%; top:-3px; bottom:-3px; width:1px; background:var(--line);}
+.trend-bar-fill{position:absolute; top:2px; bottom:2px; border-radius:4px;}
+.trend-bar-delta{font-size:10.5px; text-align:right; font-weight:700;}
+
 /* ---------- FAB & tabbar ---------- */
 .fab{position:fixed; right:calc(20px + env(safe-area-inset-right)); bottom:calc(80px + env(safe-area-inset-bottom)); z-index:20; background:var(--accent); color:var(--accent-ink); border:none; border-radius:999px; padding:14px 20px 14px 16px; font-weight:800; font-size:14px; display:flex; align-items:center; gap:7px; box-shadow:0 10px 24px -8px rgba(0,0,0,.35); max-width:460px; margin:0 auto; transform:translateZ(0);}
 .tabbar{position:fixed; left:0; right:0; bottom:0; z-index:15; background:var(--surface); border-top:1px solid var(--line); display:flex; padding:8px calc(10px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left)); transform:translateZ(0);}
@@ -4146,46 +4161,70 @@ function paceRunColor(run){
   if(Math.abs(deltaSecPerKm)<PACE_ON_TARGET_SEC_PER_KM) return 'var(--muted)';
   return deltaSecPerKm>=0 ? 'var(--z-tempo)' : 'var(--accent-strong)';
 }
-// Same pace formatting as paceOrSpeedStr, minus the /mi or /km suffix — the unit is
-// already implied by context, and every character counts in a tiny chart label.
-function compactPaceLabel(secPerKm, unit, fmt){
-  const secPerUnit = unit==='mi' ? secPerKm*KM_PER_MI : secPerKm;
-  return fmt==='speed' ? (3600/secPerUnit).toFixed(1) : secToClock(secPerUnit);
+// Same math/formatting as paceDeltaLine (see below, actual-vs-that-day's-target), but
+// comparing two actual runs against each other instead - used by the then-vs-now header
+// to say "how much have you actually improved" in the same units and phrasing the rest
+// of the pace tracker already uses. Returns direction alongside the text so callers can
+// color it without re-parsing the string.
+function paceGainLine(fromSecPerKm, toSecPerKm, unit, fmt){
+  const deltaSecPerKm = toSecPerKm - fromSecPerKm; // negative = got faster
+  const deltaDisplayPerUnit = unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm;
+  if(Math.abs(deltaDisplayPerUnit)<3) return {text:'Holding steady', direction:'steady'};
+  if(fmt==='speed'){
+    const fromSpeed = 3600/(unit==='mi'?fromSecPerKm*KM_PER_MI:fromSecPerKm);
+    const toSpeed = 3600/(unit==='mi'?toSecPerKm*KM_PER_MI:toSecPerKm);
+    const faster = toSpeed>fromSpeed;
+    return {text:`${Math.abs(toSpeed-fromSpeed).toFixed(1)} ${unit==='mi'?'mph':'km/h'} ${faster?'faster':'slower'}`, direction: faster?'faster':'slower'};
+  }
+  const faster = deltaDisplayPerUnit<0;
+  return {text:`${secToClock(Math.abs(deltaDisplayPerUnit))}/${unit} ${faster?'faster':'slower'}`, direction: faster?'faster':'slower'};
 }
-// A small line chart of pace delta over time — up (green) is faster than that day's
-// target, down (amber) is slower, the dashed center line is on pace. Plotting each run
-// individually (rather than one blended average) is the point: it shows whether recent
-// runs are trending toward target, not just where the average happens to land. Each
-// point is labeled with its own date and pace, colored the same as the dot, alternating
-// above/below by index so neighboring labels don't stack on top of each other.
-function paceSparklineSvg(runs){
-  const W = 280, H = 108, PAD_X = 10;
-  const CENTER_Y = 54, USABLE_H = 22, LABEL_OFFSET = 15;
-  const unit = state.setup.units, fmt = state.paceFormat;
-  const n = runs.length;
-  const pts = runs.map((r,i)=>{
-    const x = n===1 ? W/2 : PAD_X + (i/(n-1))*(W-PAD_X*2);
-    const deltaFrac = clamp((r.actualPaceSecPerKm-r.plannedPaceSecPerKm)/r.plannedPaceSecPerKm, -PACE_TREND_CAP_FRAC, PACE_TREND_CAP_FRAC);
-    const y = CENTER_Y + (deltaFrac/PACE_TREND_CAP_FRAC)*USABLE_H;
-    return {x, y, color:paceRunColor(r), run:r};
-  });
-  const pathD = pts.map((p,i)=> `${i===0?'M':'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
-  const dots = pts.map(p=> `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.2" style="fill:${p.color};"/>`).join('');
-  const labels = pts.map((p,i)=>{
-    const above = i%2===0;
-    const ty = above ? p.y-LABEL_OFFSET : p.y+LABEL_OFFSET+7;
-    const anchor = i===0 ? 'start' : (i===n-1 ? 'end' : 'middle');
-    const dt = parseDate(p.run.date);
+// Headline comparison: the very first logged run of this type against the latest, so the
+// card tells a "since you started" story even with just two points - the same reasoning
+// as the Projected Race Performance tile's start-vs-now framing above it on this same
+// tab, reused here rather than invented fresh. Complements the trend bars below it, which
+// show each run against THAT DAY's own target instead of against the first run. Only
+// shown once there are at least two logged runs - with just one there's no "since" yet.
+function paceThenVsNowHtml(allRuns, unit, fmt){
+  if(allRuns.length<2) return '';
+  const first = allRuns[0], last = allRuns[allRuns.length-1];
+  const gain = paceGainLine(first.actualPaceSecPerKm, last.actualPaceSecPerKm, unit, fmt);
+  const color = gain.direction==='steady' ? 'var(--muted)' : (gain.direction==='faster' ? 'var(--accent-strong)' : 'var(--z-tempo)');
+  const bg = gain.direction==='steady' ? 'var(--surface-2)' : (gain.direction==='faster' ? 'var(--accent-soft)' : 'var(--z-tempo-bg)');
+  const arrow = `<svg class="tn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`;
+  const dateLabel = d => { const dt = parseDate(d); return `${dt.getMonth()+1}/${dt.getDate()}`; };
+  return `
+    <div class="tn-row">
+      <div class="tn-col"><div class="tn-label">First logged</div><div class="tn-pace mono">${paceOrSpeedStr(first.actualPaceSecPerKm,unit,fmt)}</div><div class="tn-date mono">${dateLabel(first.date)}</div></div>
+      ${arrow}
+      <div class="tn-col"><div class="tn-label">Most recent</div><div class="tn-pace mono">${paceOrSpeedStr(last.actualPaceSecPerKm,unit,fmt)}</div><div class="tn-date mono">${dateLabel(last.date)}</div></div>
+    </div>
+    <div class="tn-badge" style="color:${color}; background:${bg};">${gain.text} · ${allRuns.length} logged</div>
+  `;
+}
+// Each logged run as a bar growing from a zero line - length is how far off THAT DAY's
+// own target pace it was (capped at PACE_TREND_CAP_FRAC, the same cap the old line chart
+// used, so one outlier can't flatten the rest), direction is immediate, no slope to read.
+// Unlike a line, a single bar is still a meaningful statement on its own - this reads
+// fine from the very first logged run, not only once enough points exist to draw a trend.
+function paceTrendBarsHtml(runs, unit, fmt){
+  return runs.map(r=>{
+    const deltaSecPerKm = r.actualPaceSecPerKm - r.plannedPaceSecPerKm; // positive = slower
+    const deltaFrac = clamp(deltaSecPerKm/r.plannedPaceSecPerKm, -PACE_TREND_CAP_FRAC, PACE_TREND_CAP_FRAC);
+    const pct = Math.abs(deltaFrac/PACE_TREND_CAP_FRAC)*50;
+    const color = paceRunColor(r);
+    const onTarget = Math.abs(deltaSecPerKm) < PACE_ON_TARGET_SEC_PER_KM;
+    const fillStyle = deltaSecPerKm<0 ? `left:50%; width:${pct.toFixed(1)}%;` : `right:50%; width:${pct.toFixed(1)}%;`;
+    const dt = parseDate(r.date);
     const dateStr = `${dt.getMonth()+1}/${dt.getDate()}`;
-    const paceLabel = compactPaceLabel(p.run.actualPaceSecPerKm, unit, fmt);
-    return `<text x="${p.x.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${anchor}" style="font-size:8.5px; font-family:var(--font-body); fill:${p.color};">${esc(dateStr)} ${esc(paceLabel)}</text>`;
+    const deltaDisplayPerUnit = Math.abs(unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm);
+    const deltaLabel = onTarget ? 'on pace' : `${deltaSecPerKm<0?'-':'+'}${Math.round(deltaDisplayPerUnit)}s`;
+    return `<div class="trend-bar-row">
+      <span class="trend-bar-date mono">${esc(dateStr)}</span>
+      <div class="trend-bar-track"><div class="trend-bar-zero"></div>${onTarget?'':`<div class="trend-bar-fill" style="${fillStyle} background:${color};"></div>`}</div>
+      <span class="trend-bar-delta mono" style="color:${color};">${esc(deltaLabel)}</span>
+    </div>`;
   }).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block; overflow:visible;">
-    <line x1="0" y1="${CENTER_Y}" x2="${W}" y2="${CENTER_Y}" style="stroke:var(--line); stroke-width:1; stroke-dasharray:3,3;"/>
-    <path d="${pathD}" style="fill:none; stroke:var(--ink-soft); stroke-width:1.5;"/>
-    ${dots}
-    ${labels}
-  </svg>`;
 }
 function paceTrackerRowHtml(type, label){
   const unit = state.setup.units, fmt = state.paceFormat;
@@ -4198,20 +4237,15 @@ function paceTrackerRowHtml(type, label){
   }
   const runs = allRuns.slice(-8);
   const mostRecent = runs[runs.length-1];
-  const deltaLineFull = paceDeltaLine(mostRecent.actualPaceSecPerKm, mostRecent.plannedPaceSecPerKm, unit, fmt);
-  const deltaShort = deltaLineFull==='right on target pace' ? 'On pace' : deltaLineFull.replace(' than planned','');
-  const recentColor = paceRunColor(mostRecent);
 
   return `<div style="padding:14px 0; border-bottom:1px solid var(--line-soft);">
-    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
       <span style="font-weight:700; font-size:14px;">${label}</span>
       <span class="mono" style="font-size:11px; color:var(--muted);">${allRuns.length} logged</span>
     </div>
-    ${paceSparklineSvg(runs)}
-    <div style="display:flex; justify-content:space-between; margin-top:2px; font-size:11.5px;">
-      <span class="mono" style="color:var(--muted);">Target ${paceOrSpeedStr(mostRecent.plannedPaceSecPerKm,unit,fmt)}</span>
-      <span style="font-weight:700; color:${recentColor};">Most recent: ${deltaShort}</span>
-    </div>
+    ${paceThenVsNowHtml(allRuns, unit, fmt)}
+    ${paceTrendBarsHtml(runs, unit, fmt)}
+    <div class="hint" style="margin-top:8px;">Target ${paceOrSpeedStr(mostRecent.plannedPaceSecPerKm,unit,fmt)}</div>
   </div>`;
 }
 
