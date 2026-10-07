@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 9; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 10; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -428,7 +428,7 @@ const STRENGTH_EXERCISES = {
     {needs:['smith'], name:'Smith machine squat', equip:'bar across the upper back'},
     {needs:['kettlebell'], name:'Goblet squat', equip:'one heavy kettlebell held at the chest'},
     {needs:['dumbbells'], name:'Goblet squat', equip:'one heavy dumbbell held at the chest'},
-    {needs:[], name:'Bodyweight squat', equip:'bodyweight, three seconds down', how:null},
+    {needs:[], name:'Single-leg squat to a chair', equip:'bodyweight, a chair or bench behind you', per:'leg', how:'Stand on one leg in front of a chair, lower slowly until you just touch the seat, then stand back up without using the other foot; hold a wall or rail for balance if needed.'},
   ]},
   legPress: {unit:'reps', how:'Feet shoulder-width on the plate, lower until the knees are near a right angle without the lower back peeling off the pad, then press back without locking the knees out.', variants:[
     {needs:['legPress'], name:'Leg press', equip:'machine'},
@@ -503,7 +503,7 @@ const STRENGTH_EXERCISES = {
     {needs:['kettlebell'], name:'Suitcase carry', equip:'one heavy kettlebell, 30–40 m per set'},
     {needs:['dumbbells'], name:'Suitcase carry', equip:'one heavy dumbbell, 30–40 m per set'},
     {needs:['plates'], name:'Suitcase carry', equip:'one heavy plate, 30–40 m per set'},
-    {needs:[], name:'Side plank', equip:'bodyweight', how:'On one forearm with the elbow under the shoulder, lift the hips so the body makes a straight line, and hold without letting the hips sag.'},
+    {needs:[], name:'Side plank', equip:'bodyweight', unit:'hold', how:'On one forearm with the elbow under the shoulder, lift the hips so the body makes a straight line, and hold without letting the hips sag.'},
   ]},
   deadBug: {unit:'reps', per:'side', how:'Lie on your back with arms up and knees over hips; lower one arm and the opposite leg toward the floor while keeping the lower back pressed down, then switch.', variants:[{needs:[], name:'Dead bug', equip:'bodyweight, lying on your back'}]},
   plank: {unit:'hold', variants:[{needs:[], name:'Plank', equip:'forearms, bodyweight'}]},
@@ -572,7 +572,7 @@ const STRENGTH_EXERCISES = {
     {needs:['kettlebell'], name:'Farmer carry', equip:'a heavy kettlebell in each hand, 30–40 m per set'},
     {needs:['dumbbells'], name:'Farmer carry', equip:'a heavy dumbbell in each hand, 30–40 m per set'},
     {needs:['plates'], name:'Farmer carry', equip:'a heavy plate in each hand, 30–40 m per set'},
-    {needs:[], name:'Plank', equip:'forearms, bodyweight', how:null},
+    {needs:[], name:'Plank', equip:'forearms, bodyweight', unit:'hold', per:null, how:null},
   ]},
 };
 // Optional extras: isolation work has no running benefit, but the upper session is short and
@@ -602,7 +602,7 @@ function resolveExercise(def, avail){
   if(!def) return null;
   for(const v of def.variants){
     if(v.needs.every(id=>avail.has(id))){
-      return {name:v.name, equip:v.equip, unit:v.unit||def.unit, per:('per' in v) ? v.per : def.per, how:('how' in v) ? v.how : def.how, id:def._id};
+      return {name:v.name, equip:v.equip, unit:v.unit||def.unit, per:('per' in v) ? v.per : def.per, how:('how' in v) ? v.how : def.how, id:def._id, bodyweight: v.needs.length===0};
     }
   }
   return null;
@@ -621,8 +621,10 @@ const UPPER_CORE2_POOL = ['sidePlank','farmerCarry','suitcaseCarry'];
 // Walk the pool from position i, skipping exercises with no available variant.
 function pickFromPool(pool, i, avail){
   const n = pool.length;
-  for(let k=0;k<n;k++){ const def = STRENGTH_EXERCISES[pool[(((i+k)%n)+n)%n]]; const r = resolveExercise(def, avail); if(r) return r; }
-  return resolveExercise(STRENGTH_EXERCISES.gobletSquat, avail) || resolveExercise(STRENGTH_EXERCISES.plank, avail);
+  const usedNames = new Set(_used.map(x=>x.name));
+  let first = null;
+  for(let k=0;k<n;k++){ const def = STRENGTH_EXERCISES[pool[(((i+k)%n)+n)%n]]; const r = resolveExercise(def, avail); if(!r) continue; if(!first) first = r; if(!usedNames.has(r.name)) return r; }
+  return first || resolveExercise(STRENGTH_EXERCISES.gobletSquat, avail) || resolveExercise(STRENGTH_EXERCISES.plank, avail);
 }
 const _used = [];
 function strengthSetLine(ex, sets, amount, restSec, effort){
@@ -677,7 +679,7 @@ function buildLowerStrengthWorkout(tier, weekIndex, weekInBlock, avail){
   if(tier==='express'){
     return [
       strengthSetLine(pogo, 2, 15, 45, 'quick off the ground'),
-      strengthSetLine(primary, 3, 5, 120, 'heavy, 2–3 reps left in the tank'),
+      primary.bodyweight ? strengthSetLine(primary, 3, 8, 60, 'slow, three seconds down, 2 reps left in the tank') : strengthSetLine(primary, 3, 5, 120, 'heavy, 2–3 reps left in the tank'),
       strengthSetLine(calf, 2, 10, 45, 'slow and controlled'),
       coreLine(core, 1, 0, 'controlled'),
     ];
@@ -685,8 +687,8 @@ function buildLowerStrengthWorkout(tier, weekIndex, weekInBlock, avail){
   if(tier==='maintain'){
     return [
       strengthSetLine(pogo, 2, 20, 45, 'quick off the ground'),
-      strengthSetLine(primary, 3, 4, 150, 'heavy but crisp — 3 reps left in the tank; keep the load, drop the volume'),
-      strengthSetLine(uni, 2, 6, 75, 'moderate, 2–3 left in the tank'),
+      primary.bodyweight ? strengthSetLine(primary, 3, 8, 60, 'slow and controlled, 3 reps left in the tank') : strengthSetLine(primary, 3, 4, 150, 'heavy but crisp — 3 reps left in the tank; keep the load, drop the volume'),
+      uni.bodyweight ? strengthSetLine(uni, 2, 10, 45, 'slow and controlled') : strengthSetLine(uni, 2, 6, 75, 'moderate, 2–3 left in the tank'),
       strengthSetLine(calf, 2, 10, 45, 'slow and controlled'),
       coreLine(core, 2, 30, 'controlled'),
     ];
@@ -697,8 +699,8 @@ function buildLowerStrengthWorkout(tier, weekIndex, weekInBlock, avail){
   const plyo = wb>=1 ? pickFromPool(PLYO_POOL_INTRO, weekIndex, avail) : null;
   const lines = [];
   if(plyo) lines.push(strengthSetLine(plyo, wb===3 ? 2 : 3, plyo.name==='Pogo hops' ? 20 : 5, 60, 'maximal intent, full recovery — quality over quantity; do these first while fresh'));
-  lines.push(strengthSetLine(primary, sets, 5, 150, `heavy — ${rir}`));
-  lines.push(strengthSetLine(uni, 3, 6, 75, 'moderate-heavy, 2 left in the tank'));
+  lines.push(primary.bodyweight ? strengthSetLine(primary, sets, 8, 60, `slow, three seconds down — ${rir}`) : strengthSetLine(primary, sets, 5, 150, `heavy — ${rir}`));
+  lines.push(uni.bodyweight ? strengthSetLine(uni, 3, 10, 45, 'slow and controlled, 2 left in the tank') : strengthSetLine(uni, 3, 6, 75, 'moderate-heavy, 2 left in the tank'));
   lines.push(isSwing(post)
     ? strengthSetLine(post, 3, 12, 60, 'crisp and powerful, hips doing the work')
     : strengthSetLine(post, 3, post.unit==='hold'?30:8, 60, 'controlled, slow lowering'));
@@ -743,6 +745,7 @@ const STRENGTH_LOAD_NOTE = {
   maintain: 'How heavy: keep the weights you were using in the build weeks — the sets are fewer, not lighter. Nothing new, nothing to failure.',
   express: 'How heavy: same weights as your full lower session; this is the short version, done after the run.',
   light: 'How heavy: bodyweight or very light. The aim is to stay sharp, not to build anything this close to the race.',
+  bodyweight: 'No weights: make each rep slow (three seconds down) and stop with 2 reps left in the tank. When a set of 12 feels easy, move to the single-leg version or slow it down further.',
   upper: 'How heavy: pick a weight where the last rep or two of each set is hard but clean. Add a little when all sets feel comfortable. Hold the planks until form starts to slip, not until collapse.',
 };
 
@@ -837,7 +840,7 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
       const express = !!d.strengthExpress && tier!=='light';
       const useTier = express ? 'express' : tier;
       d.strengthExercises = buildLowerStrengthWorkout(useTier, variant, opts.weekInBlock, avail); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : STRENGTH_TIME_MIN[tier];
-      d.strengthLoadNote = STRENGTH_LOAD_NOTE[useTier];
+      d.strengthLoadNote = (_used.filter(x=>!x.bodyweight).length===0) ? STRENGTH_LOAD_NOTE.bodyweight : STRENGTH_LOAD_NOTE[useTier];
       const usedSoFar = _used.length; d.strengthOptional = useTier==='heavy' ? buildLowerOptional(avail) : undefined; _used.length = usedSoFar;
     }
     // One how-to per unfamiliar exercise in this session, in the order they appear.

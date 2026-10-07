@@ -135,6 +135,8 @@ Run both with `npm test`.
     `strength-equipment` (every listed exercise resolvable with the plan's equipment), with
     random equipment sets in the Monte Carlo sweep including "nothing at all".
 
+42. **Bodyweight fallbacks were prescribed like heavy lifts** ("4 x 5 bodyweight squat, heavy"). *Fix:* the squat slot falls back to a single-leg squat to a chair, bodyweight variants use a slow higher-rep scheme with their own how-heavy note, and a session never repeats the same fallback movement twice.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy
