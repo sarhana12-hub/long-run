@@ -89,7 +89,23 @@ function parseWorkoutText(rawText, opts){
 
   // duration: a time token near a time label, preferring workout/moving over elapsed/total
   const times = [];
-  lines.forEach((l,i)=>{ if(PACE_RE.test(l)){ PACE_RE.lastIndex=0; return; } PACE_RE.lastIndex=0; let m; TIME_RE.lastIndex=0; while((m = TIME_RE.exec(l))){ const sec = toSec(m[1], m[2], m[3]); if(sec<60 || sec>12*3600) continue; const labelScore = str => /workout time|moving time|duration|moving/i.test(str) ? 3 : /elapsed|total time/i.test(str) ? 2 : /\btime\b/i.test(str) ? 1 : 0; const score = labelScore(l) || labelScore(lines[i-1]||''); const ctx = labelScore(l) ? l : (lines[i-1]||'')+' '+l; times.push({sec, line:i, score, ctx}); } });
+  const labelScore = str => /workout time|moving time|duration|moving/i.test(str) ? 3 : /elapsed|total time/i.test(str) ? 2 : /\btime\b/i.test(str) ? 1 : 0;
+  const LABEL_RE = /workout time|moving time|elapsed time|total time|duration|\btime\b/gi;
+  lines.forEach((l,i)=>{
+    if(PACE_RE.test(l)){ PACE_RE.lastIndex=0; return; } PACE_RE.lastIndex=0;
+    const toks = []; let m; TIME_RE.lastIndex=0; while((m = TIME_RE.exec(l))){ const sec = toSec(m[1], m[2], m[3]); if(sec>=60 && sec<=12*3600) toks.push(sec); }
+    if(!toks.length) return;
+    const prev = lines[i-1]||''; const prevLabels = prev.match(LABEL_RE)||[];
+    toks.forEach((sec,k)=>{
+      let score, ctx;
+      if(labelScore(l)){ score = labelScore(l); ctx = l; }
+      // Apple's two-column layout: "Workout Time  Elapsed Time" above "0:24:57  0:26:51" -
+      // the k-th value belongs to the k-th label
+      else if(toks.length>1 && prevLabels.length===toks.length){ score = labelScore(prevLabels[k]); ctx = prevLabels[k]+' '+l; }
+      else { score = labelScore(prev); ctx = prev+' '+l; }
+      times.push({sec, line:i, score, ctx});
+    });
+  });
   // a time of day like "7:02 AM" is not a duration
   const plausible = times.filter(t=>!/\b(am|pm)\b/i.test(t.ctx) || t.score>=2);
   let best = plausible.sort((a,b)=>b.score-a.score || b.sec-a.sec)[0] || null;
@@ -107,7 +123,9 @@ function parseWorkoutText(rawText, opts){
   if(splitStart>=0){
     for(let i=splitStart+1;i<lines.length;i++){
       const l = lines[i]; let m; PACE_RE.lastIndex=0; const row = []; while((m = PACE_RE.exec(l))) row.push({sec: toSec(0,m[1],m[2]), u:m[3].toLowerCase()});
-      if(!row.length){ const t = l.match(/^\s*(\d{1,2})\s+(\d{1,2})[':](\d{2})\b/); if(t) row.push({sec: toSec(0,t[2],t[3]), u: out.unit||'mi'}); }
+      // Apple's in-page splits: "1  08:24  8'24''  133BPM" - the pace is the quote-style token
+      // (minutes'seconds'' with no unit); the mm:ss before it is the split's time, not its pace.
+      if(!row.length){ const q = l.match(/^\s*\d{1,2}\s+(?:\d{1,2}:\d{2}\s+)?(\d{1,2})\s*['’]\s*(\d{2})\s*['’"”]*/); if(q) row.push({sec: toSec(0,q[1],q[2]), u: out.unit||'mi'}); }
       if(row.length){ const r = row[0]; out.splits.push({index: out.splits.length+1, paceSecPerKm: r.u==='mi' ? r.sec/KM_PER_MI : r.sec}); }
       else if(out.splits.length && /heart|cadence|elevation|power|workout|summary/i.test(l)) break;
     }

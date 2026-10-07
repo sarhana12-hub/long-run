@@ -4072,7 +4072,7 @@ async function scanWorkoutImage(file){
     const found = plannedWorkoutForDate(d.date); const repM = found ? repMetersForDay(found.day) : null;
     if(repM && parsed.segments.length){ const rs = repSecFromSegments(parsed.segments, repM); if(rs){ d.rep = secToClock(rs); notes.push(`Average rep time read from the segments: ${secToClock(rs)} per ${repM} m.`); } else notes.push('Segments were found but none match the planned rep distance; enter the rep time by hand.'); }
     else if(repM) notes.push('No segments in this screenshot; enter the average rep time by hand.');
-    if(parsed.splits.length) notes.push(`${parsed.splits.length} splits read (fastest ${paceOrSpeedStr(Math.min(...parsed.splits.map(x=>x.paceSecPerKm)), unit, state.paceFormat)}).`);
+    if(parsed.splits.length) notes.push(`${parsed.splits.length} split${parsed.splits.length===1?"":"s"} read (fastest ${paceOrSpeedStr(Math.min(...parsed.splits.map(x=>x.paceSecPerKm)), unit, state.paceFormat)}).`);
     const got = [parsed.date ? niceDate(parseDate(parsed.date)) : null, parsed.distanceKm ? fmtDist(parsed.distanceKm, unit, 2) : null, parsed.durationSec ? secToClock(parsed.durationSec) : null].filter(Boolean);
     const summary = got.length ? `Read: ${got.join(' · ')}. Check the fields, then save.` : 'Nothing usable was read. Try a clearer screenshot of the summary screen.';
     if(parsed.kind && /indoor|treadmill/.test(parsed.kind) && found && found.day && !found.day.treadmill) notes.push('Looks like a treadmill run.');

@@ -72,6 +72,63 @@ Heart Rate`, {today});
   check('split pace in s/km', Math.abs(r.splits[2].paceSecPerKm - 538/1.609344)<1, String(r.splits[2] && r.splits[2].paceSecPerKm));
 }
 
+console.log('4b. Apple Fitness summary as it really reads (two columns, in-page splits)');
+{
+  const r = s.parseWorkoutText(`1:03 LTE 64
+Sun, Oct 4
+Workout Details >
+Workout Time Distance
+0:18:55 2.19MI
+Active Calories Total Calories
+237CAL 268CAL
+Avg. Cadence Avg. Pace
+158SPM 8'38"/MI
+Avg. Heart Rate
+139BPM
+Effort +
+Skipped
+Splits >
+Time Pace Heart Rate
+1 08:24 8'24'' 133BPM
+2 08:48 8'48'' 144BPM
+3 01:43 8'54'' 143BPM
+Summary Fitness+ Workout Sharing`, {today});
+  check('date Oct 4', r.date==='2026-10-04', r.date);
+  check('distance 2.19 mi', Math.abs(r.distanceKm-2.19*1.609344)<0.01, String(r.distanceKm));
+  check('time 18:55 (not the 1:03 clock, not a split)', r.durationSec===18*60+55, String(r.durationSec));
+  check('average pace 8:38/mi', Math.abs(r.paceSecPerKm-518/1.609344)<1, String(r.paceSecPerKm));
+  check('three splits', r.splits.length===3, String(r.splits.length));
+  check('split paces, not split times', r.splits.length===3 && Math.abs(r.splits[2].paceSecPerKm-534/1.609344)<1, String(r.splits[2] && r.splits[2].paceSecPerKm));
+  check('confidence high', r.confidence==='high', r.confidence);
+}
+
+console.log('4c. Apple Fitness outdoor summary: Workout Time beside Elapsed Time');
+{
+  const r = s.parseWorkoutText(`1:05 5G 64
+Thu, Oct 1
+Workout Details >
+Workout Time Elapsed Time
+0:24:57 0:26:51
+Distance Active Calories
+2.84MI 310CAL
+Total Calories Elevation Gain
+351CAL 104FT
+Avg. Power Avg. Cadence
+239W 156SPM
+Avg. Pace Avg. Heart Rate
+8'47"/MI 156BPM
+Effort +
+Skipped
+Splits >
+Time Pace Heart Rate
+1 09:15 9'15'' 147BPM`, {today});
+  check('date Oct 1', r.date==='2026-10-01', r.date);
+  check('workout time, not elapsed', r.durationSec===24*60+57, String(r.durationSec));
+  check('distance 2.84 mi', Math.abs(r.distanceKm-2.84*1.609344)<0.01, String(r.distanceKm));
+  check('pace 8:47/mi', Math.abs(r.paceSecPerKm-527/1.609344)<1, String(r.paceSecPerKm));
+  check('one split read', r.splits.length===1 && Math.abs(r.splits[0].paceSecPerKm-555/1.609344)<1, JSON.stringify(r.splits));
+}
+
 console.log('5. Apple segments and rep time');
 {
   const r = s.parseWorkoutText(`Segments
