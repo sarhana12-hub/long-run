@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 8; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 9; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -374,42 +374,241 @@ function buildWorkoutMeta(day, raceDistanceKm){
 }
 
 /* ============================= strength ============================= */
-/* Equipment assumed (confirmed by the owner): barbell and plates, dumbbells, kettlebells, a
-   flat bench and a knee-high box, a leg press machine, a pull-up bar, mini resistance bands.
-   No trap bar, no cable machine. Every exercise is a familiar movement; anything beyond the
-   obvious carries a one-sentence how-to shown in the day sheet. */
+/* Equipment-aware. Every exercise declares variants, each with the equipment it needs; the
+   session picks the best variant the runner actually has and names only that. An exercise
+   with no available variant drops out of its rotation; if a whole slot would empty, a
+   bodyweight fallback fills it so a session never shrinks silently. Everything stays a
+   familiar movement, and anything beyond the obvious carries a one-sentence how-to. */
+const EQUIPMENT = [
+  {id:'barbell', label:'Barbell with plates and a rack', group:'Free weights'},
+  {id:'dumbbells', label:'Dumbbells', group:'Free weights'},
+  {id:'kettlebell', label:'Kettlebells', group:'Free weights'},
+  {id:'plates', label:'Loose weight plates you can hold', group:'Free weights'},
+  {id:'bench', label:'Flat bench', group:'Furniture'},
+  {id:'box', label:'Knee-high box or sturdy step', group:'Furniture'},
+  {id:'pullupBar', label:'Pull-up bar', group:'Furniture'},
+  {id:'dipBars', label:'Dip or parallel bars', group:'Furniture'},
+  {id:'lowBar', label:'Low bar or rings at hip height', group:'Furniture'},
+  {id:'miniBand', label:'Mini loop bands', group:'Bands'},
+  {id:'longBand', label:'Long resistance band', group:'Bands'},
+  {id:'legPress', label:'Leg press', group:'Lower-body machines'},
+  {id:'hackSquat', label:'Hack squat', group:'Lower-body machines'},
+  {id:'hamstringCurl', label:'Hamstring curl', group:'Lower-body machines'},
+  {id:'legExtension', label:'Leg extension', group:'Lower-body machines'},
+  {id:'calfStanding', label:'Standing calf raise machine', group:'Lower-body machines'},
+  {id:'calfSeated', label:'Seated calf raise machine', group:'Lower-body machines'},
+  {id:'hipThrustMachine', label:'Hip thrust / glute drive machine', group:'Lower-body machines'},
+  {id:'backExtension', label:'Back extension bench', group:'Lower-body machines'},
+  {id:'smith', label:'Smith machine', group:'Lower-body machines'},
+  {id:'chestPress', label:'Chest press machine', group:'Upper-body machines'},
+  {id:'shoulderPressMachine', label:'Shoulder press machine', group:'Upper-body machines'},
+  {id:'seatedRow', label:'Seated row machine', group:'Upper-body machines'},
+  {id:'latPulldown', label:'Lat pulldown machine', group:'Upper-body machines'},
+  {id:'assistedPullup', label:'Assisted pull-up machine', group:'Upper-body machines'},
+  {id:'cable', label:'Cable machine', group:'Upper-body machines'},
+  {id:'armMachines', label:'Curl / triceps machines', group:'Upper-body machines'},
+  {id:'stabilityBall', label:'Stability ball', group:'Extras'},
+  {id:'medicineBall', label:'Medicine ball', group:'Extras'},
+  {id:'trx', label:'Suspension trainer (TRX / rings)', group:'Extras'},
+  {id:'sled', label:'Sled or prowler', group:'Extras'},
+  {id:'vest', label:'Weighted vest', group:'Extras'},
+  {id:'jumpRope', label:'Jump rope', group:'Extras'},
+  {id:'hurdles', label:'Plyo boxes in several heights, or low hurdles', group:'Extras'},
+];
+const DEFAULT_EQUIPMENT = ['barbell','dumbbells','kettlebell','plates','bench','pullupBar','dipBars','miniBand','legPress','hamstringCurl','legExtension','smith','chestPress','shoulderPressMachine','seatedRow','latPulldown','cable'];
+function equipmentSet(list){ return new Set(Array.isArray(list) && list.length ? list : DEFAULT_EQUIPMENT); }
+
+// variants: tried in order; the first whose `needs` are all available wins. A variant with
+// needs:[] is the bodyweight fallback. `how` on the base applies to every variant unless the
+// variant brings its own. `unit`/`per` live on the base.
 const STRENGTH_EXERCISES = {
-  backSquat: {name:'Back squat', equip:'barbell; or a hack squat machine; or goblet squat with a heavy kettlebell', unit:'reps', how:'Bar across the upper back, feet shoulder-width, sit down and back until the thighs are about level with the floor, chest up, then drive through the whole foot to stand.'},
-  legPress: {name:'Leg press', equip:'machine', unit:'reps', how:'Feet shoulder-width on the plate, lower until the knees are near a right angle without the lower back peeling off the pad, then press back without locking the knees out.'},
-  romanianDeadlift: {name:'Romanian deadlift', equip:'barbell, or a dumbbell in each hand; or the back-extension machine', unit:'reps', how:'Stand tall holding the weight against the thighs, push the hips back and hinge forward with a flat back until the weight reaches mid-shin, then stand up by squeezing the glutes. The knees stay slightly bent throughout.'},
-  hipThrust: {name:'Barbell hip thrust', equip:'barbell across hips, shoulders on a bench; or a heavy dumbbell; or the hip thrust / glute drive machine', unit:'reps', how:'Upper back on a bench, feet flat, weight across the hips; drive the hips up until the body is a straight line from shoulders to knees, squeeze the glutes, lower slowly.'},
-  bulgarianSplitSquat: {name:'Bulgarian split squat', equip:'rear foot on a bench, dumbbells in hand', unit:'reps', per:'leg', how:'Stand a long stride in front of a bench with the top of the rear foot resting on it; lower straight down until the front thigh is about level, then push up through the front heel.'},
-  stepUps: {name:'Weighted step-ups', equip:'knee-high box, dumbbells in hand (or a barbell across the back)', unit:'reps', per:'leg', how:'Place one whole foot on the box, stand up through that leg without pushing off the floor foot, then step down under control.'},
-  singleLegRDL: {name:'Single-leg Romanian deadlift', equip:'one dumbbell or kettlebell', unit:'reps', per:'leg', how:'Stand on one leg, hinge forward at the hip with a flat back while the free leg extends behind you, lower the weight toward the floor, then return to standing. Hold a wall if balance is the limiter.'},
-  walkingLunges: {name:'Walking lunges', equip:'dumbbells in hand', unit:'reps', per:'leg', how:'Step forward and lower until both knees are at about right angles, then drive through the front foot into the next step.'},
-  kettlebellSwing: {name:'Kettlebell swing', equip:'one kettlebell', unit:'reps', how:'Hinge at the hips (not a squat), hike the bell back between the legs, then snap the hips forward so the bell floats to chest height with the arms relaxed; let it swing back and repeat. Power comes from the hips, not the shoulders.'},
-  calfRaiseStraight: {name:'Standing single-leg calf raise', equip:'ball of the foot on a step, hold a rail; add a dumbbell once 12 is easy; or the standing calf machine', unit:'reps', per:'leg', how:'Rise onto the ball of the foot as high as you can, pause, then lower slowly (about three seconds) until the heel is below the step.'},
-  calfRaiseBent: {name:'Seated calf raise', equip:'sitting, a dumbbell or kettlebell resting on the knee; or the seated calf machine', unit:'reps', how:'Knee bent at a right angle, raise the heel as high as possible against the weight, pause, lower slowly. Works the lower calf the standing version misses.'},
-  hamstringCurl: {name:'Hamstring curl', equip:'machine; or single-leg glute bridges if there is no machine', unit:'reps', how:'On the machine, curl the heels toward the glutes and lower slowly. Without one: lie on your back, one foot flat, the other leg straight, and drive the hips up through the planted heel.'},
-  bandWalk: {name:'Mini-band side steps', equip:'mini resistance band around the legs just above the knees', unit:'reps', per:'side', how:'Band just above the knees, feet hip-width, slight knee bend; step sideways keeping tension in the band and the toes pointing forward, then step the other way. Builds the hip muscles that keep the knee tracking straight when you run.'},
-  sidePlank: {name:'Side plank', equip:'bodyweight', unit:'hold', per:'side', how:'On one forearm with the elbow under the shoulder, lift the hips so the body makes a straight line, and hold without letting the hips sag.'},
-  suitcaseCarry: {name:'Suitcase carry', equip:'one heavy dumbbell or kettlebell, 30–40 m per set', unit:'reps', per:'side', how:'Carry the weight in one hand like a heavy suitcase and walk tall without leaning toward or away from it; the trunk muscles do the work of staying level.'},
-  deadBug: {name:'Dead bug', equip:'bodyweight, lying on your back', unit:'reps', per:'side', how:'Lie on your back with arms up and knees over hips; lower one arm and the opposite leg toward the floor while keeping the lower back pressed down, then switch.'},
-  plank: {name:'Plank', equip:'forearms, bodyweight', unit:'hold'},
-  birdDog: {name:'Bird dog', equip:'bodyweight, on hands and knees', unit:'reps', per:'side', how:'On hands and knees, reach one arm forward and the opposite leg back until both are level with the body, hold a second, return without letting the hips tilt.'},
-  hangingKneeRaise: {name:'Hanging knee raise', equip:'pull-up bar', unit:'reps', how:'Hang from the bar with straight arms, lift the knees toward the chest without swinging, lower slowly.'},
-  pogoHops: {name:'Pogo hops', equip:'bodyweight', unit:'reps', how:'Small quick hops in place on the balls of the feet with the knees nearly straight and the ankles doing the work; think of bouncing a ball, not jumping high.'},
-  boxJumps: {name:'Box jumps', equip:'knee-high box', unit:'reps', how:'From a quarter squat, swing the arms and jump to land softly on the box with both feet; step down rather than jumping down.'},
-  benchPress: {name:'Dumbbell bench press', equip:'bench + dumbbells; or the chest press machine', unit:'reps'},
-  pushUps: {name:'Push-ups', equip:'bodyweight; hands on a bench to make them easier, feet on a step to make them harder', unit:'reps'},
-  pullUps: {name:'Pull-ups', equip:'pull-up bar; loop a band over the bar and under a foot for assistance, or do slow negatives; or the lat pulldown or assisted pull-up machine', unit:'reps', how:'Hang with straight arms, pull until the chin clears the bar, lower slowly. If full pull-ups are not there yet, jump to the top and lower over three seconds, or use a band for help.'},
-  invertedRow: {name:'Inverted row', equip:'a bar at hip height, or a sturdy table edge', unit:'reps', how:'Hang under the bar with heels on the floor and body straight, pull the chest to the bar by squeezing the shoulder blades, lower slowly. Walk the feet closer to make it easier.'},
-  singleArmRow: {name:'Single-arm dumbbell row', equip:'one hand and knee on a bench; or the seated row machine', unit:'reps', per:'arm', how:'Flat back, dumbbell hanging below the shoulder, pull it to the hip leading with the elbow, lower under control.'},
-  shoulderPress: {name:'Dumbbell shoulder press', equip:'seated or standing; or the shoulder press machine', unit:'reps'},
-  gobletSquat: {name:'Goblet squat', equip:'one kettlebell or dumbbell held at the chest', unit:'reps', how:'Hold the weight against the chest with both hands, squat down between the knees keeping the chest up, stand back up.'},
-  gluteBridge: {name:'Glute bridge', equip:'bodyweight, lying on your back with feet flat', unit:'reps'},
-  farmerCarry: {name:'Farmer carry', equip:'a heavy dumbbell or kettlebell in each hand, 30–40 m per set', unit:'reps', how:'Pick up the weights, stand tall with the shoulders back, and walk at a normal pace without leaning; set them down and rest between walks.'},
+  backSquat: {unit:'reps', how:'Feet shoulder-width, sit down and back until the thighs are about level with the floor, chest up, then drive through the whole foot to stand.', variants:[
+    {needs:['barbell'], name:'Back squat', equip:'barbell across the upper back'},
+    {needs:['hackSquat'], name:'Hack squat', equip:'machine', how:'Shoulders under the pads, feet mid-plate, lower until the thighs are about level, press back up without locking the knees.'},
+    {needs:['smith'], name:'Smith machine squat', equip:'bar across the upper back'},
+    {needs:['kettlebell'], name:'Goblet squat', equip:'one heavy kettlebell held at the chest'},
+    {needs:['dumbbells'], name:'Goblet squat', equip:'one heavy dumbbell held at the chest'},
+    {needs:[], name:'Bodyweight squat', equip:'bodyweight, three seconds down', how:null},
+  ]},
+  legPress: {unit:'reps', how:'Feet shoulder-width on the plate, lower until the knees are near a right angle without the lower back peeling off the pad, then press back without locking the knees out.', variants:[
+    {needs:['legPress'], name:'Leg press', equip:'machine'},
+  ]},
+  romanianDeadlift: {unit:'reps', how:'Stand tall holding the weight against the thighs, push the hips back and hinge forward with a flat back until the weight reaches mid-shin, then stand up by squeezing the glutes. The knees stay slightly bent throughout.', variants:[
+    {needs:['barbell'], name:'Romanian deadlift', equip:'barbell'},
+    {needs:['dumbbells'], name:'Romanian deadlift', equip:'a dumbbell in each hand'},
+    {needs:['kettlebell'], name:'Kettlebell deadlift', equip:'one heavy kettlebell between the feet'},
+    {needs:['smith'], name:'Romanian deadlift', equip:'Smith machine bar'},
+    {needs:['backExtension'], name:'Back extension', equip:'45-degree back extension bench', how:'Hips on the pad, hinge down with a flat back, then raise until the body is straight — not beyond. Hold a plate to the chest to add load.'},
+    {needs:[], name:'Single-leg glute bridge', equip:'bodyweight', how:'Lie on your back, one foot flat, the other leg straight; drive the hips up through the planted heel and lower slowly.'},
+  ]},
+  hipThrust: {unit:'reps', how:'Upper back on a bench, feet flat, weight across the hips; drive the hips up until the body is a straight line from shoulders to knees, squeeze the glutes, lower slowly.', variants:[
+    {needs:['barbell','bench'], name:'Barbell hip thrust', equip:'barbell across the hips, shoulders on a bench'},
+    {needs:['hipThrustMachine'], name:'Hip thrust', equip:'hip thrust / glute drive machine'},
+    {needs:['smith','bench'], name:'Hip thrust', equip:'Smith machine bar across the hips, shoulders on a bench'},
+    {needs:['dumbbells','bench'], name:'Dumbbell hip thrust', equip:'a heavy dumbbell across the hips, shoulders on a bench'},
+    {needs:[], name:'Single-leg glute bridge', equip:'bodyweight', how:'Lie on your back, one foot flat, the other leg straight; drive the hips up through the planted heel and lower slowly.'},
+  ]},
+  bulgarianSplitSquat: {unit:'reps', per:'leg', how:'Stand a long stride in front of a bench with the top of the rear foot resting on it; lower straight down until the front thigh is about level, then push up through the front heel.', variants:[
+    {needs:['bench','dumbbells'], name:'Bulgarian split squat', equip:'rear foot on a bench, dumbbells in hand'},
+    {needs:['bench','kettlebell'], name:'Bulgarian split squat', equip:'rear foot on a bench, a kettlebell held at the chest'},
+    {needs:['bench'], name:'Bulgarian split squat', equip:'rear foot on a bench, bodyweight'},
+    {needs:['dumbbells'], name:'Reverse lunges', equip:'dumbbells in hand', how:'Step one foot back and lower until both knees are near right angles, then drive through the front foot to stand.'},
+    {needs:[], name:'Reverse lunges', equip:'bodyweight', how:'Step one foot back and lower until both knees are near right angles, then drive through the front foot to stand.'},
+  ]},
+  stepUps: {unit:'reps', per:'leg', how:'Place one whole foot on the box, stand up through that leg without pushing off the floor foot, then step down under control.', variants:[
+    {needs:['box','dumbbells'], name:'Weighted step-ups', equip:'knee-high box, dumbbells in hand'},
+    {needs:['bench','dumbbells'], name:'Weighted step-ups', equip:'onto a stable bench, dumbbells in hand'},
+    {needs:['box'], name:'Step-ups', equip:'knee-high box, bodyweight'},
+    {needs:['bench'], name:'Step-ups', equip:'onto a stable bench, bodyweight'},
+    {needs:['dumbbells'], name:'Reverse lunges', equip:'dumbbells in hand', how:'Step one foot back and lower until both knees are near right angles, then drive through the front foot to stand.'},
+    {needs:[], name:'Reverse lunges', equip:'bodyweight', how:'Step one foot back and lower until both knees are near right angles, then drive through the front foot to stand.'},
+  ]},
+  singleLegRDL: {unit:'reps', per:'leg', how:'Stand on one leg, hinge forward at the hip with a flat back while the free leg extends behind you, lower the weight toward the floor, then return to standing. Hold a wall if balance is the limiter.', variants:[
+    {needs:['dumbbells'], name:'Single-leg Romanian deadlift', equip:'one dumbbell'},
+    {needs:['kettlebell'], name:'Single-leg Romanian deadlift', equip:'one kettlebell'},
+    {needs:[], name:'Single-leg Romanian deadlift', equip:'bodyweight, arms reaching forward'},
+  ]},
+  walkingLunges: {unit:'reps', per:'leg', how:'Step forward and lower until both knees are at about right angles, then drive through the front foot into the next step.', variants:[
+    {needs:['dumbbells'], name:'Walking lunges', equip:'dumbbells in hand'},
+    {needs:['kettlebell'], name:'Walking lunges', equip:'a kettlebell held at the chest'},
+    {needs:[], name:'Walking lunges', equip:'bodyweight'},
+  ]},
+  kettlebellSwing: {unit:'reps', how:'Hinge at the hips (not a squat), hike the bell back between the legs, then snap the hips forward so the bell floats to chest height with the arms relaxed; let it swing back and repeat. Power comes from the hips, not the shoulders.', variants:[
+    {needs:['kettlebell'], name:'Kettlebell swing', equip:'one kettlebell'},
+    {needs:['dumbbells'], name:'Dumbbell swing', equip:'one dumbbell held by the end'},
+  ]},
+  calfRaiseStraight: {unit:'reps', per:'leg', how:'Rise onto the ball of the foot as high as you can, pause, then lower slowly (about three seconds) until the heel is below the step.', variants:[
+    {needs:['calfStanding'], name:'Standing calf raise', equip:'machine, one leg at a time'},
+    {needs:['dumbbells'], name:'Standing single-leg calf raise', equip:'ball of the foot on a step or stair, hold a rail; a dumbbell in the free hand once 12 is easy'},
+    {needs:[], name:'Standing single-leg calf raise', equip:'ball of the foot on a step or stair, hold a rail'},
+  ]},
+  calfRaiseBent: {unit:'reps', how:'Knee bent at a right angle, raise the heel as high as possible against the weight, pause, lower slowly. Works the lower calf the standing version misses.', variants:[
+    {needs:['calfSeated'], name:'Seated calf raise', equip:'machine'},
+    {needs:['legPress'], name:'Calf press on the leg press', equip:'balls of the feet on the bottom edge of the plate', how:'Press the plate away with the balls of the feet only, pause at full stretch, lower slowly; keep a slight knee bend throughout.'},
+    {needs:['dumbbells'], name:'Seated calf raise', equip:'sitting, a dumbbell resting on the knee'},
+    {needs:['kettlebell'], name:'Seated calf raise', equip:'sitting, a kettlebell resting on the knee'},
+    {needs:[], name:'Seated calf raise', equip:'sitting, press down on the knee with your hands'},
+  ]},
+  hamstringCurl: {unit:'reps', how:'Curl the heels toward the glutes against the resistance and lower slowly.', variants:[
+    {needs:['hamstringCurl'], name:'Hamstring curl', equip:'machine'},
+    {needs:['stabilityBall'], name:'Stability-ball hamstring curl', equip:'stability ball', how:'Lie on your back, heels on the ball, lift the hips, then pull the ball toward you with your heels and roll it back out.'},
+    {needs:[], name:'Single-leg glute bridge', equip:'bodyweight', how:'Lie on your back, one foot flat, the other leg straight; drive the hips up through the planted heel and lower slowly.'},
+  ]},
+  bandWalk: {unit:'reps', per:'side', how:'Band just above the knees, feet hip-width, slight knee bend; step sideways keeping tension in the band and the toes pointing forward, then step the other way. Builds the hip muscles that keep the knee tracking straight when you run.', variants:[
+    {needs:['miniBand'], name:'Mini-band side steps', equip:'mini resistance band around the legs just above the knees'},
+    {needs:[], name:'Side-lying leg raises', equip:'bodyweight', how:'Lie on your side, legs straight and stacked; lift the top leg slowly to about 45 degrees with the toes pointing forward, pause, lower.'},
+  ]},
+  sidePlank: {unit:'hold', per:'side', how:'On one forearm with the elbow under the shoulder, lift the hips so the body makes a straight line, and hold without letting the hips sag.', variants:[{needs:[], name:'Side plank', equip:'bodyweight'}]},
+  suitcaseCarry: {unit:'reps', per:'side', how:'Carry the weight in one hand like a heavy suitcase and walk tall without leaning toward or away from it; the trunk muscles do the work of staying level.', variants:[
+    {needs:['kettlebell'], name:'Suitcase carry', equip:'one heavy kettlebell, 30–40 m per set'},
+    {needs:['dumbbells'], name:'Suitcase carry', equip:'one heavy dumbbell, 30–40 m per set'},
+    {needs:['plates'], name:'Suitcase carry', equip:'one heavy plate, 30–40 m per set'},
+    {needs:[], name:'Side plank', equip:'bodyweight', how:'On one forearm with the elbow under the shoulder, lift the hips so the body makes a straight line, and hold without letting the hips sag.'},
+  ]},
+  deadBug: {unit:'reps', per:'side', how:'Lie on your back with arms up and knees over hips; lower one arm and the opposite leg toward the floor while keeping the lower back pressed down, then switch.', variants:[{needs:[], name:'Dead bug', equip:'bodyweight, lying on your back'}]},
+  plank: {unit:'hold', variants:[{needs:[], name:'Plank', equip:'forearms, bodyweight'}]},
+  birdDog: {unit:'reps', per:'side', how:'On hands and knees, reach one arm forward and the opposite leg back until both are level with the body, hold a second, return without letting the hips tilt.', variants:[{needs:[], name:'Bird dog', equip:'bodyweight, on hands and knees'}]},
+  hangingKneeRaise: {unit:'reps', how:'Hang from the bar with straight arms, lift the knees toward the chest without swinging, lower slowly.', variants:[
+    {needs:['pullupBar'], name:'Hanging knee raise', equip:'pull-up bar'},
+    {needs:['dipBars'], name:'Knee raise on the dip bars', equip:'supported on straight arms', how:'Support yourself on straight arms, lift the knees toward the chest without swinging, lower slowly.'},
+    {needs:[], name:'Lying leg raises', equip:'bodyweight', how:'Lie on your back with hands under the hips, raise straight legs to vertical and lower slowly without letting the lower back arch.'},
+  ]},
+  pogoHops: {unit:'reps', how:'Small quick hops in place on the balls of the feet with the knees nearly straight and the ankles doing the work; think of bouncing a ball, not jumping high.', variants:[{needs:[], name:'Pogo hops', equip:'bodyweight'}]},
+  boxJumps: {unit:'reps', how:'From a quarter squat, swing the arms and jump to land softly on the box with both feet; step down rather than jumping down.', variants:[
+    {needs:['box'], name:'Box jumps', equip:'knee-high box'},
+    {needs:['hurdles'], name:'Hurdle hops', equip:'low hurdles in a row', how:'Hop over each hurdle with both feet, landing softly and springing straight into the next; keep contacts quick.'},
+    {needs:[], name:'Squat jumps', equip:'bodyweight', how:'Drop into a quarter squat, jump as high as you can, land softly with bent knees and reset before the next one.'},
+  ]},
+  benchPress: {unit:'reps', variants:[
+    {needs:['dumbbells','bench'], name:'Dumbbell bench press', equip:'bench + dumbbells'},
+    {needs:['barbell','bench'], name:'Barbell bench press', equip:'bench + barbell'},
+    {needs:['chestPress'], name:'Chest press', equip:'machine'},
+    {needs:['smith','bench'], name:'Bench press', equip:'Smith machine'},
+    {needs:[], name:'Push-ups', equip:'bodyweight; hands on a bench to make them easier, feet on a step to make them harder'},
+  ]},
+  pushUps: {unit:'reps', variants:[{needs:[], name:'Push-ups', equip:'bodyweight; hands on a bench to make them easier, feet on a step to make them harder'}]},
+  pullUps: {unit:'reps', how:'Hang with straight arms, pull until the chin clears the bar, lower slowly. If full pull-ups are not there yet, jump to the top and lower over three seconds, or use a band for help.', variants:[
+    {needs:['pullupBar','longBand'], name:'Pull-ups', equip:'pull-up bar; loop the band over the bar and under a foot for assistance'},
+    {needs:['pullupBar'], name:'Pull-ups', equip:'pull-up bar; do slow negatives if full reps are not there yet'},
+    {needs:['assistedPullup'], name:'Assisted pull-ups', equip:'assisted pull-up machine'},
+    {needs:['latPulldown'], name:'Lat pulldown', equip:'machine', how:null},
+    {needs:['cable'], name:'Lat pulldown', equip:'cable machine with a high attachment', how:null},
+    {needs:['longBand'], name:'Band pulldown', equip:'long band anchored high', how:'Kneel facing the anchor, hold the band overhead, pull the hands down to the shoulders by squeezing the shoulder blades, return slowly.'},
+    {needs:[], name:'Inverted row under a table', equip:'a sturdy table edge', how:'Lie under the edge, grip it, pull the chest up to the edge by squeezing the shoulder blades, lower slowly.'},
+  ]},
+  invertedRow: {unit:'reps', how:'Hang under the bar with heels on the floor and body straight, pull the chest to the bar by squeezing the shoulder blades, lower slowly. Walk the feet closer to make it easier.', variants:[
+    {needs:['lowBar'], name:'Inverted row', equip:'a bar or rings at hip height'},
+    {needs:['smith'], name:'Inverted row', equip:'Smith machine bar set at hip height'},
+    {needs:['trx'], name:'Suspension row', equip:'suspension trainer'},
+    {needs:['seatedRow'], name:'Seated row', equip:'machine', how:null},
+    {needs:['cable'], name:'Cable row', equip:'cable machine, low attachment', how:null},
+    {needs:['longBand'], name:'Band row', equip:'long band anchored at chest height', how:'Sit or stand facing the anchor, pull the band to the ribs by squeezing the shoulder blades, return slowly.'},
+    {needs:['dumbbells'], name:'Bent-over dumbbell row', equip:'dumbbells, hinged at the hips', how:'Hinge forward with a flat back, let the dumbbells hang, row them to the hips leading with the elbows, lower under control.'},
+    {needs:[], name:'Inverted row under a table', equip:'a sturdy table edge'},
+  ]},
+  singleArmRow: {unit:'reps', per:'arm', how:'Flat back, dumbbell hanging below the shoulder, pull it to the hip leading with the elbow, lower under control.', variants:[
+    {needs:['dumbbells','bench'], name:'Single-arm dumbbell row', equip:'one hand and knee on a bench'},
+    {needs:['dumbbells'], name:'Single-arm dumbbell row', equip:'one hand braced on a knee or a rail'},
+    {needs:['kettlebell'], name:'Single-arm kettlebell row', equip:'one hand braced on a knee or a rail'},
+    {needs:['seatedRow'], name:'Seated row', equip:'machine', how:null, per:null},
+    {needs:['cable'], name:'Single-arm cable row', equip:'cable machine, low attachment'},
+    {needs:[], name:'Inverted row under a table', equip:'a sturdy table edge', how:'Lie under the edge, grip it, pull the chest up to the edge by squeezing the shoulder blades, lower slowly.', per:null},
+  ]},
+  shoulderPress: {unit:'reps', variants:[
+    {needs:['dumbbells'], name:'Dumbbell shoulder press', equip:'seated or standing'},
+    {needs:['shoulderPressMachine'], name:'Shoulder press', equip:'machine'},
+    {needs:['barbell'], name:'Overhead press', equip:'barbell', how:'Bar at the collarbones, press straight up until the arms lock out, lower under control; keep the ribs down, no leaning back.'},
+    {needs:['kettlebell'], name:'Kettlebell press', equip:'one kettlebell at a time', how:'Kettlebell racked at the shoulder, press straight up to lockout, lower under control; alternate arms.'},
+    {needs:[], name:'Pike push-ups', equip:'bodyweight, hips high', how:'From a push-up position walk the feet in so the hips are high, lower the head toward the floor between the hands, press back up.'},
+  ]},
+  gobletSquat: {unit:'reps', how:'Hold the weight against the chest with both hands, squat down between the knees keeping the chest up, stand back up.', variants:[
+    {needs:['kettlebell'], name:'Goblet squat', equip:'one kettlebell held at the chest'},
+    {needs:['dumbbells'], name:'Goblet squat', equip:'one dumbbell held at the chest'},
+    {needs:['plates'], name:'Goblet squat', equip:'one plate held at the chest'},
+    {needs:[], name:'Bodyweight squat', equip:'bodyweight, three seconds down', how:null},
+  ]},
+  gluteBridge: {unit:'reps', variants:[{needs:[], name:'Glute bridge', equip:'bodyweight, lying on your back with feet flat'}]},
+  farmerCarry: {unit:'reps', how:'Pick up the weights, stand tall with the shoulders back, and walk at a normal pace without leaning; set them down and rest between walks.', variants:[
+    {needs:['kettlebell'], name:'Farmer carry', equip:'a heavy kettlebell in each hand, 30–40 m per set'},
+    {needs:['dumbbells'], name:'Farmer carry', equip:'a heavy dumbbell in each hand, 30–40 m per set'},
+    {needs:['plates'], name:'Farmer carry', equip:'a heavy plate in each hand, 30–40 m per set'},
+    {needs:[], name:'Plank', equip:'forearms, bodyweight', how:null},
+  ]},
 };
+// Optional extras: isolation work has no running benefit, but the upper session is short and
+// some runners want arms and shoulders for their own sake. Always marked optional.
+const OPTIONAL_EXTRAS = {
+  curls: {unit:'reps', variants:[
+    {needs:['dumbbells'], name:'Dumbbell curls', equip:'dumbbells'},
+    {needs:['armMachines'], name:'Curls', equip:'curl machine'},
+    {needs:['cable'], name:'Cable curls', equip:'cable machine, low attachment'},
+    {needs:['barbell'], name:'Barbell curls', equip:'barbell'},
+  ]},
+  triceps: {unit:'reps', variants:[
+    {needs:['dipBars'], name:'Dips', equip:'dip bars; bend the knees and use a band or your feet for help if needed'},
+    {needs:['cable'], name:'Triceps pushdowns', equip:'cable machine, high attachment'},
+    {needs:['armMachines'], name:'Triceps extensions', equip:'triceps machine'},
+    {needs:['dumbbells'], name:'Overhead triceps extension', equip:'one dumbbell held overhead with both hands'},
+    {needs:['bench'], name:'Bench dips', equip:'hands on the bench edge, feet on the floor'},
+  ]},
+  lateralRaise: {unit:'reps', variants:[
+    {needs:['dumbbells'], name:'Lateral raises', equip:'light dumbbells'},
+    {needs:['cable'], name:'Cable lateral raises', equip:'cable machine, low attachment'},
+  ]},
+  legExtension: {unit:'reps', variants:[{needs:['legExtension'], name:'Leg extension', equip:'machine'}]},
+};
+// Resolve an exercise to the best variant the runner has. Returns null if none fits.
+function resolveExercise(def, avail){
+  if(!def) return null;
+  for(const v of def.variants){
+    if(v.needs.every(id=>avail.has(id))){
+      return {name:v.name, equip:v.equip, unit:v.unit||def.unit, per:('per' in v) ? v.per : def.per, how:('how' in v) ? v.how : def.how, id:def._id};
+    }
+  }
+  return null;
+}
+Object.keys(STRENGTH_EXERCISES).forEach(k=>{ STRENGTH_EXERCISES[k]._id = k; });
+Object.keys(OPTIONAL_EXTRAS).forEach(k=>{ OPTIONAL_EXTRAS[k]._id = k; });
 const PRIMARY_LOWER_POOL = ['backSquat','legPress','romanianDeadlift','hipThrust','backSquat','legPress','romanianDeadlift'];
 const UNILATERAL_POOL = ['bulgarianSplitSquat','stepUps','walkingLunges','stepUps','bulgarianSplitSquat'];
 const POSTERIOR_POOL = ['kettlebellSwing','singleLegRDL','hamstringCurl','kettlebellSwing'];
@@ -419,18 +618,12 @@ const UPPER_PUSH_POOL = ['benchPress','pushUps','shoulderPress'];
 const UPPER_PULL_POOL = ['pullUps','singleArmRow','invertedRow'];
 const UPPER_CORE_POOL = ['plank','deadBug','hangingKneeRaise','birdDog'];
 const UPPER_CORE2_POOL = ['sidePlank','farmerCarry','suitcaseCarry'];
-// Optional extras: isolation work has no running benefit, but the upper session is short and
-// some runners want arms and shoulders for their own sake. Always marked optional.
-const OPTIONAL_EXTRAS = [
-  {name:'Dumbbell curls', equip:'dumbbells; or the curl machine', unit:'reps'},
-  {name:'Triceps dips or dumbbell overhead extension', equip:'a bench for dips, or one dumbbell held overhead; or the triceps machine', unit:'reps'},
-  {name:'Lateral raises', equip:'light dumbbells', unit:'reps'},
-];
-function buildUpperOptional(variant){
-  const a = OPTIONAL_EXTRAS[variant%3], b = OPTIONAL_EXTRAS[(variant+1)%3];
-  return [a,b].map(ex=>strengthSetLine(ex, 2, 12, 45, 'moderate, 2 reps left in the tank'));
+// Walk the pool from position i, skipping exercises with no available variant.
+function pickFromPool(pool, i, avail){
+  const n = pool.length;
+  for(let k=0;k<n;k++){ const def = STRENGTH_EXERCISES[pool[(((i+k)%n)+n)%n]]; const r = resolveExercise(def, avail); if(r) return r; }
+  return resolveExercise(STRENGTH_EXERCISES.gobletSquat, avail) || resolveExercise(STRENGTH_EXERCISES.plank, avail);
 }
-function pickFromPool(pool, i){ return STRENGTH_EXERCISES[pool[((i%pool.length)+pool.length)%pool.length]]; }
 const _used = [];
 function strengthSetLine(ex, sets, amount, restSec, effort){
   _used.push(ex);
@@ -442,8 +635,9 @@ function strengthSetLine(ex, sets, amount, restSec, effort){
   return `${sets}×${amountStr} ${ex.name}${nameSuffix} (${ex.equip}) — ${effort}.${restClause}`;
 }
 // Tiers: 'heavy' (base/build: strength + introduce plyometrics, 4-week wave of effort),
-// 'maintain' (peak: fewer sets, keep the load, keep a little plyo), 'light' (taper beyond
-// 10 days out: bodyweight + a few hops, nothing new), none inside the last 10 days.
+// 'maintain' (peak: fewer sets, keep the load, keep a little plyo), 'express' (shares a
+// workout day: the two lifts that matter, ~20 min), 'light' (taper beyond the cutoff:
+// bodyweight + a few hops), none inside the cutoff.
 function lowerStrengthTierForPhase(phase, daysToRace, cutoffDays){
   const cutoff = cutoffDays!=null ? cutoffDays : 10;
   if(daysToRace!=null && daysToRace>=0 && daysToRace<=Math.max(1,cutoff)) return null;
@@ -451,78 +645,94 @@ function lowerStrengthTierForPhase(phase, daysToRace, cutoffDays){
   if(phase==='peak') return 'maintain';
   return 'heavy';
 }
-// weekInBlock: 0..3 position in the running 4-week wave (3 = cutback) - effort cue and set
-// count climb over three weeks then back off, the standard mesocycle shape.
 // One line for the core/hip slot, phrased for what the exercise actually is.
 function coreLine(core, sets, restSec, cue){
-  if(core===STRENGTH_EXERCISES.bandWalk) return strengthSetLine(core, Math.max(2,sets), 15, 30, 'slow steps, toes forward, knees pushed out against the band');
-  if(core===STRENGTH_EXERCISES.suitcaseCarry) return strengthSetLine(core, Math.max(2,sets), 1, 30, 'one walk per hand, stay level');
+  if(core.name==='Mini-band side steps' || core.name==='Side-lying leg raises') return strengthSetLine(core, Math.max(2,sets), 15, 30, core.name==='Mini-band side steps' ? 'slow steps, toes forward, knees pushed out against the band' : 'slow and controlled, toes forward');
+  if(core.name==='Suitcase carry') return strengthSetLine(core, Math.max(2,sets), 1, 30, 'one walk per hand, stay level');
   const amt = core.unit==='hold' ? 30 : 10;
   return strengthSetLine(core, sets, amt, restSec, cue || (core.unit==='hold' ? 'hold with good form' : 'slow and controlled'));
 }
-function buildLowerStrengthWorkout(tier, weekIndex, weekInBlock){
+function isSwing(ex){ return /swing/i.test(ex.name); }
+function isCarry(ex){ return /carry/i.test(ex.name); }
+// weekInBlock: 0..3 position in the running 4-week wave (3 = cutback) - effort cue and set
+// count climb over three weeks then back off, the standard mesocycle shape.
+function buildLowerStrengthWorkout(tier, weekIndex, weekInBlock, avail){
+  avail = avail || equipmentSet();
   const wb = weekInBlock==null ? weekIndex%4 : weekInBlock;
-  const primary = pickFromPool(PRIMARY_LOWER_POOL, weekIndex);
-  const uni = pickFromPool(UNILATERAL_POOL, weekIndex);
-  const post = pickFromPool(POSTERIOR_POOL, weekIndex);
-  const core = pickFromPool(LOWER_CORE_POOL, weekIndex);
-  const coreAmt = core.unit==='hold' ? 30 : core===STRENGTH_EXERCISES.bandWalk ? 15 : core===STRENGTH_EXERCISES.suitcaseCarry ? 1 : 10;
+  const primary = pickFromPool(PRIMARY_LOWER_POOL, weekIndex, avail);
+  const uni = pickFromPool(UNILATERAL_POOL, weekIndex, avail);
+  const post = pickFromPool(POSTERIOR_POOL, weekIndex, avail);
+  const core = pickFromPool(LOWER_CORE_POOL, weekIndex, avail);
+  const calf = resolveExercise(STRENGTH_EXERCISES.calfRaiseStraight, avail);
+  const calf2 = resolveExercise(STRENGTH_EXERCISES.calfRaiseBent, avail);
+  const pogo = resolveExercise(STRENGTH_EXERCISES.pogoHops, avail);
   if(tier==='light'){
     return [
-      strengthSetLine(STRENGTH_EXERCISES.pogoHops, 2, 15, 45, 'springy and relaxed'),
-      strengthSetLine(STRENGTH_EXERCISES.gobletSquat, 2, 6, 60, 'light, smooth, nothing new'),
-      strengthSetLine(STRENGTH_EXERCISES.gluteBridge, 2, 10, 30, 'easy'),
+      strengthSetLine(pogo, 2, 15, 45, 'springy and relaxed'),
+      strengthSetLine(resolveExercise(STRENGTH_EXERCISES.gobletSquat, avail), 2, 6, 60, 'light, smooth, nothing new'),
+      strengthSetLine(resolveExercise(STRENGTH_EXERCISES.gluteBridge, avail), 2, 10, 30, 'easy'),
       coreLine(core, 1, 0, 'easy, controlled'),
     ];
   }
   if(tier==='express'){
-    // Shares a day with a hard run: the two lifts that matter most, done after the run,
-    // kept to ~20 minutes so the whole day stays realistic for someone with a job.
     return [
-      strengthSetLine(STRENGTH_EXERCISES.pogoHops, 2, 15, 45, 'quick off the ground'),
+      strengthSetLine(pogo, 2, 15, 45, 'quick off the ground'),
       strengthSetLine(primary, 3, 5, 120, 'heavy, 2–3 reps left in the tank'),
-      strengthSetLine(STRENGTH_EXERCISES.calfRaiseStraight, 2, 10, 45, 'slow and controlled'),
+      strengthSetLine(calf, 2, 10, 45, 'slow and controlled'),
       coreLine(core, 1, 0, 'controlled'),
     ];
   }
   if(tier==='maintain'){
     return [
-      strengthSetLine(STRENGTH_EXERCISES.pogoHops, 2, 20, 45, 'quick off the ground'),
+      strengthSetLine(pogo, 2, 20, 45, 'quick off the ground'),
       strengthSetLine(primary, 3, 4, 150, 'heavy but crisp — 3 reps left in the tank; keep the load, drop the volume'),
       strengthSetLine(uni, 2, 6, 75, 'moderate, 2–3 left in the tank'),
-      strengthSetLine(STRENGTH_EXERCISES.calfRaiseStraight, 2, 10, 45, 'slow and controlled'),
+      strengthSetLine(calf, 2, 10, 45, 'slow and controlled'),
       coreLine(core, 2, 30, 'controlled'),
     ];
   }
   // heavy
   const sets = wb===3 ? 3 : wb===0 ? 3 : 4;
   const rir = wb===3 ? '3 reps left in the tank (easier week)' : wb===0 ? '3 reps left in the tank' : wb===1 ? '2 reps left in the tank' : '1–2 reps left in the tank';
-  const plyo = wb>=1 ? pickFromPool(PLYO_POOL_INTRO, weekIndex) : null;
+  const plyo = wb>=1 ? pickFromPool(PLYO_POOL_INTRO, weekIndex, avail) : null;
   const lines = [];
-  if(plyo) lines.push(strengthSetLine(plyo, wb===3 ? 2 : 3, plyo===STRENGTH_EXERCISES.pogoHops ? 20 : 5, 60, 'maximal intent, full recovery — quality over quantity; do these first while fresh'));
+  if(plyo) lines.push(strengthSetLine(plyo, wb===3 ? 2 : 3, plyo.name==='Pogo hops' ? 20 : 5, 60, 'maximal intent, full recovery — quality over quantity; do these first while fresh'));
   lines.push(strengthSetLine(primary, sets, 5, 150, `heavy — ${rir}`));
   lines.push(strengthSetLine(uni, 3, 6, 75, 'moderate-heavy, 2 left in the tank'));
-  lines.push(post===STRENGTH_EXERCISES.kettlebellSwing
-      ? strengthSetLine(post, 3, 12, 60, 'crisp and powerful, hips doing the work')
-      : strengthSetLine(post, 3, post.unit==='hold'?30:8, 60, 'controlled, slow lowering'));
-  lines.push(strengthSetLine(STRENGTH_EXERCISES.calfRaiseStraight, 3, 10, 45, 'heavy enough that 10 is work; 3s down'));
-  lines.push(strengthSetLine(STRENGTH_EXERCISES.calfRaiseBent, 2, 15, 30, 'moderate'));
+  lines.push(isSwing(post)
+    ? strengthSetLine(post, 3, 12, 60, 'crisp and powerful, hips doing the work')
+    : strengthSetLine(post, 3, post.unit==='hold'?30:8, 60, 'controlled, slow lowering'));
+  lines.push(strengthSetLine(calf, 3, 10, 45, 'heavy enough that 10 is work; 3s down'));
+  lines.push(strengthSetLine(calf2, 2, 15, 30, 'moderate'));
   lines.push(coreLine(core, 3, 30));
   return lines;
 }
-function buildUpperStrengthWorkout(variant){
-  const push = pickFromPool(UPPER_PUSH_POOL, variant);
-  const pull = pickFromPool(UPPER_PULL_POOL, variant+1);
-  const core = pickFromPool(UPPER_CORE_POOL, variant);
-  const core2 = pickFromPool(UPPER_CORE2_POOL, variant+2);
-  const pushReps = push===STRENGTH_EXERCISES.pushUps ? 12 : 8;
+function buildUpperStrengthWorkout(variant, avail){
+  avail = avail || equipmentSet();
+  const push = pickFromPool(UPPER_PUSH_POOL, variant, avail);
+  const pull = pickFromPool(UPPER_PULL_POOL, variant+1, avail);
+  const core = pickFromPool(UPPER_CORE_POOL, variant, avail);
+  const core2 = pickFromPool(UPPER_CORE2_POOL, variant+2, avail);
+  const pushReps = push.name==='Push-ups' || push.name==='Pike push-ups' ? 12 : 8;
   // Pull first: upper-back strength holds posture late in a race; the press only balances it.
   return [
     strengthSetLine(pull, 3, 8, 75, '1–2 reps left in the tank, squeeze the shoulder blades'),
     strengthSetLine(push, 3, pushReps, 75, 'same effort'),
     strengthSetLine(core, 3, core.unit==='hold'?40:10, 30, core.unit==='hold' ? 'hold with a neutral spine' : 'slow and controlled'),
-    core2===STRENGTH_EXERCISES.farmerCarry ? strengthSetLine(core2, 2, 1, 30, 'one walk per set, tall posture') : coreLine(core2, 2, 30, 'steady'),
+    isCarry(core2) && core2.name==='Farmer carry' ? strengthSetLine(core2, 2, 1, 30, 'one walk per set, tall posture') : coreLine(core2, 2, 30, 'steady'),
   ];
+}
+function buildUpperOptional(variant, avail){
+  avail = avail || equipmentSet();
+  const keys = ['curls','triceps','lateralRaise'];
+  const picks = [];
+  for(let k=0;k<3 && picks.length<2;k++){ const r = resolveExercise(OPTIONAL_EXTRAS[keys[(variant+k)%3]], avail); if(r) picks.push(r); }
+  return picks.map(ex=>strengthSetLine(ex, 2, 12, 45, 'moderate, 2 reps left in the tank'));
+}
+function buildLowerOptional(avail){
+  avail = avail || equipmentSet();
+  const r = resolveExercise(OPTIONAL_EXTRAS.legExtension, avail);
+  return r ? [strengthSetLine(r, 2, 12, 45, 'moderate, slow lowering — easy on the knees')] : [];
 }
 const STRENGTH_TIME_MIN = {heavy:40, maintain:28, express:20, light:15, upper:22};
 // Load is set by effort, not by a number the app can't know: "N reps left in the tank"
@@ -536,10 +746,7 @@ const STRENGTH_LOAD_NOTE = {
   upper: 'How heavy: pick a weight where the last rep or two of each set is hard but clean. Add a little when all sets feel comfortable. Hold the planks until form starts to slip, not until collapse.',
 };
 
-// Decide which days of an already-typed week carry strength, and what focus. Scoring:
-// never heavy legs the day before a hard run (that day becomes upper/core if used at
-// all); same-day as a quality run is acceptable ("hard days hard", lift after the run);
-// a rest day or the recovery day after the long run is ideal; keep lifting days >= 2 apart.
+// Decide which days of an already-typed week carry strength, and what focus.
 function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex, opts){
   opts = opts||{};
   days.forEach(d=>{ d.strength=false; d.strengthFocus=null; d.strengthExpress=false; d.strengthOrdinal=undefined; d.strengthExercises=undefined; d.strengthTimeMin=undefined; });
@@ -551,10 +758,6 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex
   const hard = i => isLegDemandingDay(days[i]) || days[i].type==='race';
   const cutoff = opts.strengthCutoffDays!=null ? opts.strengthCutoffDays : 10;
   const usable = i => { const d = days[i]; return d.type!=='race' && !(d.daysToRace!=null && d.daysToRace>=0 && d.daysToRace<=Math.max(1,cutoff)) && !(d.daysToRace!=null && d.daysToRace<0); };
-  // Lower body (heavy legs) needs a clear day before the next hard run; it sits best on a
-  // rest day or the easy/recovery day after the long run. Upper body/core is cheap to
-  // recover from, so it can go on a rest day or the day before a quality session, and
-  // keeps every rest day a genuine day off for the legs.
   // Lower body pairs with a RUN day (an easy run, ideally the recovery run after the long
   // run) - a rest day is for resting the legs, so it never gets heavy leg work. Needs a
   // clear day before the next hard run; a quality day itself is the last resort (express).
@@ -579,7 +782,7 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex
     if(hard(i)) sc -= 3;
     return sc;
   };
-  const chosen = []; // {i, focus}
+  const chosen = [];
   const taken = i => chosen.some(c=>c.i===i);
   const lowerOk = i => !chosen.some(c=>c.focus==='lower' && circularDayDist(days[c.i].dow, days[i].dow)<3);
   const bestLower = () => { let b=null; for(let i=0;i<n;i++){ if(taken(i) || !lowerOk(i)) continue; const sc=lowerScore(i); if(sc==null) continue; if(!b || sc>b.sc) b={i, sc}; } return b; };
@@ -592,7 +795,6 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex
     const l = lowerCount<2 ? bestLower() : null;
     const u = bestUpper();
     if(!l && !u) break;
-    // A second lower session only when it has a clean slot; otherwise upper body/core.
     if(l && l.sc>=0 && (!u || l.sc>=u.sc-1)) chosen.push({i:l.i, focus:'lower'});
     else if(u) chosen.push({i:u.i, focus:'upper'});
     else chosen.push({i:l.i, focus:'lower'});
@@ -614,8 +816,12 @@ function recomputeStrengthFocus(days){
     day.strengthExpress = day.strengthFocus==='lower' && isLegDemandingDay(day);
   });
 }
+// Attaches exercise content to every strength day for the runner's equipment
+// (opts.equipment, defaulting to DEFAULT_EQUIPMENT). Called at generation and after any
+// edit, swap, or equipment change.
 function refreshStrengthWorkouts(days, phase, weekIndex, opts){
   opts = opts||{};
+  const avail = equipmentSet(opts.equipment);
   days.forEach(d=>{
     if(d.type==='rest') Object.assign(d, buildWorkoutMeta(d)); // rest-day text depends on whether strength landed there
     if(!d.strength){ d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
@@ -624,14 +830,15 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
     _used.length = 0;
     if(d.strengthFocus==='upper' || tier==null){
       d.strengthFocus = 'upper';
-      d.strengthExercises = buildUpperStrengthWorkout(variant); d.strengthTimeMin = STRENGTH_TIME_MIN.upper;
+      d.strengthExercises = buildUpperStrengthWorkout(variant, avail); d.strengthTimeMin = STRENGTH_TIME_MIN.upper;
       d.strengthLoadNote = STRENGTH_LOAD_NOTE.upper;
-      const usedSoFar = _used.length; d.strengthOptional = buildUpperOptional(variant); _used.length = usedSoFar; // extras need no how-to
+      const usedSoFar = _used.length; d.strengthOptional = buildUpperOptional(variant, avail); _used.length = usedSoFar; // extras need no how-to
     } else {
       const express = !!d.strengthExpress && tier!=='light';
       const useTier = express ? 'express' : tier;
-      d.strengthExercises = buildLowerStrengthWorkout(useTier, variant, opts.weekInBlock); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : STRENGTH_TIME_MIN[tier];
-      d.strengthLoadNote = STRENGTH_LOAD_NOTE[useTier]; d.strengthOptional = undefined;
+      d.strengthExercises = buildLowerStrengthWorkout(useTier, variant, opts.weekInBlock, avail); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : STRENGTH_TIME_MIN[tier];
+      d.strengthLoadNote = STRENGTH_LOAD_NOTE[useTier];
+      const usedSoFar = _used.length; d.strengthOptional = useTier==='heavy' ? buildLowerOptional(avail) : undefined; _used.length = usedSoFar;
     }
     // One how-to per unfamiliar exercise in this session, in the order they appear.
     const seen = new Set(); d.strengthHowTo = [];
@@ -1168,7 +1375,7 @@ function generatePlan(setup, dayOneOverride){
       built = buildOnce(weeklyKm);
     }
     const days = built.days;
-    if(firstUnplaced>Math.max(2, weeklyKm*0.05) && w<nTrain && !warnings.some(x=>x.startsWith('With '))){
+    if(firstUnplaced>Math.max(1, weeklyKm*0.05) && w<nTrain && !warnings.some(x=>x.startsWith('With '))){
       warnings.push(`With ${runsPerWeek} running days, ${fmtDist(weeklyKm,unit,0)}/week means very long easy days. The plan caps easy runs below the long run and lets the week come in a little under target — adding a running day would fix that.`);
     }
 
@@ -1188,7 +1395,7 @@ function generatePlan(setup, dayOneOverride){
     }
     finishWeekDays(days, raceKm);
     const minDaysToRace = Math.min(...days.map(d=>d.daysToRace));
-    placeStrengthDays(days, setup.strengthDows, setup.strengthPerWeek, phase, w, {minDaysToRace, weekInBlock, strengthCutoffDays, trainThrough: taperMode==='none'});
+    placeStrengthDays(days, setup.strengthDows, setup.strengthPerWeek, phase, w, {minDaysToRace, weekInBlock, strengthCutoffDays, trainThrough: taperMode==='none', equipment: setup.equipment});
 
     weeks.push({weekIndex:w, phase, isCutback, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, nominalKm: w<nTrain ? vols[w] : weeklyKm, paces, days, baselineVdot:weekVdot, daysToRaceAtStart: daysBetween(weekStart, raceDate)});
   }
@@ -1254,7 +1461,7 @@ function generateSpeedPlan(setup, dayOneOverride){
     const longKmAdj = Math.max(longKm, round1(Math.min(Math.max(...quality.map(q=>q.km))+0.6, kmForMinutes(150, paces.longPerKm))));
     const built = buildWeekDays({weekStart, weeklyKm, longKm:longKmAdj, longDow:c.longDow, phase:'build', isCutback, weekIndex:w, quality, runsPerWeek:c.runsPerWeek, strides:1, raceKm:10, paces, medLong:false, unit:c.unit});
     finishWeekDays(built.days, 10);
-    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?2:setup.strengthPerWeek, isCutback?'cutback':'build', w, {weekInBlock:inCycle});
+    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?2:setup.strengthPerWeek, isCutback?'cutback':'build', w, {weekInBlock:inCycle, equipment: setup.equipment});
     list.push({weekIndex:w, phase:isCutback?'cutback':'build', isCutback, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:vdot});
   }
   return finishGeneralPlan(setup, list, startVdot, endVdot);
@@ -1283,7 +1490,7 @@ function generateDistancePlan(setup, dayOneOverride){
     if(metric!=='longest') longKm = round1(Math.min(weeklyKm*(runs<=4 ? 0.33 : DISTANCE_LONG_FRACTION), kmForMinutes(150, paces.longPerKm)));
     const built = buildWeekDays({weekStart, weeklyKm, longKm, longDow:c.longDow, phase:'base', isCutback, weekIndex:w, quality:[], runsPerWeek:runs, strides:1, raceKm:10, paces, medLong:runs>=5, unit:c.unit});
     finishWeekDays(built.days, 10);
-    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?1:setup.strengthPerWeek, isCutback?'cutback':'base', w, {weekInBlock:w%4});
+    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?1:setup.strengthPerWeek, isCutback?'cutback':'base', w, {weekInBlock:w%4, equipment: setup.equipment});
     list.push({weekIndex:w, phase:isCutback?'cutback':'base', isCutback, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
   }
   return finishGeneralPlan(setup, list, c.athlete.vdot, c.athlete.vdot);
@@ -1302,7 +1509,7 @@ function generateMaintenancePlan(setup, dayOneOverride){
     const longKmAdj = Math.max(longKm, round1(Math.min(s.km+0.6, kmForMinutes(150, paces.longPerKm))));
     const built = buildWeekDays({weekStart, weeklyKm:c.currentKm, longKm:longKmAdj, longDow:c.longDow, phase:'maintenance', isCutback:false, weekIndex:w, quality:[{dow:qDows[0], type, ...s}], runsPerWeek:c.runsPerWeek, strides:1, raceKm:10, paces, medLong:false, unit:c.unit});
     finishWeekDays(built.days, 10);
-    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?1:setup.strengthPerWeek, 'maintenance', w, {weekInBlock:w%4});
+    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?1:setup.strengthPerWeek, 'maintenance', w, {weekInBlock:w%4, equipment: setup.equipment});
     list.push({weekIndex:w, phase:'maintenance', isCutback:false, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:c.currentKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
   }
   return finishGeneralPlan(setup, list, c.athlete.vdot, c.athlete.vdot);
@@ -1321,7 +1528,7 @@ function generateRecoveryPlan(setup, dayOneOverride){
     const built = buildWeekDays({weekStart, weeklyKm, longKm, longDow:c.longDow, phase:'recovery', isCutback:false, weekIndex:w, quality:[], runsPerWeek:runs, strides:0, raceKm:10, paces, medLong:false, unit:c.unit});
     finishWeekDays(built.days, 10);
     built.days.forEach(d=>{ if(d.type==='long'){ d.paceKey='easyPerKm'; d.descBase='Longer easy run — relaxed, no pace pressure'; } });
-    placeStrengthDays(built.days, [], 0, 'recovery', w, {});
+    placeStrengthDays(built.days, [], 0, 'recovery', w, {equipment: setup.equipment});
     list.push({weekIndex:w, phase:'recovery', isCutback:false, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
   }
   return finishGeneralPlan(setup, list, c.athlete.vdot, c.athlete.vdot);
@@ -1476,7 +1683,7 @@ return {
   raceLabelKm, runsPerWeekFor,
   QUALITY_TYPES, WARMUP_ELIGIBLE_TYPES, STRIDES_ELIGIBLE_TYPES, STRIDES_REPS, STRIDES_EXTRA_KM, HILL_STRIDES_EXTRA_KM, QUALITY_WARMUP_KM, QUALITY_COOLDOWN_KM,
   TYPE_LABELS, isLegDemandingDay, structuredEffort, buildWorkoutMeta,
-  STRENGTH_EXERCISES, STRENGTH_TIME_MIN, lowerStrengthTierForPhase, buildLowerStrengthWorkout, buildUpperStrengthWorkout,
+  STRENGTH_EXERCISES, OPTIONAL_EXTRAS, EQUIPMENT, DEFAULT_EQUIPMENT, equipmentSet, resolveExercise, STRENGTH_TIME_MIN, lowerStrengthTierForPhase, buildLowerStrengthWorkout, buildUpperStrengthWorkout,
   placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts,
   qualityDowsFor, deriveScheduleFromLongDow, evenlySpacedPositions, scheduleWarnings,
   raceClass, taperDaysFor, taperVolumeFactor, taperLongFactor, weeklyGrowthRateFor, targetPeakWeeklyKm, peakLongTargetKm, longFracCap, longTimeCapMin,

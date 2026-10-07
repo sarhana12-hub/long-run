@@ -53,6 +53,7 @@ function randomSetup(i){
     maxWeeklyKm: (race.km>=21 && rnd()<0.2) ? Math.round(mpw*between(1.0,1.3))*MI : null,
     longRunEmphasis: pick(['low','balanced','balanced','high']), speedEmphasis: pick(['low','balanced','balanced','high']),
     hillsMode: rnd()<0.25 ? 'hilly' : 'flat', skipBase: rnd()<0.2, taperMode,
+    equipment: (()=>{ const r=rnd(); if(r<0.3) return g.DEFAULT_EQUIPMENT.slice(); if(r<0.36) return []; if(r<0.5) return ['dumbbells','bench']; return g.EQUIPMENT.map(e=>e.id).filter(()=>rnd()<0.55); })(),
   };
   if(hasRecent && goalMode!=='none'){
     const pred = g.predictRace({races:[{km:recent.km, sec:recentSec}], weeklyKm:mpw*MI, longestKm: longest?longest*MI:null}, race.km);
@@ -128,8 +129,12 @@ function sanityCheck(plan, setup){
         }
         if(d.strengthFocus==='upper' && d.type==='long') push('upper-on-long', wk);
         if(!d.strengthExercises || d.strengthExercises.length<3) push('strength-empty', wk);
-        const BASIC = ['Plank','Dumbbell bench press','Push-ups','Dumbbell shoulder press','Glute bridge'];
-        (d.strengthExercises||[]).forEach(line=>{ const m=line.match(/^\d+×\S+ (.+?) (each (side|way|hand) )?\(/); const nm=m?m[1].trim():''; if(nm && !BASIC.includes(nm) && !(d.strengthHowTo||[]).some(x=>x.name===nm)) push('strength-howto', `${wk} no how-to for ${nm}`); });
+        // every listed exercise must be resolvable with the runner's equipment, and explained unless its variant says it needs no how-to
+        const avail = g.equipmentSet(setup.equipment);
+        const resolvable = new Map();
+        Object.values(g.STRENGTH_EXERCISES).concat(Object.values(g.OPTIONAL_EXTRAS)).forEach(def=>{ const r=g.resolveExercise(def, avail); if(r) resolvable.set(r.name, r); });
+        (d.strengthExercises||[]).forEach(line=>{ const m=line.match(/^\d+×\S+ (.+?) (each (side|way|hand) )?\(/); const nm=m?m[1].trim():''; if(!nm) return; const r=resolvable.get(nm); if(!r) push('strength-equipment', `${wk} ${nm} not available with [${[...avail].join(',')}]`); else if(r.how && !(d.strengthHowTo||[]).some(x=>x.name===nm)) push('strength-howto', `${wk} no how-to for ${nm}`); });
+        (d.strengthOptional||[]).forEach(line=>{ const m=line.match(/^\d+×\S+ (.+?) \(/); const nm=m?m[1].trim():''; if(nm && !resolvable.has(nm)) push('strength-equipment', `${wk} optional ${nm} not available`); });
         if(!d.strengthTimeMin) push('strength-time', wk);
         if(d.strengthExpress && d.strengthTimeMin>25) push('express-too-long', wk);
         if(d.type==='rest' && !/strength/i.test(text)) push('rest-strength-text', `${wk}: ${text}`);

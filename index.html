@@ -983,6 +983,7 @@ function defaultDraft(){
     longRunEmphasis: 'balanced', speedEmphasis: 'balanced', strengthPerWeek: 2,
     hillsMode: 'flat', // 'flat' | 'hilly' - race plans only, see generatePlan()
     taperMode: 'full', // 'full' | 'light' | 'none' - race plans only
+    equipment: DEFAULT_EQUIPMENT.slice(),
     skipBase: false, // race plans only - skip straight to build phase, see generatePlan()
     // General (non-race) plan fields
     planKind: 'speed', weeks: PLAN_KIND_META.speed.weeksDefault,
@@ -1005,6 +1006,7 @@ function draftFromSetup(setup){
     recent2Time: setup.recent2TimeSec ? secToClock(setup.recent2TimeSec) : '',
     longDow: setup.longDow, weekStartDow: setup.weekStartDow || 0,
     restDays: clamp(7 - (setup.runsPerWeek || runsPerWeekFor(setup.currentWeeklyKm)), 1, 4),
+    equipment: (setup.equipment && setup.equipment.length) ? setup.equipment.slice() : DEFAULT_EQUIPMENT.slice(),
   };
   if(isGeneralPlan(setup)){
     const draft = {...common, goalMode:'general', planKind:setup.planKind, weeks:setup.weeks};
@@ -1088,7 +1090,7 @@ function submitOnboarding(){
       currentWeeklyKm: unitToKm(Number(d.currentWeeklyMi)||0, d.units),
       ...fitnessFields,
       longDow: d.longDow, weekStartDow: d.weekStartDow||0, ...deriveScheduleFromLongDow(d.longDow, d.planKind==='speed'?2:1),
-      runsPerWeek: clamp(7 - d.restDays, 3, 6),
+      runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: d.strengthPerWeek, equipment: (d.equipment||DEFAULT_EQUIPMENT).slice(),
     };
     if(d.planKind==='distance'){
       if(!d.distanceGoalTargetMi){ showToast('Enter a target to build toward'); return; }
@@ -1115,6 +1117,7 @@ function submitOnboarding(){
       maxWeeklyKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxWeeklyMi) ? unitToKm(Number(d.maxWeeklyMi), d.units) : null,
       longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis,
       hillsMode: d.hillsMode, skipBase: d.skipBase, taperMode: d.taperMode || 'full',
+      equipment: (d.equipment||DEFAULT_EQUIPMENT).slice(),
     };
     plan = generatePlan(setup, dayOneOverride);
   }
@@ -1596,6 +1599,11 @@ function renderOnboardStep3(d){
         <div class="dow-grid">${dowGrid('longDow', d.longDow, false)}</div>
         <div class="hint">Everything else — speed work, strength — is placed automatically around this.</div>
       </div>
+      <details class="field">
+        <summary style="font-size:13px; font-weight:700; color:var(--ink-soft); cursor:pointer; -webkit-tap-highlight-color:transparent;">Gym equipment — ${(d.equipment||[]).length} of ${EQUIPMENT.length} ticked · tap to edit</summary>
+        <div class="hint" style="margin:6px 0 0;">Strength sessions use only what's ticked here, and you can change it any time in Settings.</div>
+        ${equipmentChipsHtml(d.equipment, 'toggle-draft-equipment')}
+      </details>
       <div class="field">
         <label class="field-label">Week starts on</label>
         <div class="chip-select">${weekStartChipsHtml(d.weekStartDow, 'pick-week-start')}</div>
@@ -1631,6 +1639,12 @@ function renderOnboardStep3(d){
       </div>
       <div class="hint">${d.taperMode==='none' ? 'No taper: training and strength carry on as normal, with only race day and the day before kept easy. Good when this race is a stepping stone rather than the goal.' : d.taperMode==='light' ? 'A shorter, gentler taper — about half the usual length and volume cut, strength eases off five days out.' : 'The full, evidence-based taper for this distance — volume drops, intensity stays, strength stops ten days out. Best when this race is the goal.'}</div>
     </div>
+
+    <details class="field" style="margin-top:4px;">
+      <summary style="font-size:13px; font-weight:700; color:var(--ink-soft); cursor:pointer; -webkit-tap-highlight-color:transparent;">Gym equipment — ${(d.equipment||[]).length} of ${EQUIPMENT.length} ticked · tap to edit</summary>
+      <div class="hint" style="margin:6px 0 0;">Strength sessions use only what's ticked here, and you can change it any time in Settings.</div>
+      ${equipmentChipsHtml(d.equipment, 'toggle-draft-equipment')}
+    </details>
 
     <div class="section-title">Weekly rhythm</div>
     <div class="field">
@@ -1739,6 +1753,26 @@ function tabBtn(key,icon,label){
   return `<button class="tab-btn ${state.tab===key?'active':''}" data-act="set-tab" data-tab="${key}">${icon}<span>${label}</span></button>`;
 }
 
+// Grouped equipment toggles, shared by onboarding (draft) and Settings (live setup).
+function equipmentChipsHtml(selected, act){
+  const sel = new Set(selected||[]);
+  const groups = [];
+  EQUIPMENT.forEach(e=>{ let g = groups.find(x=>x.name===e.group); if(!g){ g={name:e.group, items:[]}; groups.push(g); } g.items.push(e); });
+  return groups.map(g=>`
+    <div class="field-label" style="margin:12px 0 6px;">${esc(g.name)}</div>
+    <div class="chip-select">${g.items.map(e=>`<button class="chip ${sel.has(e.id)?'active':''}" data-act="${act}" data-id="${e.id}">${esc(e.label)}</button>`).join('')}</div>`).join('');
+}
+// Options every post-generation strength refresh needs (edits, swaps, equipment changes).
+function strengthOptsFor(week){
+  const mode = (state.setup && state.setup.taperMode) || 'full';
+  return {equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none'};
+}
+function refreshStrengthFromThisWeek(){
+  const plan = state.plan; if(!plan) return;
+  const todayWeek = findWeekForToday(plan);
+  plan.weeks.forEach(w=>{ if(w.weekIndex>=todayWeek.weekIndex) refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); });
+  Store.setPlan(plan);
+}
 function phaseColorVar(phase){
   return phase==='taper' ? 'var(--z-race)' : phase==='peak' ? 'var(--z-intervals)' : phase==='build' ? 'var(--z-tempo)' : 'var(--z-easy)';
 }
@@ -3098,6 +3132,12 @@ function renderSettingsTab(){
       `; })()}
     </div>
 
+    <div class="section-title">Gym equipment</div>
+    <div class="card" style="padding:4px 16px 14px;">
+      <div class="hint" style="padding-top:10px;">Strength sessions are built from what's ticked here. Change it and every session from this week on is rebuilt around it — runs and logged workouts are untouched.</div>
+      ${equipmentChipsHtml(s.equipment && s.equipment.length ? s.equipment : DEFAULT_EQUIPMENT, 'toggle-equipment')}
+    </div>
+
     <div class="section-title">Strava</div>
     <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
       ${state.stravaAuth ? `
@@ -3804,6 +3844,7 @@ function renderDayDetail(){
     ${day.strengthOptional && day.strengthOptional.length ? `
     <div class="field-label" style="margin-bottom:6px;">Optional extras — only if you have time</div>
     <ul style="font-size:13.5px; color:var(--muted); margin:0 0 14px; padding-left:20px; line-height:1.5;">${day.strengthOptional.map(p=>`<li style="margin-bottom:4px;">${esc(p)}</li>`).join('')}</ul>` : ''}
+    ${day.strength ? `<div class="hint" style="margin:-6px 0 12px;">Built for the gym equipment ticked in Settings.</div>` : ''}
     ${day.strengthHowTo && day.strengthHowTo.length ? `
     <details style="margin:-6px 0 16px;">
       <summary style="font-size:13px; font-weight:700; color:var(--muted); cursor:pointer; -webkit-tap-highlight-color:transparent;">How to do these</summary>
@@ -4064,6 +4105,25 @@ function onClick(e){
   if(act==='pick-hills-mode'){ state.onboardDraft.hillsMode = el.dataset.mode; render(); return; }
   if(act==='pick-skip-base'){ state.onboardDraft.skipBase = el.dataset.mode==='1'; render(); return; }
   if(act==='pick-taper-mode'){ state.onboardDraft.taperMode = el.dataset.mode; render(); return; }
+  if(act==='toggle-draft-equipment'){
+    const id = el.dataset.id; const list = new Set(state.onboardDraft.equipment || DEFAULT_EQUIPMENT);
+    if(list.has(id)) list.delete(id); else list.add(id);
+    state.onboardDraft.equipment = [...list];
+    // keep the <details> open across the re-render
+    render();
+    const dts = document.querySelector('details'); if(dts) dts.open = true; // keep the panel open while ticking
+    return;
+  }
+  if(act==='toggle-equipment'){
+    const id = el.dataset.id; const list = new Set((state.setup.equipment && state.setup.equipment.length) ? state.setup.equipment : DEFAULT_EQUIPMENT);
+    if(list.has(id)) list.delete(id); else list.add(id);
+    state.setup.equipment = [...list];
+    Store.setSetup(state.setup);
+    refreshStrengthFromThisWeek();
+    const y = window.scrollY; render(); window.scrollTo(0, y);
+    showToast('Strength sessions updated for your equipment');
+    return;
+  }
   if(act==='pick-recent2'){ state.onboardDraft.recent2DistanceKey = el.dataset.key||''; if(!el.dataset.key) state.onboardDraft.recent2Time=''; render(); return; }
   if(act==='pick-plan-kind'){
     const kind = el.dataset.kind;
@@ -4254,7 +4314,7 @@ function onClick(e){
     week.days[a] = {...db_, ...keepA};
     week.days[b] = {...da, ...keepB};
     recomputeStrengthFocus(week.days);
-    refreshStrengthWorkouts(week.days, week.phase, week.weekIndex);
+    refreshStrengthWorkouts(week.days, week.phase, week.weekIndex, strengthOptsFor(week));
     Store.setPlan(state.plan);
     state.modal = null;
     showToast('Swapped');
@@ -4290,7 +4350,7 @@ function onClick(e){
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     recomputeStrengthFocus(week.days);
-    refreshStrengthWorkouts(week.days, week.phase, week.weekIndex);
+    refreshStrengthWorkouts(week.days, week.phase, week.weekIndex, strengthOptsFor(week));
     Store.setPlan(state.plan);
     state.modal=null; showToast('Day updated'); return;
   }

@@ -127,6 +127,14 @@ Run both with `npm test`.
     join the lower pools, mini-band side steps and suitcase carries replace the Pallof press,
     pull-ups and hanging knee raises use the bar.
 
+41. **Sessions named machines the runner may not have.** *Fix:* equipment is an input. Every
+    exercise declares variants with what each needs; the session uses the best variant the
+    runner has, names only that, and falls back to bodyweight before ever dropping a slot.
+    Equipment is ticked in onboarding and changeable in Settings; changing it rebuilds
+    strength from the current week without touching runs or logs. *Guard:*
+     (every listed exercise resolvable with the plan's equipment), with
+    random equipment sets in the Monte Carlo sweep including "nothing at all".
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy
