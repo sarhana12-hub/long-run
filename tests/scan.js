@@ -129,6 +129,22 @@ Time Pace Heart Rate
   check('one split read', r.splits.length===1 && Math.abs(r.splits[0].paceSecPerKm-555/1.609344)<1, JSON.stringify(r.splits));
 }
 
+console.log('4d. Apple Splits screen on its own');
+{
+  const r = s.parseWorkoutText(`1:08 5G 63
+Splits
+1 Mile
+Time Pace
+1 09:15 9'15''/MI
+2 08:51 8'51''/MI
+3 06:51 8'08''/MI`, {today});
+  check('three splits with times', r.splits.length===3 && r.splits.every(x=>x.timeSec>0), JSON.stringify(r.splits));
+  check('split paces per km', Math.abs(r.splits[2].paceSecPerKm-488/1.609344)<1, String(r.splits[2] && r.splits[2].paceSecPerKm));
+  check('time summed from splits (24:57)', r.durationSec===24*60+57, String(r.durationSec));
+  check('distance derived (about 2.84 mi)', Math.abs(r.distanceKm/1.609344-2.84)<0.03, String(r.distanceKm/1.609344));
+  check('no date, says so', r.date===null && r.notes.some(n=>/No date/.test(n)));
+}
+
 console.log('5. Apple segments and rep time');
 {
   const r = s.parseWorkoutText(`Segments

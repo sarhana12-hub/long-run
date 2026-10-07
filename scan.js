@@ -29,7 +29,7 @@ function toSec(h, m, s){ return (Number(h)||0)*3600 + (Number(m)||0)*60 + (Numbe
 // mm:ss or h:mm:ss anywhere in a line
 const TIME_RE = /(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?![\d'"])/g;
 // a pace: 9'10" /MI, 9:10 /mi, 9'10"/KM
-const PACE_RE = /(\d{1,2})\s*['’:]\s*(\d{2})\s*(?:["”])?\s*\/?\s*(mi|km)\b/gi;
+const PACE_RE = /(\d{1,2})\s*['’:]\s*(\d{2})\s*['"’”]*\s*\/?\s*(mi|km)\b/gi;
 // a distance with a unit: 3.52 MI, 10.0 km, 5.00mi
 const DIST_RE = /(\d{1,3}(?:\.\d{1,2})?)\s*(mi|km)\b/gi;
 
@@ -115,19 +115,33 @@ function parseWorkoutText(rawText, opts){
     const agree = plausible.find(t=>Math.abs(t.sec-expect)/expect < 0.15);
     best = agree || null;
   }
-  if(best) out.durationSec = best.sec;
+  if(best){ out.durationSec = best.sec; out.durationScore = best.score; }
   else if(out.distanceKm && out.paceSecPerKm){ out.durationSec = Math.round(out.distanceKm*out.paceSecPerKm); out.notes.push('Time worked out from distance and average pace.'); }
 
   // splits: pace tokens listed after a Splits/Mile/Km header, one per row
   const splitStart = lines.findIndex(l=>/^splits?\b|^mile splits|^km splits|\bsplits\b/i.test(l));
   if(splitStart>=0){
+    // "1 Mile" / "1 Kilometer" header on Apple's Splits screen says what each split is
+    const hdr = lines.slice(splitStart, splitStart+4).join(' ').match(/(\d+(?:\.\d+)?)\s*(mile|mi\b|kilomet|km\b)/i);
+    const splitKm = hdr ? Number(hdr[1])*(/^(mile|mi)/i.test(hdr[2]) ? KM_PER_MI : 1) : null;
     for(let i=splitStart+1;i<lines.length;i++){
       const l = lines[i]; let m; PACE_RE.lastIndex=0; const row = []; while((m = PACE_RE.exec(l))) row.push({sec: toSec(0,m[1],m[2]), u:m[3].toLowerCase()});
       // Apple's in-page splits: "1  08:24  8'24''  133BPM" - the pace is the quote-style token
       // (minutes'seconds'' with no unit); the mm:ss before it is the split's time, not its pace.
       if(!row.length){ const q = l.match(/^\s*\d{1,2}\s+(?:\d{1,2}:\d{2}\s+)?(\d{1,2})\s*['’]\s*(\d{2})\s*['’"”]*/); if(q) row.push({sec: toSec(0,q[1],q[2]), u: out.unit||'mi'}); }
-      if(row.length){ const r = row[0]; out.splits.push({index: out.splits.length+1, paceSecPerKm: r.u==='mi' ? r.sec/KM_PER_MI : r.sec}); }
+      if(row.length){
+        const r = row[0]; const t = l.match(/^\s*\d{1,2}\s+(\d{1,2}):(\d{2})\b/);
+        out.splits.push({index: out.splits.length+1, paceSecPerKm: r.u==='mi' ? r.sec/KM_PER_MI : r.sec, timeSec: t ? toSec(0,t[1],t[2]) : null});
+        if(!out.unit) out.unit = r.u;
+      }
       else if(out.splits.length && /heart|cadence|elevation|power|workout|summary/i.test(l)) break;
+    }
+    // A splits screen on its own still gives the whole run: time is the sum of the splits,
+    // distance is the full splits plus the partial last one (its time over its pace).
+    if(out.splits.length && out.splits.every(s=>s.timeSec>0)){
+      // an unlabelled time token (often the phone's clock) loses to the splits' own sum
+      if(!out.durationSec || !out.durationScore){ out.durationSec = out.splits.reduce((a,s)=>a+s.timeSec,0); out.durationScore = 3; out.notes.push('Time added up from the splits.'); }
+      if(!out.distanceKm && splitKm){ const last = out.splits[out.splits.length-1]; out.distanceKm = Math.round(((out.splits.length-1)*splitKm + last.timeSec/last.paceSecPerKm)*100)/100; out.notes.push('Distance worked out from the splits.'); }
     }
   }
   // segments (Apple Watch "Segments", Garmin "Laps"): rows with a distance and a time
