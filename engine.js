@@ -1484,7 +1484,7 @@ function generatePlan(setup, dayOneOverride){
       if(removed>0) weeklyKm = round1(weeklyKm - removed);
     }
     if(firstUnplaced>Math.max(1, weeklyKm*0.05) && w<nTrain && !warnings.some(x=>x.startsWith('With '))){
-      warnings.push(`With ${runsW} running days, ${fmtDist(w<nTrain ? levels[w] : weeklyKm,unit,0)}/week doesn't fit: Daniels keeps easy runs to 30–60 minutes, so the week comes in under target. Adding a running day is the fix.`);
+      warnings.push(`From week ${w+1}, ${fmtDist(w<nTrain ? levels[w] : weeklyKm,unit,0)}/week on ${runsW} running days doesn't fit: Daniels keeps easy runs to 30–60 minutes, so the week comes in under target. Adding a running day is the fix.`);
     }
 
     // race week / post-race days

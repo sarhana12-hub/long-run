@@ -13,6 +13,19 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Peak">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<!-- Launch screens for the home-screen app: without these iOS shows a blank screen until the page paints. -->
+<link rel="apple-touch-startup-image" media="screen and (device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1320x2868.png">
+<link rel="apple-touch-startup-image" media="screen and (device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1206x2622.png">
+<link rel="apple-touch-startup-image" media="screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1290x2796.png">
+<link rel="apple-touch-startup-image" media="screen and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1179x2556.png">
+<link rel="apple-touch-startup-image" media="screen and (device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1284x2778.png">
+<link rel="apple-touch-startup-image" media="screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1170x2532.png">
+<link rel="apple-touch-startup-image" media="screen and (device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1125x2436.png">
+<link rel="apple-touch-startup-image" media="screen and (device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1242x2688.png">
+<link rel="apple-touch-startup-image" media="screen and (device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icons/splash/828x1792.png">
+<link rel="apple-touch-startup-image" media="screen and (device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icons/splash/750x1334.png">
+<link rel="apple-touch-startup-image" media="screen and (device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1242x2208.png">
+<link rel="apple-touch-startup-image" media="screen and (device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icons/splash/640x1136.png">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -164,6 +177,8 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .step-indicator{display:flex; align-items:center; gap:10px; margin:2px 0 20px;}
 .step-indicator .step-label{font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.02em;}
 .step-dots{display:flex; gap:6px;}
+/* The Next/Back bar stays in view while a long step scrolls, then settles at the end. */
+.onboard-nav{position:sticky; bottom:0; margin:22px 0 0; padding:12px 0 calc(14px + env(safe-area-inset-bottom)); background:linear-gradient(to top, var(--bg) 70%, transparent); z-index:5;}
 .step-dot{width:7px; height:7px; border-radius:50%; background:var(--line);}
 .step-dot.active{background:var(--accent-strong);}
 
@@ -179,7 +194,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .week-header h2{font-size:21px;}
 .week-meta{font-size:12.5px; color:var(--muted); margin-top:3px;}
 .week-stat{text-align:right;}
-.week-stat .v{font-family:var(--font-mono); font-weight:700; font-size:18px;}
+.week-stat .v{font-family:var(--font-mono); font-weight:700; font-size:18px; white-space:nowrap;}
 .week-stat .l{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
 
 /* ---------- day cards ---------- */
@@ -201,6 +216,58 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .day-check{width:19px; height:19px; border-radius:50%; background:var(--accent-strong); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; flex:none;}
 .day-check svg{width:11px; height:11px;}
 .strength-badge{font-size:10px; font-weight:700; color:var(--z-strength); background:var(--z-strength-bg); border-radius:6px; padding:2px 6px;}
+.day-card{border-left:4px solid var(--card-edge, var(--line));}
+.day-card.today{border-color:var(--accent-strong); border-left-color:var(--card-edge, var(--accent-strong));}
+.pill .pill-ico{display:inline-flex; width:11px; height:11px;}
+.pill .pill-ico svg{width:11px; height:11px;}
+/* today card */
+.today-card{margin:0 18px 14px; padding:14px 16px; border-color:var(--accent-strong);}
+.today-card .tc-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;}
+.today-card .tc-label{font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-strong);}
+.today-card .tc-date{font-size:12.5px; color:var(--muted); font-weight:600;}
+.today-card .tc-title{font-family:var(--font-display); font-size:19px; font-weight:800; display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px;}
+.today-card ul{margin:0 0 10px; padding-left:18px; font-size:13.5px; line-height:1.45; color:var(--ink-soft);}
+.today-card .row .btn{padding:11px 10px;}
+/* coach's notes callout */
+.notes-callout{margin:0 18px 14px; border:1px solid var(--accent-strong); background:var(--accent-soft); border-radius:14px; padding:0 14px;}
+.notes-callout summary{list-style:none; display:flex; align-items:center; gap:8px; padding:12px 0; font-weight:700; font-size:13.5px; cursor:pointer; -webkit-tap-highlight-color:transparent;}
+.notes-callout summary::-webkit-details-marker{display:none;}
+.notes-callout summary .count{margin-left:auto; font-family:var(--font-mono); font-size:12px; color:var(--muted);}
+.notes-callout summary svg{width:15px; height:15px; flex:none;}
+.notes-callout ul{margin:0; padding:0 0 12px 18px; font-size:13px; line-height:1.45; color:var(--ink);}
+.notes-callout li{margin-bottom:6px;}
+/* first-visit help card */
+.help-card{margin:0 18px 14px; padding:14px 16px;}
+.help-card ol{margin:6px 0 10px; padding-left:18px; font-size:13px; line-height:1.45; color:var(--ink-soft);}
+/* strength rows */
+.sx-row{display:flex; align-items:flex-start; gap:10px; padding:9px 0; border-bottom:1px solid var(--line-soft);}
+.sx-row:last-child{border-bottom:none;}
+.sx-row input[type=checkbox]{width:22px; height:22px; flex:none; margin:2px 0 0; accent-color:var(--accent-strong);}
+.sx-row details{flex:1; min-width:0;}
+.sx-row summary{list-style:none; display:flex; align-items:baseline; justify-content:space-between; gap:10px; cursor:pointer; -webkit-tap-highlight-color:transparent;}
+.sx-row summary::-webkit-details-marker{display:none;}
+.sx-row .sx-name{font-weight:700; font-size:14px;}
+.sx-row .sx-sets{font-family:var(--font-mono); font-weight:700; font-size:13.5px; white-space:nowrap; flex:none;}
+.sx-row .sx-cue{font-size:12.5px; color:var(--muted); margin-top:2px; line-height:1.4;}
+.sx-row .sx-more{font-size:12.5px; color:var(--ink-soft); margin-top:6px; line-height:1.45;}
+.sx-row .sx-more b{color:var(--ink);}
+.sx-row.done .sx-name{color:var(--muted); text-decoration:line-through;}
+/* settings collapsibles */
+.settings-details summary{list-style:none; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 0; cursor:pointer; -webkit-tap-highlight-color:transparent;}
+.settings-details summary::-webkit-details-marker{display:none;}
+.settings-details summary .chev{color:var(--muted); transition:transform .15s ease; flex:none;}
+.settings-details[open] summary .chev{transform:rotate(90deg);}
+/* desktop: wider column, tabs on top */
+@media (min-width:900px){
+  #app{max-width:680px; padding-top:56px;}
+  .tabbar{top:0; bottom:auto; border-top:none; border-bottom:1px solid var(--line); padding:4px 10px;}
+  .tabbar-inner{max-width:680px;}
+  .tab-btn{flex-direction:row; gap:8px; font-size:13px; padding:10px 0;}
+  .tab-btn svg{width:18px; height:18px;}
+  .fab{bottom:32px;}
+  .sheet{max-width:600px; border-radius:20px; margin-bottom:24px;}
+  .overlay{align-items:center;}
+}
 
 /* ---------- pace tracker: then-vs-now + trend bars ---------- */
 .tn-row{display:flex; align-items:center; justify-content:center; gap:10px; margin:2px 0 10px;}
@@ -731,6 +798,11 @@ const Store = {
   // separate "did it happen" record, since a strength day (including a rest day with
   // strength attached) has no run to log against.
   getStrengthDone(){ return this._get('lr_strength_done', []); },
+  // Per-exercise ticks inside a strength session: {date: [bool,...]} in exercise order.
+  getStrengthItems(){ return this._get('lr_strength_items', {}); },
+  setStrengthItems(v){ this._set('lr_strength_items', v); },
+  getFlag(key){ return this._get('lr_flag_'+key, false); },
+  setFlag(key, v){ this._set('lr_flag_'+key, !!v); },
   setStrengthDone(v){ this._set('lr_strength_done', v); },
   // One entry per time an achievement fires: {key, date, detail?}. Repeatable
   // achievements (a new PR, a new week hit) simply get another entry with the same key -
@@ -747,6 +819,9 @@ const Store = {
     localStorage.removeItem('lr_logs');
     localStorage.removeItem('lr_milestones');
     localStorage.removeItem('lr_strength_done');
+    localStorage.removeItem('lr_strength_items');
+    localStorage.removeItem('lr_flag_help_seen');
+    localStorage.removeItem('lr_flag_notes_seen');
     localStorage.removeItem('lr_achievement_log');
     localStorage.removeItem('lr_strava_auth');
   }
@@ -754,6 +829,10 @@ const Store = {
 
 /* ============================= icons ============================= */
 const ICONS = {
+  moon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+  dot:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="6"/></svg>',
+  chevron:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+  treadmill:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17h18"/><path d="M5 17V8l12-3"/><path d="M19 17v-6"/></svg>',
   route:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M6 15.5V13a4 4 0 0 1 4-4h4a4 4 0 0 0 4-4"/></svg>',
   peak:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19 L9 10 L11 13 L15 6 L21 19"/><path d="M15 6 L15 2"/><path d="M15 2 L18.5 3.2 L15 4.4"/></svg>',
   summitBadge:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M7.5 15.5 L12 8.5 L16.5 15.5"/><path d="M12 8.5 L12 5.2"/><path d="M12 5.2 L14.6 6.2 L12 7.2"/></svg>',
@@ -842,9 +921,12 @@ function boot(){
   state.name = Store.getName();
   state.paceFormat = Store.getPaceFormat();
   const setup = Store.getSetup();
-  const plan = Store.getPlan();
+  let plan = Store.getPlan();
   state.logs = Store.getLogs();
   state.strengthDone = Store.getStrengthDone();
+  state.strengthItems = Store.getStrengthItems();
+  state.helpSeen = Store.getFlag('help_seen');
+  state.notesSeen = Store.getFlag('notes_seen');
   state.achievementLog = Store.getAchievementLog();
   // One-time migration from the old boolean-flag milestone tracker: a device that already
   // celebrated these under the old system shouldn't see them pop up again just because the
@@ -1158,7 +1240,11 @@ function submitOnboarding(){
   if(isSwitch && state.setup && state.setup.trackingStartDate){
     setup.trackingStartDate = state.setup.trackingStartDate;
   } else {
-    setup.trackingStartDate = (backdateApplied && trainingStartOverride && d.trackFromToday) ? fmtDate(todayDate()) : null;
+    // No backdating: the first week usually started before the plan existed, so the
+    // days before today must not count as missed. Count from today.
+    const firstWeekStart = plan.weeks && plan.weeks.length ? parseDate(plan.weeks[0].weekStart) : null;
+    const madeMidWeek = !backdateApplied && firstWeekStart && todayDate() > firstWeekStart;
+    setup.trackingStartDate = (backdateApplied && trainingStartOverride && d.trackFromToday) ? fmtDate(todayDate()) : (madeMidWeek ? fmtDate(todayDate()) : null);
   }
   state.name = d.name.trim();
   Store.setName(state.name);
@@ -1245,8 +1331,9 @@ function recentRaceLabel(setup, unit){
 function dowGridHtml(name, selected, multi, act){
   return DOW_LABELS.map((l,i)=>`<button class="dow-opt ${ (multi? selected.includes(i): selected===i) ?'sel':''}" data-act="${act}" data-name="${name}" data-i="${i}" data-multi="${multi?1:0}">${l}</button>`).join('');
 }
+// Asked as running days (what the runner thinks in); stored as rest days (what the plan reads).
 function restDaysChipsHtml(restDays, act){
-  return [1,2,3,4].map(n=>`<button class="chip ${restDays===n?'active':''}" data-act="${act}" data-n="${n}">${n}</button>`).join('');
+  return [3,4,5,6].map(r=>`<button class="chip ${7-restDays===r?'active':''}" data-act="${act}" data-n="${7-r}">${r}</button>`).join('');
 }
 const EMPHASIS_LEVELS = [{key:'low', label:'Less'}, {key:'balanced', label:'Balanced'}, {key:'high', label:'More'}];
 function emphasisLabel(key){ const l = EMPHASIS_LEVELS.find(x=>x.key===key); return l ? l.label : 'Balanced'; }
@@ -1311,15 +1398,13 @@ function renderOnboardStep1(d){
   const raceFieldsHtml = `
     <div class="section-title">Race distance</div>
     <div class="chip-select" style="margin-bottom:8px;">${presetChips}</div>
-    <div class="row" style="margin-bottom:16px;">
-      <div class="field" style="margin-bottom:0;">
-        <label class="field-label">Custom distance (${d.units})</label>
-        <input class="input" type="number" min="1" step="0.1" id="in-custom-dist" value="${d.raceKey==='custom'? round1(kmToUnit(d.raceDistanceKm,d.units)):''}" placeholder="e.g. 8">
-      </div>
-      <div class="field" style="margin-bottom:0;">
-        <label class="field-label">Units</label>
-        <div class="chip-select">${unitChips}</div>
-      </div>
+    <div class="field">
+      <label class="field-label">Custom distance (${d.units})</label>
+      <input class="input" type="number" inputmode="decimal" min="1" step="0.1" id="in-custom-dist" value="${d.raceKey==='custom'? round1(kmToUnit(d.raceDistanceKm,d.units)):''}" placeholder="e.g. 8">
+    </div>
+    <div class="field">
+      <label class="field-label">Units</label>
+      <div class="chip-select">${unitChips}</div>
     </div>
 
     <div class="section-title">Race day</div>
@@ -1470,7 +1555,8 @@ function recentPaceHint(d){
   if(!preset || !sec) return 'Enter a finish time to see your pace per mile.';
   const secPerKm = sec/preset.km;
   const mph = 3600/(secPerKm*KM_PER_MI);
-  return `That's about ${paceStr(secPerKm,'mi')} pace — ${animalPaceComparison(mph)}`;
+  void mph;
+  return `That's about ${paceStr(secPerKm,'mi')} pace.`;
 }
 
 function renderOnboardStep2(d){
@@ -1550,7 +1636,7 @@ function renderOnboardStep2(d){
     </div>
     <div class="field">
       <label class="field-label">Longest run in the last few weeks (${d.units}, optional)</label>
-      <input class="input" type="number" min="0" step="0.5" id="in-longest" value="${esc(d.longestRecentMi)}" placeholder="e.g. 8">
+      <input class="input" type="number" inputmode="decimal" min="0" step="0.5" id="in-longest" value="${esc(d.longestRecentMi)}" placeholder="e.g. 8">
       <div class="hint">Sets where your long run starts and how far it can safely build.</div>
     </div>
     ${!isGeneral ? `
@@ -1560,24 +1646,25 @@ function renderOnboardStep2(d){
         <button class="chip ${d.skipBase?'':'active'}" data-act="pick-skip-base" data-mode="0">Build up gradually</button>
         <button class="chip ${d.skipBase?'active':''}" data-act="pick-skip-base" data-mode="1">Skip straight to speed work</button>
       </div>
-      <div class="hint">${d.skipBase ? "You'll go straight into structured speed sessions instead of easy-only base weeks — good if you're already running consistently and comfortable with quality workouts." : "A few weeks of easy-only running before speed work starts, scaled to how close your current mileage already is to what the plan will peak at."}</div>
+      <div class="hint">${d.skipBase ? "You'll go straight into structured speed sessions instead of easy-only base weeks — good if you're already running consistently and comfortable with quality workouts." : "Daniels' Phase I: a few weeks of easy running with strides before speed work starts. Its length follows the weeks you have, not your mileage."}</div>
     </div>` : ''}
     <div class="field">
       <label class="field-label">Most recent race (optional, calibrates your paces)</label>
       <div class="chip-select" style="margin-bottom:10px;">${recentChips}</div>
-      <input class="input" type="text" inputmode="numeric" id="in-recent-time" placeholder="HH:MM:SS — just type digits" value="${esc(d.recentTime)}">
+      <input class="input" type="text" inputmode="numeric" id="in-recent-time" placeholder="e.g. 25:30" value="${esc(d.recentTime)}">
       <div class="hint" id="recent-pace-hint">${recentPaceHint(d)}</div>
     </div>
     <div class="field">
       <label class="field-label">Another recent race at a different distance (optional)</label>
       <div class="chip-select" style="margin-bottom:10px;"><button class="chip ${!d.recent2DistanceKey?'active':''}" data-act="pick-recent2" data-key="">None</button>${recent2Chips}</div>
-      ${d.recent2DistanceKey ? `<input class="input" type="text" inputmode="numeric" id="in-recent2-time" placeholder="HH:MM:SS — just type digits" value="${esc(d.recent2Time)}">` : ''}
+      ${d.recent2DistanceKey ? `<input class="input" type="text" inputmode="numeric" id="in-recent2-time" placeholder="e.g. 25:30" value="${esc(d.recent2Time)}">` : ''}
       <div class="hint">Two distances pin down how your speed carries over to longer races — the single biggest accuracy gain for marathon and half projections.</div>
     </div>
     ${isGeneral ? '' : `
     <div class="field">
       <label class="field-label">Goal time for this race (optional)</label>
-      <input class="input" type="text" id="in-goal-time" placeholder="e.g. 1:45:00 — leave blank to let paces guide you" value="${esc(d.goalTime)}">
+      <input class="input" type="text" inputmode="numeric" id="in-goal-time" placeholder="e.g. 1:45:00" value="${esc(d.goalTime)}">
+      <div class="hint">Leave blank to let your paces guide you.</div>
       ${predictionHint ? `<div class="hint" style="margin-top:8px;">${predictionHint}</div>` : ''}
     </div>`}
     ${isDistance ? `<div class="section-title">Your goal</div>${distanceGoalHtml}` : ''}
@@ -1589,10 +1676,10 @@ function renderOnboardStep3(d){
   const runDaysPerWeek = clamp(7 - d.restDays, 3, 6);
   if(d.goalMode==='general'){
     return `
-      <div class="section-title" style="margin-top:0;">Rest days per week</div>
+      <div class="section-title" style="margin-top:0;">Running days per week</div>
       <div class="field">
         <div class="chip-select">${restDaysChipsHtml(d.restDays, 'pick-restdays')}</div>
-        <div class="hint">${runDaysPerWeek} running day${runDaysPerWeek===1?'':'s'} per week.</div>
+        <div class="hint">${7-runDaysPerWeek} rest day${7-runDaysPerWeek===1?'':'s'} a week. Each easy run gets at least 30 minutes; if the mileage can't give every day that, the plan starts with fewer days and adds one back as the mileage grows.</div>
       </div>
       <div class="section-title">Long run day</div>
       <div class="field">
@@ -1600,7 +1687,7 @@ function renderOnboardStep3(d){
         <div class="hint">Everything else — speed work, strength — is placed automatically around this.</div>
       </div>
       <details class="field">
-        <summary style="font-size:13px; font-weight:700; color:var(--ink-soft); cursor:pointer; -webkit-tap-highlight-color:transparent;">Gym equipment — ${(d.equipment||[]).length} of ${EQUIPMENT.length} ticked · tap to edit</summary>
+        <summary style="font-size:13px; font-weight:700; color:var(--ink-soft); cursor:pointer; -webkit-tap-highlight-color:transparent;">Gym equipment: ${equipmentSummary(d.equipment)} · tap to edit</summary>
         <div class="hint" style="margin:6px 0 0;">Strength sessions use only what's ticked here, and you can change it any time in Settings.</div>
         ${equipmentChipsHtml(d.equipment, 'toggle-draft-equipment')}
       </details>
@@ -1626,7 +1713,7 @@ function renderOnboardStep3(d){
     <div class="field">
       <label class="field-label">Strength days per week</label>
       <div class="chip-select">${strengthCountChipsHtml(d.strengthPerWeek, 'pick-strength-count')}</div>
-      <div class="hint">Lower-body sessions (heavy lifts plus short plyometrics, the combination with the strongest evidence for running economy) go on easy or rest days with a clear day before any hard run. Upper body and core sessions are light on the legs, so they take rest days or the day before a quality session. Everything eases off in peak weeks and stops in the final ten days.</div>
+      <div class="hint">Lower-body sessions (heavy lifts plus short plyometrics, the combination with the strongest evidence for running economy) go on easy run days — never on a rest day, which is for your legs — with a clear day before any hard run. Upper body and core sessions are light on the legs, so they take rest days or the day before a quality session. Everything eases off in peak weeks and stops in the final ten days.</div>
       ${d.hillsMode==='hilly' && (d.strengthPerWeek||0)<2 ? `<div class="banner" style="margin-top:10px;">${ICONS.bolt}<span>Hilly courses put heavy eccentric load on your quads and glutes, especially on descents — most coaches recommend at least 2 strength sessions/week to build that tolerance. You can still pick fewer, but it's worth the extra session here.</span></div>` : ''}
     </div>
 
@@ -1641,16 +1728,16 @@ function renderOnboardStep3(d){
     </div>
 
     <details class="field" style="margin-top:4px;">
-      <summary style="font-size:13px; font-weight:700; color:var(--ink-soft); cursor:pointer; -webkit-tap-highlight-color:transparent;">Gym equipment — ${(d.equipment||[]).length} of ${EQUIPMENT.length} ticked · tap to edit</summary>
+      <summary style="font-size:13px; font-weight:700; color:var(--ink-soft); cursor:pointer; -webkit-tap-highlight-color:transparent;">Gym equipment: ${equipmentSummary(d.equipment)} · tap to edit</summary>
       <div class="hint" style="margin:6px 0 0;">Strength sessions use only what's ticked here, and you can change it any time in Settings.</div>
       ${equipmentChipsHtml(d.equipment, 'toggle-draft-equipment')}
     </details>
 
     <div class="section-title">Weekly rhythm</div>
     <div class="field">
-      <label class="field-label">Rest days per week</label>
+      <label class="field-label">Running days per week</label>
       <div class="chip-select">${restDaysChipsHtml(d.restDays, 'pick-restdays')}</div>
-      <div class="hint">${runDaysPerWeek} running day${runDaysPerWeek===1?'':'s'} per week (long run, quality sessions, and easy runs). Five or more days unlocks a second quality session in build and peak weeks.</div>
+      <div class="hint">Long run, quality sessions and easy runs, with ${7-runDaysPerWeek} rest day${7-runDaysPerWeek===1?'':'s'}. Five or more days unlocks a second quality session in build and peak weeks. Each easy run gets at least 30 minutes; if the mileage can't give every day that, the plan starts with fewer days and adds one back as the mileage grows.</div>
     </div>
     <div class="field">
       <label class="field-label">Long run day</label>
@@ -1691,12 +1778,12 @@ function renderOnboarding(){
     ? '<button class="btn btn-block" style="padding:14px;" data-act="onboard-back">Back</button>'
     : (isSwitch ? '<button class="btn btn-block" style="padding:14px;" data-act="cancel-switch-plan">Cancel</button>' : '');
   const navHtml = step<3 ? `
-    <div class="row" style="margin:22px 0 30px;">
+    <div class="row onboard-nav">
       ${backOrCancelHtml}
       <button class="btn btn-primary btn-block" style="padding:14px;" data-act="onboard-next">Next</button>
     </div>
   ` : `
-    <div class="row" style="margin:22px 0 30px;">
+    <div class="row onboard-nav">
       ${backOrCancelHtml}
       <button class="btn btn-primary btn-block" style="padding:14px;" data-act="generate-plan">${isSwitch?'Update my plan':'Generate my plan'}</button>
     </div>
@@ -1707,8 +1794,8 @@ function renderOnboarding(){
     <div class="brand"><div class="brand-mark">${ICONS.peak}</div><div class="brand-name">Peak</div></div>
   </div>
   <div class="container">
-    <div class="eyebrow" style="margin-top:6px;">Training plans, tailored to race day</div>
-    <h1 style="font-size:24px; margin:6px 0 4px;">${meta.title}</h1>
+    ${step===1 ? `<div class="eyebrow" style="margin-top:6px;">Training plans, tailored to race day</div>` : ''}
+    <h1 style="font-size:${step===1?24:21}px; margin:6px 0 4px;">${meta.title}</h1>
     <div class="hint" style="margin-bottom:14px;">${meta.hint}</div>
     ${isSwitch ? `<div class="hint" style="margin:-8px 0 14px; color:var(--accent-strong); font-weight:600;">Changing your plan — your logged runs stay exactly as they are.</div>` : ''}
     <div class="step-indicator">
@@ -1736,12 +1823,12 @@ function renderApp(){
   <div class="topbar">
     <div class="brand"><div class="brand-mark">${ICONS.peak}</div><div class="brand-name">Peak</div></div>
     <div style="display:flex; align-items:center; gap:12px;">
-      <div style="font-weight:700; font-size:13.5px; color:var(--muted);">${esc(state.name)}</div>
-      <button class="btn btn-ghost btn-sm" data-act="open-help" aria-label="How to read this screen" style="color:var(--muted); padding:6px;">${ICONS.help}</button>
+      ${(state.tab==='plan' && todayWeekIndex(plan)!==-1 && todayWeekIndex(plan)!==state.currentWeekIndex) ? `<button class="btn btn-sm" data-act="goto-today" style="border-color:var(--accent-strong); color:var(--accent-strong);">Today</button>` : `<div style="font-weight:700; font-size:13.5px; color:var(--muted);">${esc(state.name)}</div>`}
+      <button class="btn btn-ghost btn-sm" data-act="open-help" aria-label="How to read this screen" style="color:var(--muted); padding:10px; margin-right:-8px;">${ICONS.help}</button>
     </div>
   </div>
   ${body}
-  <button class="fab" data-act="open-log">${ICONS.plus} Log a run</button>
+  ${state.tab==='plan' ? `<button class="fab" data-act="open-log">${ICONS.plus} Log a run</button>` : ''}
   <div class="tabbar"><div class="tabbar-inner">
     ${tabBtn('plan', ICONS.route, 'Plan')}
     ${tabBtn('progress', ICONS.chart, 'Progress')}
@@ -1754,6 +1841,12 @@ function tabBtn(key,icon,label){
 }
 
 // Grouped equipment toggles, shared by onboarding (draft) and Settings (live setup).
+// "Barbell, dumbbells, kettlebells +14" for a collapsed equipment row.
+function equipmentSummary(selected){
+  const names = EQUIPMENT.filter(e=>(selected||[]).includes(e.id)).map(e=>e.label.split(/ with | \(| or |, | \/ /)[0]);
+  if(!names.length) return 'nothing ticked — bodyweight sessions';
+  return names.slice(0,3).join(', ') + (names.length>3 ? ` +${names.length-3}` : '');
+}
 function equipmentChipsHtml(selected, act){
   const sel = new Set(selected||[]);
   const groups = [];
@@ -1826,7 +1919,88 @@ function computeCoachNote(plan, week, unit){
   return null;
 }
 
+function todayWeekIndex(plan){
+  const today = todayDate();
+  return plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
+}
+function typeIcon(type){
+  if(type==='rest') return ICONS.moon;
+  if(type==='easy') return ICONS.dot;
+  if(type==='long') return ICONS.route;
+  if(type==='race') return ICONS.flag;
+  return ICONS.bolt;
+}
+function dayPill(day, big){
+  const meta = TYPE_META[day.type];
+  return `<span class="pill" style="background:var(${meta.bg}); color:var(${meta.fg});${big?' font-size:13px; padding:6px 14px;':''}"><span class="pill-ico">${typeIcon(day.type)}</span>${day.label}</span>`;
+}
+// A day set to treadmill shows belt speed instead of pace and carries its own incline note.
+// Jones & Doust (1996): a 1% grade reproduces the energy cost of outdoor running.
+function dayFmt(day, fmt){ return day.treadmill ? 'speed' : fmt; }
+function treadmillNote(day){
+  if(!day.treadmill) return null;
+  if(day.type==='hills' || day.terrain==='hilly' || day.hillStrides) return null; // the session text already carries its incline
+  if(day.easyRole==='recovery') return 'Treadmill: 0–1% incline, speeds above are belt speed.';
+  return 'Treadmill: set a 1% incline to match outdoor effort (Jones & Doust 1996); speeds above are belt speed.';
+}
+function parseStrengthLine(line){
+  const m = line.match(/^(\d+)×(\S+) (.+?) \(([^)]*)\) — (.*)$/);
+  if(!m) return null;
+  const r = m[5].match(/^(.*?)\.?(?: Rest (.+?) between sets\.)?$/);
+  return {sets:m[1], amount:m[2], name:m[3], equip:m[4], cue:(r?r[1]:m[5]), rest:(r&&r[2])||null};
+}
+function strengthRowsHtml(lines, date, howTo, optional){
+  const ticks = (state.strengthItems && state.strengthItems[date]) || [];
+  return lines.map((line,i)=>{
+    const p = parseStrengthLine(line);
+    const how = p && (howTo||[]).find(h=>p.name.startsWith(h.name));
+    const done = !optional && !!ticks[i];
+    if(!p) return `<div class="sx-row ${done?'done':''}">${optional?'':`<input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${i}" ${done?'checked':''}>`}<div class="sx-name" style="font-weight:600;">${esc(line)}</div></div>`;
+    return `<div class="sx-row ${done?'done':''}">
+      ${optional?'':`<input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${i}" ${done?'checked':''} aria-label="Done: ${esc(p.name)}">`}
+      <details>
+        <summary><span><span class="sx-name">${esc(p.name)}</span><div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
+        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how?`<br><b>How:</b> ${esc(how.how)}`:''}</div>
+      </details>
+    </div>`;
+  }).join('');
+}
+function renderTodayCard(plan){
+  const ti = todayWeekIndex(plan);
+  if(ti===-1 || ti!==state.currentWeekIndex) return '';
+  const week = plan.weeks[ti];
+  const di = week.days.findIndex(d=>d.date===fmtDate(todayDate()));
+  if(di===-1) return '';
+  const day = week.days[di];
+  const unit = state.setup.units, fmt = dayFmt(day, state.paceFormat);
+  const weekPaces = getWeekPaces(plan, week, state.logs);
+  const logged = state.logs.some(l=>l.date===day.date);
+  const parts = day.km>0 ? workoutPartsFor(day, weekPaces, unit, fmt) : [day.strength ? 'No running — strength session today.' : 'Full rest, or easy cross-training if you want to move.'];
+  const tm = treadmillNote(day); if(tm) parts.push(tm);
+  return `<div class="card today-card">
+    <div class="tc-head"><span class="tc-label">Today</span><span class="tc-date">${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}${logged?' · logged':''}</span></div>
+    <div class="tc-title">${dayPill(day)}${day.km>0?`<span class="mono">${fmtDist(day.km,unit)}</span>`:''}${day.strength?`<span class="strength-badge">+ Strength${day.strengthFocus==='upper'?' (upper/core)':''}</span>`:''}${day.treadmill?'<span class="strength-badge" style="color:var(--z-easy); background:var(--z-easy-bg);">Treadmill</span>':''}</div>
+    <ul>${parts.slice(0,4).map(p=>`<li>${esc(p)}</li>`).join('')}</ul>
+    <div class="row">
+      <button class="btn" data-act="open-day" data-i="${di}">Details</button>
+      ${day.km>0 && day.type!=='race' ? `<button class="btn btn-primary" data-act="open-log-for-date" data-date="${day.date}">${ICONS.plus} Log a run</button>` : (day.strength ? `<button class="btn btn-primary" data-act="toggle-strength-done" data-date="${day.date}">${state.strengthDone.includes(day.date)?'Strength done ✓':'Mark strength done'}</button>` : '')}
+    </div>
+  </div>`;
+}
+function renderHelpCard(){
+  if(state.helpSeen) return '';
+  return `<div class="card help-card">
+    <div style="font-weight:800; font-size:14.5px;">How to read your plan</div>
+    <ol>
+      <li><b>Base</b> builds the engine with easy running and strides. <b>Build</b> adds the speed sessions. <b>Peak</b> sharpens for the race. <b>Cutback</b> weeks are lighter on purpose. <b>Taper</b> rests you into race day.</li>
+      <li>Tap any day for the full session, paces and strength work; tap Edit to change or swap it.</li>
+      <li>Log every run — paces and the finish projection adjust from what you actually do.</li>
+    </ol>
+    <button class="btn btn-sm" data-act="dismiss-help-card">Got it</button>
+  </div>`;
+}
 function renderPlanTab(week, plan){
+  if(week.weekIndex===0 && !state.notesSeen && plan.warnings && plan.warnings.length){ setTimeout(()=>{ state.notesSeen = true; Store.setFlag('notes_seen', true); }, 0); }
   const unit = state.setup.units;
   const fmt = state.paceFormat;
   const weekPaces = getWeekPaces(plan, week, state.logs);
@@ -1845,20 +2019,22 @@ function renderPlanTab(week, plan){
   const dayCards = week.days.map((day,di)=>{
     const meta = TYPE_META[day.type];
     const isToday = fmtDate(todayDate())===day.date;
+    const cardFmt = dayFmt(day, fmt);
     const match = loggedThisWeek.find(l=>l.date===day.date);
     const isMoveSrc = state.moveFrom && state.moveFrom.weekIndex===state.currentWeekIndex && state.moveFrom.dayIndex===di;
     const isMoveTarget = state.moveFrom && state.moveFrom.weekIndex===state.currentWeekIndex && state.moveFrom.dayIndex!==di;
     const dt = parseDate(day.date);
     return `
-    <button class="card day-card ${match?'logged':''} ${isMoveSrc?'move-source':''} ${isMoveTarget?'move-target':''}" data-act="${state.moveFrom? 'move-target':'open-day'}" data-i="${di}" style="${isToday?'border-color:var(--accent-strong)':''}">
+    <button class="card day-card ${match?'logged':''} ${isToday?'today':''} ${isMoveSrc?'move-source':''} ${isMoveTarget?'move-target':''}" data-act="${state.moveFrom? 'move-target':'open-day'}" data-i="${di}" style="${day.type!=='rest'?`--card-edge:var(${meta.fg});`:''}">
       <div class="day-date"><div class="dow">${DOW_LABELS[day.dow]}</div><div class="dom mono">${dt.getDate()}</div></div>
       <div class="day-main">
         <div class="day-top">
-          <span class="pill" style="background:var(--${meta.bg}); color:var(--${meta.fg})">${day.label}</span>
+          ${dayPill(day)}
           ${day.strength?`<span class="strength-badge">+ Strength${day.strengthFocus==='upper'?' (upper/core)':''}</span>`:''}
           ${day.terrain==='hilly'?`<span class="strength-badge" style="color:var(--z-hill); background:var(--z-hill-bg);">⛰ Hilly</span>`:''}
+          ${day.treadmill?`<span class="strength-badge" style="color:var(--z-easy); background:var(--z-easy-bg);">Treadmill</span>`:''}
         </div>
-        <div class="day-desc">${esc(daySummaryText(day, weekPaces, unit, fmt))}</div>
+        <div class="day-desc">${esc(daySummaryText(day, weekPaces, unit, cardFmt))}</div>
       </div>
       <div class="day-side">
         ${match?`<div class="day-check">${ICONS.check}</div>`:''}
@@ -1869,6 +2045,8 @@ function renderPlanTab(week, plan){
 
   return `
   ${state.moveFrom!=null && state.moveFrom.weekIndex===state.currentWeekIndex ? `<div class="banner">${ICONS.move}<span>Choose a day to swap with "${week.days[state.moveFrom.dayIndex].label}". <a class="link-btn" data-act="cancel-move" style="color:inherit">Cancel</a></span></div>`:''}
+  ${renderHelpCard()}
+  ${renderTodayCard(plan)}
   <div class="week-strip">${strip}</div>
   <div class="week-header">
     <div>
@@ -1882,10 +2060,10 @@ function renderPlanTab(week, plan){
       <div class="l">logged this week</div>
     </div>
   </div>
-  ${(week.weekIndex===0 && plan.warnings && plan.warnings.length) ? `<div class="card" style="padding:14px 16px; margin:0 18px 16px;">
-    <div class="field-label" style="margin-bottom:6px;">Coach's notes on this plan</div>
-    <ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.45; color:var(--ink-soft);">${plan.warnings.map(w=>`<li style="margin-bottom:4px;">${esc(w)}</li>`).join('')}</ul>
-  </div>` : ''}
+  ${(week.weekIndex===0 && plan.warnings && plan.warnings.length) ? `<details class="notes-callout" ${state.notesSeen?'':'open'}>
+    <summary>${ICONS.route} Coach's notes on this plan <span class="count">${plan.warnings.length}</span></summary>
+    <ul>${plan.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul>
+  </details>` : ''}
   ${(()=>{ const note = computeCoachNote(plan, week, unit); return note ? `<div class="card" style="padding:14px 16px; margin:0 18px 16px; background:var(--accent-soft); border-color:var(--accent-strong); display:flex; gap:10px; align-items:flex-start;">
     <div style="width:16px; height:16px; flex-shrink:0; margin-top:1px; color:var(--accent-ink);">${ICONS.route}</div>
     <span style="font-size:13px; line-height:1.4; color:var(--ink);">${esc(note)}</span>
@@ -2405,6 +2583,7 @@ function evaluateAndTriggerAchievements(newLog){
 // comparison below, both the race-plan tile and each general-plan distance row.
 function projectionDeltaText(startTimeSec, currentTimeSec){
   const deltaSec = startTimeSec - currentTimeSec; // positive = current is the faster (lower) time
+  if(!computeRecalibration(state.plan, state.logs)) return 'moves once you log tempo or interval sessions';
   if(Math.abs(deltaSec) < 5) return 'about the same as at the start';
   return `${secToClock(Math.abs(deltaSec))} ${deltaSec>0?'faster':'slower'} than at the start`;
 }
@@ -2421,13 +2600,13 @@ function renderRaceProjectionSection(stats, unit, fmt){
       <div class="v">${secToClock(p.current.timeSec)}</div>
       <div class="l">projected finish today (${paceOrSpeedStr(p.current.paceSecPerKm,unit,fmt)})${p.current.lowSec ? ` · likely ${secToClock(p.current.lowSec)}–${secToClock(p.current.highSec)}` : ''}</div>
       <div class="hint" style="margin-top:6px;">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}</div>
-      ${p.goal ? `<div class="hint" style="margin-top:2px; color:var(--accent-strong);">On pace for ${secToClock(p.goal.timeSec)} (${paceOrSpeedStr(p.goal.paceSecPerKm,unit,fmt)}) if you complete the rest of the plan</div>` : ''}
+      ${p.goal ? `<div class="hint" style="margin-top:2px; color:var(--accent-strong);">Could reach about ${secToClock(p.goal.lowSec||p.goal.timeSec)}–${secToClock(p.goal.highSec||p.goal.timeSec)} by race week if training goes to plan</div>` : ''}
     </button>`;
   }
   if(stats.generalProjections){
     const rows = stats.generalProjections.map(p=>`
       <div class="settings-row" data-act="open-stat-detail" data-stat="general-projection-${p.key}" style="cursor:pointer;">
-        <div><div class="lbl">${p.label}</div><div class="sub">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}${p.goal ? `<br>On pace for ${secToClock(p.goal.timeSec)} (${paceOrSpeedStr(p.goal.paceSecPerKm,unit,fmt)}) by plan's end` : ''}</div></div>
+        <div><div class="lbl">${p.label}</div><div class="sub">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}${p.goal ? `<br>Could reach about ${secToClock(p.goal.timeSec)} by the plan's end if training goes to plan` : ''}</div></div>
         <div style="text-align:right;">
           <div class="mono" style="font-weight:700;">${secToClock(p.current.timeSec)}</div>
           <div class="hint" style="margin:0;">${paceOrSpeedStr(p.current.paceSecPerKm,unit,fmt)}</div>
@@ -2888,6 +3067,7 @@ function renderProgressTab(){
       <span style="width:18px; height:18px;">${ICONS.peak}</span> Peek the Peak
     </button>
     ${renderRaceProjectionSection(stats, unit, state.paceFormat)}
+    ${(!plan.planKind && daysToRace>=0 && daysToRace<=14) ? `<button class="btn btn-primary btn-block" data-act="open-pacing-sheet" style="margin-bottom:16px;">${ICONS.flag} Race-day pacing sheet</button>` : ''}
   </div>
   <div class="stat-grid" style="margin-bottom:16px;">
     <button class="card stat-tile" data-act="open-stat-detail" data-stat="total-logged"><div class="v">${fmtDist(stats.totalLoggedKm,unit,0)}</div><div class="l">total logged</div></button>
@@ -3109,16 +3289,16 @@ function renderSettingsTab(){
     </div>
     ${!isGeneralPlan(s) ? `<button class="btn btn-block" data-act="open-pacing-sheet" style="margin:-4px 0 20px;">${ICONS.flag} Race-day pacing sheet</button>` : ''}
 
-    <div class="section-title">Your starting inputs</div>
-    <div class="card" style="padding:6px 16px;">
+    <details class="card settings-details" style="padding:0 16px; margin-top:22px;">
+      <summary><span><div class="lbl" style="font-weight:700; font-size:14px;">Your starting inputs</div><div class="sub" style="font-size:12px; color:var(--muted); margin-top:2px;">What you entered when this plan was built</div></span><span class="chev">${ICONS.chevron}</span></summary>
       ${(()=>{ const recentRace = recentRaceLabel(s, unit); const runsPerWeekVal = s.runsPerWeek || runsPerWeekFor(s.currentWeeklyKm); const restDaysVal = 7-runsPerWeekVal; return `
       <div class="settings-row"><div><div class="lbl">Recent race</div><div class="sub">${recentRace ? esc(recentRace) : 'Not provided'}${s.recent2DistanceKm && s.recent2TimeSec ? ` · also ${esc((RACE_PRESETS.slice(0,5).find(r=>Math.abs(r.km-s.recent2DistanceKm)<0.05)||{label:fmtDist(s.recent2DistanceKm,unit)}).label)} in ${secToClock(s.recent2TimeSec)}` : ''}</div></div></div>
       <div class="settings-row"><div><div class="lbl">Longest recent run</div><div class="sub">${s.longestRecentRunKm ? fmtDist(s.longestRecentRunKm,unit,1) : 'Not provided — estimated from weekly mileage'}</div></div></div>
       ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Goal time</div><div class="sub">${s.goalTimeSec ? secToClock(s.goalTimeSec) : 'None set — paces follow your fitness'}</div></div></div>` : ''}
       <div class="settings-row"><div><div class="lbl">Long run day</div><div class="sub">${DOW_LABELS[s.longDow]}</div></div></div>
       <div class="settings-row"><div><div class="lbl">Week starts on</div><div class="sub">${(s.weekStartDow||0)===1?'Monday':'Sunday'}</div></div></div>
-      ${s.trackingStartDate ? `<div class="settings-row"><div><div class="lbl">Tracking progress from</div><div class="sub">${niceDate(parseDate(s.trackingStartDate))} — earlier training weeks aren't counted</div></div></div>` : ''}
-      <div class="settings-row"><div><div class="lbl">Rest days per week</div><div class="sub">${restDaysVal} (${runsPerWeekVal} running day${runsPerWeekVal===1?'':'s'}/week)</div></div></div>
+      ${s.trackingStartDate ? `<div class="settings-row"><div><div class="lbl">Tracking progress from</div><div class="sub">${niceDate(parseDate(s.trackingStartDate))} — earlier days aren't counted against you</div></div></div>` : ''}
+      <div class="settings-row"><div><div class="lbl">Running days per week</div><div class="sub">${runsPerWeekVal} (${restDaysVal} rest day${restDaysVal===1?'':'s'})</div></div></div>
       ${!isGeneralPlan(s) ? `
       <div class="settings-row"><div><div class="lbl">Long run emphasis</div><div class="sub">${emphasisLabel(s.longRunEmphasis)}</div></div></div>
       <div class="settings-row"><div><div class="lbl">Speed work emphasis</div><div class="sub">${emphasisLabel(s.speedEmphasis)}</div></div></div>
@@ -3128,15 +3308,15 @@ function renderSettingsTab(){
       ` : (s.planKind==='distance' ? `
       <div class="settings-row"><div><div class="lbl">Distance goal</div><div class="sub">${s.distanceGoalMetric==='weekly'?'Weekly mileage':'Longest run'}: ${fmtDist(s.distanceGoalCurrentKm,unit,1)} → ${fmtDist(s.distanceGoalTargetKm,unit,1)}</div></div></div>
       ` : '')}
-      <div class="hint" style="padding:0 0 12px;">What you entered when this plan was built, for reference. To change any of it, use Change plan below.</div>
+      <div class="hint" style="padding:0 0 12px;">To change any of it, use Change plan below.</div>
       `; })()}
-    </div>
+    </details>
 
-    <div class="section-title">Gym equipment</div>
-    <div class="card" style="padding:4px 16px 14px;">
-      <div class="hint" style="padding-top:10px;">Strength sessions are built from what's ticked here. Change it and every session from this week on is rebuilt around it — runs and logged workouts are untouched.</div>
-      ${equipmentChipsHtml(s.equipment && s.equipment.length ? s.equipment : DEFAULT_EQUIPMENT, 'toggle-equipment')}
-    </div>
+    <details class="card settings-details" id="equip-details" style="padding:0 16px; margin-top:10px;">
+      <summary><span><div class="lbl" style="font-weight:700; font-size:14px;">Gym equipment</div><div class="sub" style="font-size:12px; color:var(--muted); margin-top:2px;">${esc(equipmentSummary(s.equipment && s.equipment.length ? s.equipment : DEFAULT_EQUIPMENT))}</div></span><span class="chev">${ICONS.chevron}</span></summary>
+      <div class="hint" style="padding:0 0 4px;">Strength sessions are built from what's ticked here. Change it and every session from this week on is rebuilt around it — runs and logged workouts are untouched.</div>
+      <div style="padding-bottom:14px;">${equipmentChipsHtml(s.equipment && s.equipment.length ? s.equipment : DEFAULT_EQUIPMENT, 'toggle-equipment')}</div>
+    </details>
 
     <div class="section-title">Strava</div>
     <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
@@ -3153,6 +3333,8 @@ function renderSettingsTab(){
     <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
       <div class="hint">Change your plan type or update its inputs — race or general, any of the four fitness plans. Your logged runs are always kept, no matter what you switch to.</div>
       <button class="btn btn-block" data-act="open-switch-plan">Change plan</button>
+      <div class="hint" style="margin-top:4px;">Put every planned day in your phone's calendar as an all-day event. Re-export after any change to the plan.</div>
+      <button class="btn btn-block" data-act="export-ics">${ICONS.calendarCheck} Add to calendar (.ics)</button>
     </div>
 
     <div class="section-title">Backup</div>
@@ -3201,7 +3383,8 @@ const TAB_HELP = {
     body: `
       <p>The strip along the top is every week of your plan, in order — tap any week to jump to it. Its color and label (Base, Build, Peak, Taper, Cutback) show which phase that week belongs to; a lighter Cutback week is a deliberate recovery dip, not a mistake.</p>
       <p>Below that is the week you're viewing, one card per day. A checkmark means you've logged a run against that day. Tap any day to see the full workout detail — purpose, effort level, and pace targets — or to log a run right there.</p>
-      <p>"+ Strength" means a strength session is scheduled alongside that day's run (or on its own, for a rest day); mark it done from the day's detail view. A hill icon means that day is flagged for rolling/hilly terrain.</p>
+      <p>"+ Strength" means a strength session is scheduled alongside that day's run (or on its own, for a rest day); tick the exercises off inside the day. "Treadmill" means you switched that day to belt speed and incline — the Treadmill button inside any run day does that. A hill icon means that day is flagged for rolling/hilly terrain.</p>
+      <p>The card at the top is today. The coloured edge on each card says what kind of day it is: blue easy, purple long, orange and red quality, gold race.</p>
       <p>Use "Log a run" any time — it defaults to today's scheduled workout, but you can log against any date.</p>
     `,
   },
@@ -3631,7 +3814,7 @@ function plannedWorkoutHtml(dateStr){
     <label class="field-label">Planned for this day</label>
     <div class="input" style="height:auto; display:flex; flex-direction:column; gap:6px;">
       <div style="display:flex; align-items:center; gap:8px;">
-        <span class="pill" style="background:var(--${meta.bg}); color:var(--${meta.fg})">${day.label}</span>
+        <span class="pill" style="background:var(${meta.bg}); color:var(${meta.fg})">${day.label}</span>
         ${day.km>0?`<span class="mono" style="font-size:12.5px; color:var(--ink-soft);">${fmtDist(day.km,unit)}</span>`:''}
       </div>
       ${desc?`<div style="color:var(--ink-soft); font-size:13px;">${esc(desc)}</div>`:''}
@@ -3684,8 +3867,8 @@ function modalLogManualHtml(d){
     <div class="field"><label class="field-label">Date</label><input class="input" type="date" id="lr-date" value="${d.date}"></div>
     <div id="lr-planned">${plannedWorkoutHtml(d.date)}</div>
     <div class="row">
-      <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" step="0.01" min="0" id="lr-dist" value="${d.dist}" placeholder="e.g. 5.2"></div>
-      <div class="field"><label class="field-label">Time (h:mm:ss)</label><input class="input" type="text" inputmode="numeric" id="lr-time" value="${d.time}" placeholder="Just type digits, e.g. 4530"></div>
+      <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" inputmode="decimal" step="0.01" min="0" id="lr-dist" value="${d.dist}" placeholder="e.g. 5.2"></div>
+      <div class="field"><label class="field-label">Time (h:mm:ss)</label><input class="input" type="text" inputmode="numeric" id="lr-time" value="${d.time}" placeholder="e.g. 45:30"></div>
     </div>
     <div class="hint" id="lr-pace-hint" style="margin-bottom:14px;">${logPaceHint(d, unit)}</div>
     <div class="field"><label class="field-label">Notes (optional)</label><input class="input" type="text" id="lr-notes" value="${esc(d.notes)}" placeholder="How did it feel?"></div>
@@ -3815,7 +3998,7 @@ function renderDayDetail(){
   const matchedLogs = state.logs.filter(l=>l.date===day.date);
   const meta = TYPE_META[day.type];
   const weekPaces = getWeekPaces(state.plan, week, state.logs);
-  const descriptionParts = (day.descBase==null && day.notes!=null) ? [day.notes] : workoutPartsFor(day, weekPaces, unit, fmt);
+  const descriptionParts = (day.descBase==null && day.notes!=null) ? [day.notes] : workoutPartsFor(day, weekPaces, unit, dayFmt(day, fmt));
   const purpose = WORKOUT_PURPOSE[day.type];
   const strengthFocusNote = day.strengthFocus==='upper'
     ? (day.type==='rest'
@@ -3826,12 +4009,17 @@ function renderDayDetail(){
     : null;
   const isStrengthDone = state.strengthDone.includes(day.date);
   const editBtn = `<button class="btn" data-act="open-day-edit" style="position:absolute; top:14px; right:62px; padding:9px 16px; font-size:13.5px;">Edit</button>`;
+  const canTreadmill = day.km>0 && day.type!=='race';
+  const tmNote = treadmillNote(day);
+  if(tmNote) descriptionParts.push(tmNote);
+  void meta;
 
   return modalShell(`${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}`, `
     <div style="display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
-      <span class="pill" style="background:var(--${meta.bg}); color:var(--${meta.fg}); font-size:13px; padding:6px 14px;">${day.label}</span>
+      ${dayPill(day, true)}
       ${day.km>0?`<span class="mono" style="font-size:15px; font-weight:700;">${fmtDist(day.km,unit)}</span>`:''}
       ${day.strength?`<span class="strength-badge">+ Strength${day.strengthFocus==='upper'?' (upper/core)':''}</span>`:''}
+      ${canTreadmill ? `<button class="chip ${day.treadmill?'active':''}" data-act="toggle-treadmill" data-wi="${weekIndex}" data-di="${dayIndex}" style="margin-left:auto; display:inline-flex; align-items:center; gap:6px; padding:6px 12px;"><span style="width:14px; height:14px; display:inline-flex;">${ICONS.treadmill}</span>Treadmill</button>` : ''}
     </div>
     ${descriptionParts.length>1
       ? `<ul style="font-size:14.5px; color:var(--ink-soft); margin:0 0 16px; padding-left:20px; line-height:1.5;">${descriptionParts.map(p=>`<li style="margin-bottom:4px;">${esc(p)}</li>`).join('')}</ul>`
@@ -3839,17 +4027,13 @@ function renderDayDetail(){
     ${strengthFocusNote ? `<div class="hint" style="margin:-10px 0 16px;">${esc(strengthFocusNote)}</div>` : ''}
     ${day.strength && day.strengthExercises && day.strengthExercises.length ? `
     <div class="field-label" style="margin-bottom:8px;">Strength${day.strengthTimeMin ? ` — about ${day.strengthTimeMin} min${day.strengthExpress ? ', kept short because it shares a workout day — do it after the run' : ''}` : ''}</div>
-    <ul style="font-size:14.5px; color:var(--ink-soft); margin:0 0 16px; padding-left:20px; line-height:1.5;">${day.strengthExercises.map(p=>`<li style="margin-bottom:6px;">${esc(p)}</li>`).join('')}</ul>
-    ${day.strengthLoadNote ? `<div class="hint" style="margin:-8px 0 14px;">${esc(day.strengthLoadNote)}</div>` : ''}
+    <div class="card" style="padding:2px 14px; margin-bottom:12px;">${strengthRowsHtml(day.strengthExercises, day.date, day.strengthHowTo, false)}</div>
+    <div class="hint" style="margin:0 0 12px;">Tap an exercise for the effort, rest and how to do it. Tick each one as you go.</div>
+    ${day.strengthLoadNote ? `<div class="hint" style="margin:-4px 0 14px;">${esc(day.strengthLoadNote)}</div>` : ''}
     ${day.strengthOptional && day.strengthOptional.length ? `
     <div class="field-label" style="margin-bottom:6px;">Optional extras — only if you have time</div>
-    <ul style="font-size:13.5px; color:var(--muted); margin:0 0 14px; padding-left:20px; line-height:1.5;">${day.strengthOptional.map(p=>`<li style="margin-bottom:4px;">${esc(p)}</li>`).join('')}</ul>` : ''}
-    ${day.strength ? `<div class="hint" style="margin:-6px 0 12px;">Built for the gym equipment ticked in Settings.</div>` : ''}
-    ${day.strengthHowTo && day.strengthHowTo.length ? `
-    <details style="margin:-6px 0 16px;">
-      <summary style="font-size:13px; font-weight:700; color:var(--muted); cursor:pointer; -webkit-tap-highlight-color:transparent;">How to do these</summary>
-      <ul style="font-size:13.5px; color:var(--ink-soft); margin:8px 0 0; padding-left:20px; line-height:1.5;">${day.strengthHowTo.map(x=>`<li style="margin-bottom:6px;"><b style="color:var(--ink);">${esc(x.name)}</b> — ${esc(x.how)}</li>`).join('')}</ul>
-    </details>` : ''}
+    <div class="card" style="padding:2px 14px; margin-bottom:12px; opacity:.85;">${strengthRowsHtml(day.strengthOptional, day.date, day.strengthHowTo, true)}</div>` : ''}
+    ${day.strength ? `<div class="hint" style="margin:-4px 0 12px;">Built for the gym equipment ticked in Settings.</div>` : ''}
     ` : ''}
     ${day.strength ? `<button class="btn btn-block" data-act="toggle-strength-done" data-date="${day.date}" style="margin-bottom:16px; ${isStrengthDone?'color:var(--accent-strong); border-color:var(--accent-strong);':''}">${isStrengthDone?`${ICONS.check} Strength completed`:'Mark strength completed'}</button>` : ''}
     ${day.type==='race' ? `<button class="btn btn-primary btn-block" data-act="open-pacing-sheet" style="margin-bottom:16px;">${ICONS.flag} View pacing sheet</button>` : ''}
@@ -3889,8 +4073,8 @@ function modalEditDay(){
   // a dedicated Hill Repeats session, or the week's aerobic easy day (the one hill strides
   // can land on). Every other day type never reads treadmillHills at all, so showing the
   // toggle there would just be a control with no visible effect.
-  const treadmillEligible = draft.type==='hills' || (draft.type==='easy' && day.easyRole==='aerobic');
-  const description = renderWorkoutText(previewDay, weekPaces, unit, fmt) || 'No planned distance for this day.';
+  const treadmillEligible = draft.type!=='rest' && draft.type!=='race';
+  const description = renderWorkoutText(previewDay, weekPaces, unit, draft.treadmillHills ? 'speed' : fmt) || 'No planned distance for this day.';
   const recommendedSecPerKm = meta.paceKey ? weekPaces[meta.paceKey] : null;
   const effectiveSecPerKm = draft.paceOverrideSecPerKm!=null ? draft.paceOverrideSecPerKm : recommendedSecPerKm;
   const speedUnitLabel = unit==='mi' ? 'mph' : 'km/h';
@@ -3922,7 +4106,7 @@ function modalEditDay(){
     </div>` : ''}
     ${treadmillEligible ? `
     <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
-      <label class="field-label" style="margin:0;">Treadmill (no real hills for this one)</label>
+      <label class="field-label" style="margin:0;">Treadmill (belt speed and incline instead of pace)</label>
       <input type="checkbox" id="ed-treadmill-hills" ${draft.treadmillHills?'checked':''} style="width:20px; height:20px;">
     </div>` : ''}
     ${draft.type==='progression' ? `
@@ -3999,6 +4183,29 @@ function modalConfirmImport(data){
 // every logged run and small bits of profile state. Deliberately NOT the generated plan
 // object itself - regenerating from setup means an import always rebuilds against the
 // app's current plan-generation logic rather than replaying a possibly-outdated one.
+// One all-day calendar event per planned day, so the plan shows up next to real life.
+function icsEscape(t){ return String(t).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n'); }
+function icsFold(line){ const out=[]; let l=line; while(l.length>72){ out.push(l.slice(0,72)); l=' '+l.slice(72); } out.push(l); return out.join('\r\n'); }
+function exportCalendar(){
+  const plan = state.plan, unit = state.setup.units, fmt = state.paceFormat;
+  const stamp = new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+Z$/,'Z');
+  const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Peak//Training plan//EN','CALSCALE:GREGORIAN','X-WR-CALNAME:Peak training plan'];
+  plan.weeks.forEach(week=>{
+    const paces = getWeekPaces(plan, week, state.logs);
+    week.days.forEach(day=>{
+      if(!(day.km>0) && !day.strength) return;
+      const d = day.date.replace(/-/g,''); const next = fmtDate(addDays(parseDate(day.date),1)).replace(/-/g,'');
+      const title = day.km>0 ? `${day.label} ${fmtDist(day.km,unit)}` : 'Strength session';
+      const parts = day.km>0 ? workoutPartsFor(day, paces, unit, dayFmt(day, fmt)) : [];
+      if(day.strength) parts.push(`Strength${day.strengthFocus==='upper'?' (upper body/core)':''}${day.strengthTimeMin?` — about ${day.strengthTimeMin} min`:''}${day.strengthExercises?': '+day.strengthExercises.join('; '):''}`);
+      lines.push('BEGIN:VEVENT', `UID:${day.id}@peak`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${next}`, icsFold(`SUMMARY:Peak: ${icsEscape(title)}`), icsFold(`DESCRIPTION:${icsEscape(parts.join('\n'))}`), 'END:VEVENT');
+    });
+  });
+  lines.push('END:VCALENDAR');
+  const blob = new Blob([lines.join('\r\n')], {type:'text/calendar'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'peak-plan.ics'; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  showToast('Calendar file ready — open it to add the plan');
+}
 function exportBackupData(){
   const payload = {
     schema: 'peak-backup-v1',
@@ -4070,6 +4277,25 @@ function bindGlobal(){
   app.onclick = onClick;
   app.oninput = onInput;
   app.onchange = onChange;
+  // Pull a sheet down (from its top) to close it, the way iOS sheets behave.
+  let drag = null;
+  app.ontouchstart = e=>{
+    const sheet = e.target.closest && e.target.closest('.sheet');
+    if(!sheet || sheet.scrollTop>0 || e.target.closest('input,select,textarea')) { drag=null; return; }
+    drag = {sheet, y0:e.touches[0].clientY, dy:0};
+  };
+  app.ontouchmove = e=>{
+    if(!drag) return;
+    drag.dy = Math.max(0, e.touches[0].clientY - drag.y0);
+    if(drag.sheet.scrollTop>0){ drag.sheet.style.transform=''; drag=null; return; }
+    drag.sheet.style.transition='none'; drag.sheet.style.transform = drag.dy>0 ? `translateY(${drag.dy}px)` : '';
+  };
+  app.ontouchend = ()=>{
+    if(!drag) return;
+    const {sheet, dy} = drag; drag = null;
+    if(dy>90){ state.modal=null; state.moveFrom=null; render(); return; }
+    sheet.style.transition='transform .18s ease'; sheet.style.transform='';
+  };
 }
 
 function findAct(el){
@@ -4085,7 +4311,45 @@ function onClick(e){
   if(!el) return;
   const act = el.dataset.act;
 
-  if(act==='set-tab'){ state.tab = el.dataset.tab; render(); return; }
+  if(act==='set-tab'){ state.tab = el.dataset.tab; render(); window.scrollTo(0,0); return; }
+  if(act==='goto-today'){
+    const idx = todayWeekIndex(state.plan);
+    if(idx!==-1) state.currentWeekIndex = idx;
+    state.moveFrom = null; render(); window.scrollTo(0,0);
+    return;
+  }
+  if(act==='dismiss-help-card'){ state.helpSeen = true; Store.setFlag('help_seen', true); render(); return; }
+  if(act==='export-ics'){ exportCalendar(); return; }
+  if(act==='open-log-for-date'){ state.modal={type:'log-run', data:{date:el.dataset.date, dist:'', time:'', notes:''}}; render(); return; }
+  if(act==='toggle-treadmill'){
+    const wi = Number(el.dataset.wi), di = Number(el.dataset.di);
+    const day = state.plan.weeks[wi].days[di];
+    const on = !day.treadmill;
+    const meta = buildWorkoutMeta({...day, treadmillHills:on}, state.plan.raceDistanceKm);
+    Object.assign(day, {treadmill:on, treadmillHills:on, descBase:meta.descBase, paceKey:meta.paceKey, qualityKm: meta.qualityKm!=null ? meta.qualityKm : day.qualityKm});
+    Store.setPlan(state.plan);
+    const sheet = document.querySelector('.sheet'); const y = sheet ? sheet.scrollTop : 0;
+    render();
+    const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = y;
+    return;
+  }
+  if(act==='toggle-strength-item'){
+    const date = el.dataset.date, i = Number(el.dataset.i);
+    const items = state.strengthItems || {}; const arr = (items[date]||[]).slice(); arr[i] = !arr[i]; items[date] = arr;
+    state.strengthItems = items; Store.setStrengthItems(items);
+    const day = findPlanDay(state.plan, date);
+    const total = day && day.strengthExercises ? day.strengthExercises.length : 0;
+    const allDone = total>0 && arr.filter(Boolean).length>=total;
+    if(allDone && !state.strengthDone.includes(date)){
+      state.strengthDone = [...state.strengthDone, date]; Store.setStrengthDone(state.strengthDone);
+      evaluateAndTriggerAchievements(null);
+      showToast('Strength session complete');
+    }
+    const sheet = document.querySelector('.sheet'); const y = sheet ? sheet.scrollTop : 0;
+    render();
+    const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = y;
+    return;
+  }
   if(act==='goto-week'){ state.currentWeekIndex = Number(el.dataset.i); state.moveFrom=null; render(); return; }
   if(act==='open-trail-week'){
     const idx = state.plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return todayDate()>=ws && todayDate()<addDays(ws,7); });
@@ -4121,6 +4385,7 @@ function onClick(e){
     Store.setSetup(state.setup);
     refreshStrengthFromThisWeek();
     const y = window.scrollY; render(); window.scrollTo(0, y);
+    const dts = document.getElementById('equip-details'); if(dts) dts.open = true;
     showToast('Strength sessions updated for your equipment');
     return;
   }
@@ -4262,7 +4527,7 @@ function onClick(e){
     state.modal={type:'edit-day', weekIndex, dayIndex, draft:{
       type: day.type, km: day.km, strength: day.strength, strides: !!day.strides, easyRole: day.easyRole ?? null,
       paceOverrideSecPerKm: day.paceOverrideSecPerKm ?? null, progressionEasy: !!day.progressionEasy,
-      warmupKm: day.warmupKm ?? 0, cooldownKm: day.cooldownKm ?? 0, treadmillHills: !!day.treadmillHills,
+      warmupKm: day.warmupKm ?? 0, cooldownKm: day.cooldownKm ?? 0, treadmillHills: !!(day.treadmillHills || day.treadmill),
     }};
     render(); return;
   }
@@ -4335,8 +4600,8 @@ function onClick(e){
     // (see modalEditDay) - for any other type, draft.treadmillHills is whatever it was
     // initialized to and was never presented as a choice, so fall back to the day's
     // existing value rather than accidentally reset it via an untouched draft field.
-    const treadmillEligible = draft.type==='hills' || (draft.type==='easy' && day.easyRole==='aerobic');
-    const treadmillHills = treadmillEligible ? !!draft.treadmillHills : !!day.treadmillHills;
+    const treadmillEligible = draft.type!=='rest' && draft.type!=='race';
+    const treadmillHills = treadmillEligible ? !!draft.treadmillHills : false;
     const meta = buildWorkoutMeta({type:draft.type, km:draft.km, strength:draft.strength, easyRole:draft.easyRole, progressionEasy, warmupKm:draft.warmupKm, cooldownKm:draft.cooldownKm, treadmillHills}, state.plan.raceDistanceKm);
     // terrain/hillStrides are generatePlan-assigned, role-based fields (the long run, and
     // the week's "aerobic" easy day - see easyIdxs.forEach), not something the edit modal
@@ -4346,7 +4611,7 @@ function onClick(e){
     // instead of carrying it forward onto a workout it no longer describes.
     const terrainEligible = draft.type==='long' || (draft.type==='easy' && day.easyRole==='aerobic');
     const hillStridesEligible = draft.type==='easy' && day.easyRole==='aerobic' && strides;
-    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0, easyVariety:false, terrain: terrainEligible ? day.terrain : null, hillStrides: hillStridesEligible ? day.hillStrides : false, treadmillHills};
+    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0, easyVariety:false, terrain: terrainEligible ? day.terrain : null, hillStrides: hillStridesEligible ? day.hillStrides : false, treadmillHills, treadmill: treadmillHills};
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     recomputeStrengthFocus(week.days);
@@ -4386,7 +4651,7 @@ function onClick(e){
   if(act==='do-reset'){
     Store.resetAll();
     state.name=''; state.setup=null; state.plan=null; state.logs=[]; state.modal=null;
-    state.strengthDone = []; state.achievementLog = [];
+    state.strengthDone = []; state.achievementLog = []; state.strengthItems = {}; state.helpSeen = false; state.notesSeen = false;
     state.stravaAuth = null;
     state.view='onboarding'; state.onboardDraft = defaultDraft(); state.onboardStep = 1;
     render(); window.scrollTo(0,0); return;

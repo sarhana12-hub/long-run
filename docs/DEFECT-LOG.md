@@ -155,6 +155,14 @@ Run both with `npm test`.
 
 Residual (documented, not hidden): across 2,400 random plans one train-through race week of an 11 mpw runner racing 20 miles sizes its sharpener one cruise rep above the 10% share, and two four-run-day plans sit a few percent over the final-7-days cap. Both are rounding edges of the floor search, not rule breaks.
 
+## Round 6 — UI review (2026-10-07)
+
+55. **Saved plans never rebuilt on an engine update.** The boot code assigned the fresh plan to a constant, threw, and swallowed the error, so phones kept the old plan (and the "rebuilt" toast never showed). *Fix:* plain variable. Found while verifying the UI changes in the browser console.
+56. **Workout pills had no colour.** Every pill wrote a doubled-dash variable reference (the variable name already carried its dashes), so the type colours in the palette never reached the screen. *Fix:* the pills, the new card edges and the today card use the variables correctly.
+57. **Day one read as "behind plan".** A plan created mid-week started its accounting on the previous Sunday. *Fix:* accounting starts on the creation date unless the runner backdated the plan.
+58. **Onboarding copy contradicted the plan** (lower-body strength "on easy or rest days"; base phase "scaled to your mileage"). *Fix:* copy matches the rules.
+59. **Treadmill was only reachable through Edit, and only for hill days.** *Fix:* a Treadmill switch inside every run day shows belt speed and the incline note (Jones & Doust 1996: 1% grade matches outdoor effort).
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy
