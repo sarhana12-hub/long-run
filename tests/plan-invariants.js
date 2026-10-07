@@ -54,11 +54,11 @@ const holdsVolume = (plan, s) => { const v = plan.weeks[0].days.reduce((a,d)=>a+
 const hasTaper = (plan) => { const w = plan.weeks.filter(x=>x.phase==='taper'); return w.length ? [] : ['no taper week']; };
 const tempoShorterThanLong = (plan) => plan.weeks.flatMap(w=>{ const L=w.days.find(d=>d.type==='long'); return w.days.filter(d=>d.type==='tempo' && L && d.km>=L.km).map(d=>`w${w.weekIndex+1} tempo ${mi(d.km)} >= long ${mi(L.km)}`); });
 
-check('10k, 45 mpw, 20:00 5k', {race:'10k', mpw:45, weeks:12, recentSec:20*60, longest:10}, (p,s)=>[...holdsVolume(p,s), ...hasTaper(p), ...tempoShorterThanLong(p)]);
+check('10k, 45 mpw, 20:00 5k', {race:'10k', mpw:45, weeks:12, recentSec:20*60, longest:10}, (p,s)=>[...hasTaper(p), ...tempoShorterThanLong(p)]);
 check('10k, 30 mpw', {race:'10k', mpw:30, weeks:10, recentSec:22*60}, (p,s)=>[...holdsVolume(p,s), ...hasTaper(p)]);
 check('10k, 30 mpw, speed high', {race:'10k', mpw:30, weeks:10, recentSec:22*60, speedE:'high'});
 check('5k, 20 mpw', {race:'5k', mpw:20, weeks:8, recentSec:25*60}, (p,s)=>[...tempoShorterThanLong(p), ...hasTaper(p)]);
-check('5k, 40 mpw', {race:'5k', mpw:40, weeks:10, recentSec:19*60, longest:9}, (p,s)=>[...holdsVolume(p,s), ...tempoShorterThanLong(p)]);
+check('5k, 40 mpw', {race:'5k', mpw:40, weeks:10, recentSec:19*60, longest:9}, (p,s)=>[...tempoShorterThanLong(p)]);
 check('5k, race Saturday, week starts Monday', {race:'5k', mpw:25, weeks:8, recentSec:24*60, raceDow:6, weekStartDow:1, longDow:0});
 check('Half, 25 mpw', {race:'half', mpw:25, weeks:12, recentSec:24*60, longest:8}, hasTaper);
 check('Half, 50 mpw, two races', {race:'half', mpw:50, weeks:14, recentSec:19*60, recent2Km:10, recent2Sec:40*60, longest:13});
@@ -75,6 +75,9 @@ check('10k, no recent race', {race:'10k', mpw:20, weeks:10, recentKm:null, recen
 check('Marathon, race Monday', {race:'marathon', mpw:40, weeks:16, recentSec:22*60, raceDow:1, longDow:6});
 check('Half, 3 strength/wk, long Saturday', {race:'half', mpw:30, weeks:12, recentSec:23*60, strength:3, longDow:6});
 check('5k, 1 strength, skip base', {race:'5k', mpw:30, weeks:8, recentSec:21*60, strength:1, skipBase:true});
+check('10k, 24 mpw, long Friday (reported: thin cruise session)', {race:'10k', mpw:24, weeks:10, recentSec:23*60, longDow:5}, (p)=>{
+  const bad=[]; p.weeks.forEach(w=>{ if(w.phase==='taper'||w.isCutback) return; w.days.forEach(d=>{ if(d.type==='cruise'||d.type==='tempo'){ const min=g.minutesForKm(d.qualityKm, w.paces.tempoPerKm); if(min<19) bad.push(`w${w.weekIndex+1} ${d.type} ${min.toFixed(0)} min`); } }); }); return bad; });
+check('10k, 50 mpw (trims toward what a 10k needs)', {race:'10k', mpw:50, weeks:12, recentSec:19*60, longest:12}, (p,s)=>{ const settled=Math.max(...p.weeks.filter(w=>w.weekIndex>=3 && w.phase!=='taper').map(w=>w.plannedKm||0)); return settled <= s.currentWeeklyKm*0.92 ? [] : [`expected a ~10% trim after the first weeks, settled at ${mi(settled)} vs current ${mi(s.currentWeeklyKm)}`]; });
 check('Marathon, 30 weeks out', {race:'marathon', mpw:30, weeks:30, recentSec:25*60, longest:9});
 
 // general plans

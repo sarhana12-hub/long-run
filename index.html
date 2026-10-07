@@ -578,14 +578,25 @@ function stridesDetail(day, unit){
   const extra = fmtDist(STRIDES_EXTRA_KM, unit);
   return `${STRIDES_REPS} × 20s relaxed, full recovery, about ${extra} of the total above`;
 }
+// Workout text carries {pace} (the session's own pace, honouring a manual override) and
+// {easy} (the easy pace) where the pace belongs mid-sentence; older descriptions without
+// placeholders get the pace appended as before.
+function fillPacePlaceholders(text, day, weekPaces, unit, fmt){
+  const own = day.paceKey ? (day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : (weekPaces && weekPaces[day.paceKey])) : null;
+  const easy = weekPaces && weekPaces.easyPerKm;
+  const hasPlaceholder = /\{pace\}|\{easy\}/.test(text);
+  let out = text.replace(/\{pace\}/g, own!=null ? paceOrSpeedStr(own, unit, fmt) : 'the target pace').replace(/\{easy\}/g, easy!=null ? paceOrSpeedStr(easy, unit, fmt) : 'easy');
+  return {text: out, hasPlaceholder};
+}
 function renderWorkoutText(day, weekPaces, unit, fmt){
   if(!day.descBase) return '';
   const segs = [];
   const warmup = warmupClause(day, weekPaces, unit, fmt);
   if(warmup) segs.push(warmup);
   const qtyPrefix = qualityDistancePrefix(day, unit);
-  let main = qtyPrefix + (qtyPrefix ? lowercaseFirst(day.descBase) : day.descBase);
-  if(day.paceKey){
+  const filled = fillPacePlaceholders(day.descBase, day, weekPaces, unit, fmt);
+  let main = qtyPrefix + (qtyPrefix ? lowercaseFirst(filled.text) : filled.text);
+  if(day.paceKey && !filled.hasPlaceholder){
     const p = day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : (weekPaces && weekPaces[day.paceKey]);
     if(p!=null) main += ` @ ${paceOrSpeedStr(p, unit, fmt)}`;
   }
@@ -616,7 +627,11 @@ function daySummaryText(day, weekPaces, unit, fmt){
     case 'long': parts.push('Relaxed aerobic' + at('longPerKm')); if(day.racePaceKm>0.5 && p('racePerKm')) parts.push(`final ${fmtDist(day.racePaceKm, unit)} @ ${p('racePerKm')}`); break;
     case 'tempo': case 'racepace': { const q = Math.max(0, day.km-(day.warmupKm||0)-(day.cooldownKm||0)); parts.push(`${fmtDist(q, unit)} ${day.type==='tempo' ? 'at threshold' : 'at race pace'}${at(day.paceKey)}`); if(day.warmupKm>0.15) parts.push('warm-up & cool-down included'); break; }
     case 'overunder': { const m = d.match(/(\d+) ×/); parts.push(`${m ? m[1]+' × ' : ''}2 min over / 1 min under${at('tempoPerKm')}`); if(day.warmupKm>0.15) parts.push('warm-up & cool-down included'); break; }
-    case 'intervals': case 'cruise': case 'reps': case 'hills': { const head = d.replace(/^(Cruise intervals|Over\/unders) — /,'').split(/,|\(| — /)[0].trim(); parts.push(head + at(day.paceKey)); if(day.warmupKm>0.15) parts.push('warm-up & cool-down included'); break; }
+    case 'intervals': case 'cruise': case 'reps': case 'hills': {
+      const head = d.replace(/^(Cruise intervals|Over\/unders) — /,'').split(/,| \(| — /)[0].trim();
+      const filled = fillPacePlaceholders(head, day, weekPaces, unit, fmt);
+      parts.push(filled.text.replace(/ at threshold pace$/,'') + (filled.hasPlaceholder ? '' : at(day.paceKey)));
+      if(day.warmupKm>0.15) parts.push('warm-up & cool-down included'); break; }
     case 'fartlek': parts.push('Easy run with surges' + at('easyPerKm')); break;
     case 'progression': parts.push(`Easy start, ${day.progressionEasy ? 'steady' : 'tempo'} finish${at('easyPerKm')}`); break;
     default: return dayDisplayText(day, weekPaces, unit, fmt);
@@ -641,8 +656,9 @@ function workoutPartsFor(day, weekPaces, unit, fmt){
   const warmup = warmupClause(day, weekPaces, unit, fmt);
   if(warmup) parts.push(warmup);
   const qtyPrefix = qualityDistancePrefix(day, unit);
-  let main = qtyPrefix + (qtyPrefix ? lowercaseFirst(day.descBase) : day.descBase);
-  if(day.paceKey){
+  const filled = fillPacePlaceholders(day.descBase, day, weekPaces, unit, fmt);
+  let main = qtyPrefix + (qtyPrefix ? lowercaseFirst(filled.text) : filled.text);
+  if(day.paceKey && !filled.hasPlaceholder){
     const p = day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : (weekPaces && weekPaces[day.paceKey]);
     if(p!=null) main += ` @ ${paceOrSpeedStr(p, unit, fmt)}`;
   }
@@ -1745,6 +1761,9 @@ function computeCoachNote(plan, week, unit){
   }
   if(week.phase!==prev.phase){
     return `Moving from ${phaseLabel(prev.phase)} into ${phaseLabel(week.phase)} phase this week.`;
+  }
+  if(prev.isCutback && week.targetKm>prev.targetKm*1.08){
+    return `Back up to full volume after last week's cutback — ${fmtDist(week.targetKm,unit,1)} this week. That's the rhythm, not a jump.`;
   }
   if(prev.targetKm>0){
     const pctChange = (week.targetKm-prev.targetKm)/prev.targetKm*100;
@@ -3760,7 +3779,7 @@ function renderDayDetail(){
       : descriptionParts.length===1 ? `<div style="font-size:14.5px; color:var(--ink-soft); margin-bottom:16px;">${esc(descriptionParts[0])}</div>` : ''}
     ${strengthFocusNote ? `<div class="hint" style="margin:-10px 0 16px;">${esc(strengthFocusNote)}</div>` : ''}
     ${day.strength && day.strengthExercises && day.strengthExercises.length ? `
-    <div class="field-label" style="margin-bottom:8px;">Strength${day.strengthTimeMin ? ` — about ${day.strengthTimeMin} min` : ''}</div>
+    <div class="field-label" style="margin-bottom:8px;">Strength${day.strengthTimeMin ? ` — about ${day.strengthTimeMin} min${day.strengthExpress ? ', kept short because it shares a workout day — do it after the run' : ''}` : ''}</div>
     <ul style="font-size:14.5px; color:var(--ink-soft); margin:0 0 16px; padding-left:20px; line-height:1.5;">${day.strengthExercises.map(p=>`<li style="margin-bottom:6px;">${esc(p)}</li>`).join('')}</ul>
     ` : ''}
     ${day.strength ? `<button class="btn btn-block" data-act="toggle-strength-done" data-date="${day.date}" style="margin-bottom:16px; ${isStrengthDone?'color:var(--accent-strong); border-color:var(--accent-strong);':''}">${isStrengthDone?`${ICONS.check} Strength completed`:'Mark strength completed'}</button>` : ''}
