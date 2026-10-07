@@ -153,7 +153,7 @@ function sanityCheck(plan, setup){
         if(d.strengthFocus==='lower'){
           if(d.type==='rest') push('lower-on-rest', wk);
           if(d.type==='long') push('lower-on-long', wk);
-          if(g.isLegDemandingDay(next) || next.type==='race') push('lower-before-hard', `${wk} ${d.label} -> ${next.label}`);
+          if(g.isKeySessionDay(next)) push('lower-before-hard', `${wk} ${d.label} -> ${next.label}`);
           if(g.isLegDemandingDay(d) && !d.strengthAfterRun) push('lower-on-hard-not-after-run', wk);
           if(d.strengthExpress) push('express-retired', wk);
           if(d.strengthTimeMin < 28 && !/taper|peak/.test(w.phase) && !(d.daysToRace!=null && d.daysToRace<=21)) push('lower-too-short', `${wk} ${d.strengthTimeMin} min`);

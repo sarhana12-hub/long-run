@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 14; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 15; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -269,6 +269,9 @@ const TYPE_LABELS = {
 // A day worth protecting from added leg fatigue: the long run, or a real quality session
 // (base-phase variety picks are flagged easyVariety and are intensity-neutral by design).
 function isLegDemandingDay(day){ return day.type==='long' || (QUALITY_TYPES.includes(day.type) && !day.easyVariety); }
+// A key session is one whose pace matters: a quality run, the race, or a long run with a
+// race-pace finish. A plain easy-pace long run is not (heavy legs the day before cost it little).
+function isKeySessionDay(day){ return day.type==='race' || (day.type==='long' && (day.racePaceKm||0)>0.5) || (QUALITY_TYPES.includes(day.type) && !day.easyVariety); }
 
 // Reps/cycles for a structured session given the km of its structured BLOCK (hard work plus
 // the recovery jogs between reps - everything between warm-up and cool-down). Returns the
@@ -773,9 +776,10 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex
   // after the run, as a full session - the owner's call: leg days are never dropped.
   const lowerScore = i => {
     const d = days[i], next = days[(i+1)%n];
-    if(!usable(i) || d.type==='rest' || d.type==='long' || hard((i+1)%n) || next.type==='race') return null;
+    if(!usable(i) || d.type==='rest' || d.type==='long' || isKeySessionDay(next)) return null;
     let sc = 0;
     if(hard(i)) sc -= 6;
+    if(next.type==='long') sc -= 1; // allowed before a plain long run (owner decision), but a day with rest after it is better
     if(d.type==='easy' || d.easyVariety) sc += 2;
     if(d.easyRole==='recovery') sc += 1;
     if(d.easyRole==='aerobic') sc -= 1.5; // medium-long run: a plain easy day is the better home for heavy legs
@@ -820,7 +824,7 @@ function recomputeStrengthFocus(days){
   days.forEach((day,i)=>{
     if(!day.strength){ day.strengthFocus=null; return; }
     const next = days[(i+1)%n];
-    const beforeHard = isLegDemandingDay(next) || next.type==='race';
+    const beforeHard = isKeySessionDay(next);
     if(beforeHard || day.type==='long') day.strengthFocus = 'upper';
     else if(!day.strengthFocus) day.strengthFocus = 'lower';
     day.strengthExpress = false; day.strengthAfterRun = day.strengthFocus==='lower' && isLegDemandingDay(day);
@@ -1813,7 +1817,7 @@ function validatePlan(plan, setup){
     w.days.forEach((d,i)=>{
       if(!d.strength) return;
       const next = w.days[(i+1)%7];
-      if(d.strengthFocus!=='upper' && (isLegDemandingDay(next) || next.type==='race')) v.push(`${wk} lower-body strength on ${d.label} before ${next.label}`);
+      if(d.strengthFocus!=='upper' && isKeySessionDay(next)) v.push(`${wk} lower-body strength on ${d.label} before ${next.label}`);
       const cutoff = (plan.taperMode||'full')==='none' ? 1 : (plan.taperMode==='light' ? 5 : 10);
       if(d.daysToRace!=null && d.daysToRace<=cutoff && d.daysToRace>=0) v.push(`${wk} strength inside the final ${cutoff} days`);
       if(d.strengthFocus!=='upper' && d.type==='rest') v.push(`${wk} lower-body strength on a rest day`);
@@ -2030,7 +2034,7 @@ return {
   riegelSec, vvMarathonSecModel1, vvMarathonSecModel2, tandaMarathonSec, predictRace, assessGoal, buildAthlete, zonesForVdot, zonesForPlanVdot, projectRaceTime,
   raceLabelKm, runsPerWeekFor,
   QUALITY_TYPES, WARMUP_ELIGIBLE_TYPES, STRIDES_ELIGIBLE_TYPES, STRIDES_REPS, STRIDES_EXTRA_KM, HILL_STRIDES_EXTRA_KM, QUALITY_WARMUP_KM, QUALITY_COOLDOWN_KM,
-  TYPE_LABELS, isLegDemandingDay, structuredEffort, buildWorkoutMeta,
+  TYPE_LABELS, isLegDemandingDay, isKeySessionDay, structuredEffort, buildWorkoutMeta,
   STRENGTH_EXERCISES, OPTIONAL_EXTRAS, EQUIPMENT, DEFAULT_EQUIPMENT, equipmentSet, resolveExercise, STRENGTH_TIME_MIN, lowerStrengthTierForPhase, buildLowerStrengthWorkout, buildUpperStrengthWorkout,
   placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts,
   qualityDowsFor, deriveScheduleFromLongDow, evenlySpacedPositions, scheduleWarnings,

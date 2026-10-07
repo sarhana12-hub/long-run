@@ -112,7 +112,7 @@ rule would be.
 | Heavy compound lifts 3–4 × 4–6 plus plyometrics; 2–3 sessions/week; ≥ 6–8 weeks | `buildLowerStrengthWorkout` | Blagrove 2018; Beattie 2014; Rønnestad & Mujika 2014; Balsalobre-Fernández 2016 | Sourced | — |
 | Reduce strength in peak; stop in the final ~10 days | `lowerStrengthTierForPhase` | Rønnestad & Mujika (maintenance dose); Blagrove | Sourced | — |
 | No heavy legs the day before a hard run | `placeStrengthDays` | Doma & Deakin 2013 | Sourced | — |
-| Lower body on run days only, never the day before a hard run; upper/core on rest days | `placeStrengthDays` | Doma & Deakin 2013 (day-after impairment); owner | Sourced + Owner decision | — |
+| Lower body on run days only, never the day before a key session (quality run, race, or a long run with a race-pace finish); the day before a plain easy long run is allowed but ranks below a day with rest after it; upper/core on rest days | `placeStrengthDays`, `isKeySessionDay` | Doma & Deakin 2013 (day-after impairment); owner decision 2026-10-07 | Sourced + Owner decision | — |
 | A wanted leg session is never traded for upper/core: when no easy day qualifies it goes on the hard day itself, after the run, as a full session | `placeStrengthDays` | Blagrove (hard days hard, easy days easy); owner decision 2026-10-07 | Owner decision | — |
 | A medium-long-run day scores below a plain easy day for heavy legs | `placeStrengthDays` | — | Judgement (Pfitzinger treats the MLR as a key aerobic day) | Keep flagged |
 | Carries are prescribed as 30–40 m walks | `strengthSetLine` | Common practice | Presentation | — |
