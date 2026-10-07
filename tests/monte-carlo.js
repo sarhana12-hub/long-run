@@ -93,7 +93,11 @@ function sanityCheck(plan, setup){
     w.days.forEach((d,i)=>{
       const next = w.days[(i+1)%7];
       const parts = ui.workoutPartsFor(d, p, unit, 'pace'); const text = parts.join(' | '); const sum = ui.daySummaryText(d, p, unit, 'pace');
-      if(/\{pace\}|\{easy\}|undefined|NaN|@ —|null/.test(text+' '+sum)) push('bad-text', `${wk} ${d.label}: ${text} || ${sum}`);
+      if(/\{pace\}|\{easy\}|\{pace2\}|\{portion\}|\{repTime\}|undefined|NaN|@ —|null/.test(text+' '+sum)) push('bad-text', `${wk} ${d.label}: ${text} || ${sum}`);
+      // Every named effort carries its number in parentheses right there (owner rule): no " @ " anywhere,
+      // and an effort word must be followed by a pace within the same clause.
+      if(/ @ /.test(text+' '+sum)) push('at-sign', `${wk} ${d.label}: ${text} || ${sum}`);
+      [...parts, sum].forEach(line=>{ const re=/(tempo effort|threshold pace|race pace|marathon pace|5K effort|10K effort|interval pace|rep pace|easy pace|long-run pace|goal pace effort)/gi; let mm; while((mm=re.exec(line))){ const tail=line.slice(mm.index+mm[0].length, mm.index+mm[0].length+60); if(!/\d{1,2}:\d{2}\/(mi|km)|\d+(\.\d)? mph/.test(tail)) push('pace-not-inline', `${wk} ${d.label}: …${line.slice(Math.max(0,mm.index-20), mm.index+mm[0].length+30)}…`); } });
       // Every pace figure must sit next to the words of its own zone: the easy pace may not
       // follow "tempo", "threshold", "hard", "race pace", "interval" or "5K effort", and a
       // tempo/interval pace may not follow "easy", "jog", "recovery" or "conversational".
@@ -139,7 +143,7 @@ function sanityCheck(plan, setup){
         if(!text.includes(paceOf(p.longPerKm)) && !text.includes(paceOf(p.easyPerKm))) push('long-pace-missing', `${wk}: ${text}`);
       }
       // 66 printed rep time matches rep distance × printed pace (±15 s)
-      if(d.type==='intervals'){ const rm = text.match(/(\d+) × (\d+)m at ([\d:]+)\/(km|mi) \(about (\d+):(\d\d) each\)/); if(!rm) push('rep-time', `${wk} ${text}`); else { const perUnit = Number(rm[3].split(':')[0])*60+Number(rm[3].split(':')[1]); const perKm = rm[4]==='mi' ? perUnit/MI : perUnit; const want = perKm*Number(rm[2])/1000; const got = Number(rm[5])*60+Number(rm[6]); if(Math.abs(want-got)>15) push('rep-time', `${wk} ${text} (expected ${Math.round(want)}s)`); } }
+      if(d.type==='intervals'){ const rm = text.match(/(\d+) × (\d+)m at interval pace \(([\d:]+)\/(km|mi), about (\d+):(\d\d) each\)/); if(!rm) push('rep-time', `${wk} ${text}`); else { const perUnit = Number(rm[3].split(':')[0])*60+Number(rm[3].split(':')[1]); const perKm = rm[4]==='mi' ? perUnit/MI : perUnit; const want = perKm*Number(rm[2])/1000; const got = Number(rm[5])*60+Number(rm[6]); if(Math.abs(want-got)>15) push('rep-time', `${wk} ${text} (expected ${Math.round(want)}s)`); } }
       // 67 strength lines are readable
       (d.strengthExercises||[]).forEach(x=>{ if(/×1 /.test(x) || /undefined|NaN/.test(x)) push('strength-text', `${wk} ${x}`); });
       // 68 recovery label only on a short run that is the shortest easy run of the week

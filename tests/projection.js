@@ -77,14 +77,26 @@ console.log('5. a tempo run far too fast is capped');
   check('one session moves now by under a point', f.workoutAdjust<=1.0 && f.workoutAdjust>0, String(f.workoutAdjust));
 }
 
-console.log('6. five weeks of nothing');
+console.log('6. five weeks of nothing after one logged run');
 {
   const today = at(35);
-  const f = g.projectFitness(plan, [], today);
+  const first = plan.weeks[0].days.find(d=>d.km>0);
+  const f = g.projectFitness(plan, [{id:'first', date:first.date, distanceKm:first.km, durationSec:Math.round(first.km*plan.weeks[0].paces.easyPerKm)}], today);
   check('counts the light stretch', f.lowDays>=14, String(f.lowDays));
   check('now has eased below the start', f.nowVdot<plan.startVdot && f.decay>0, `${f.nowVdot} vs ${plan.startVdot}, decay ${f.decay}`);
   check('potential has shrunk (missed sessions earn nothing)', f.potentialVdot < plan.endVdot-0.05 || plan.endVdot-plan.startVdot<0.2, `${f.potentialVdot} vs ${plan.endVdot}`);
   check('decay is capped', f.decay<=2);
+}
+
+console.log('6b. nothing logged at all: no decline (defect 84)');
+{
+  const today = at(35);
+  const f = g.projectFitness(plan, [], today);
+  check('no decay without any logs', f.decay===0 && f.lowDays===0, `decay ${f.decay}, lowDays ${f.lowDays}`);
+  check('now equals the start', Math.abs(f.nowVdot-plan.startVdot)<0.05, `${f.nowVdot} vs ${plan.startVdot}`);
+  const g2 = g.projectFitness(plan, [], today, {trackingStart: g.fmtDate(at(35))});
+  check('tracking start honoured', g2.decay===0, String(g2.decay));
+  check('weeks before the tracking start count as done in full', g2.sessionsDue>0 ? g2.sessionsDone===g2.sessionsDue : true, `${g2.sessionsDone}/${g2.sessionsDue}`);
 }
 
 console.log('7. race-time projections');

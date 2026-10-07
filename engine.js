@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 16; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 17; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -288,24 +288,24 @@ function structuredEffort(type, blockKm, raceDistanceKm, treadmillHills){
       const repM = options.find(m => 4*(m+recFor(m)) <= blockKm*1000+1) || options[options.length-1];
       const recM = recFor(repM);
       const reps = clamp(Math.floor((blockKm*1000)/(repM+recM)+1e-6), 4, raceDistanceKm<=10 ? 6 : 7);
-      return {structuredKm: reps*(repM+recM)/1000, workKm: reps*repM/1000, descBase:`${reps} × ${repM}m at {pace} (about {repTime} each), jog ${recM}m easy ({easy}) between`, paceKey:'intervalPerKm'};
+      return {structuredKm: reps*(repM+recM)/1000, workKm: reps*repM/1000, descBase:`${reps} × ${repM}m at interval pace ({pace}, about {repTime} each), jog ${recM}m easy ({easy}) between`, paceKey:'intervalPerKm'};
     }
     case 'reps':{
       const options = raceDistanceKm<=5 ? [400,300,200] : [300,200];
       const repM = options.find(m => 6*m*2 <= blockKm*1000+1) || 200;
       const reps = clamp(Math.floor((blockKm*1000)/(repM*2)+1e-6), 6, 12);
-      return {structuredKm: reps*repM*2/1000, workKm: reps*repM/1000, descBase:`${reps} × ${repM}m fast and relaxed at {pace}, walk or jog ${repM}m to recover fully between — speed and form, not a grind`, paceKey:'repPerKm'};
+      return {structuredKm: reps*repM*2/1000, workKm: reps*repM/1000, descBase:`${reps} × ${repM}m fast and relaxed at rep pace ({pace}), walk or jog ${repM}m to recover fully between — speed and form, not a grind`, paceKey:'repPerKm'};
     }
     case 'hills':{
       const reps = clamp(Math.floor(blockKm/0.6+1e-6), 6, 10);
       const descBase = treadmillHills
-        ? `${reps} hill reps of 60–90s at 6% incline and {pace}, flat and an easy walk to recover between each`
-        : `${reps} hill reps — 60–90s strong uphill effort (about 5K effort, tall posture, quick steps), jog back down to recover`;
-      return {structuredKm: reps*0.6, workKm: reps*0.3, descBase, paceKey: treadmillHills ? 'tempoPerKm' : null};
+        ? `${reps} hill reps of 60–90s at 6% incline and tempo pace ({pace}), flat and an easy walk to recover between each`
+        : `${reps} hill reps — 60–90s strong uphill effort (about 5K effort: {pace} on the flat, slower uphill, so go by breathing; tall posture, quick steps), jog back down to recover`;
+      return {structuredKm: reps*0.6, workKm: reps*0.3, descBase, paceKey: 'intervalPerKm'};
     }
     case 'overunder':{
       const cycles = clamp(Math.floor(blockKm/1.0+1e-6), 4, 8);
-      return {structuredKm: cycles*1.0, workKm: cycles*1.0, descBase:`Over/unders — ${cycles} × (2 min a touch faster than {pace} / 1 min a touch slower), continuous`, paceKey:'tempoPerKm'};
+      return {structuredKm: cycles*1.0, workKm: cycles*1.0, descBase:`Over/unders — ${cycles} × (2 min a touch faster than threshold pace ({pace}) / 1 min a touch slower), continuous`, paceKey:'tempoPerKm'};
     }
     case 'cruise':{
       const options = [1600,1200,1000,800];
@@ -315,7 +315,7 @@ function structuredEffort(type, blockKm, raceDistanceKm, treadmillHills){
       const reps = clamp(Math.floor((blockKm*1000)/(repM+recM)+1e-6), 3, 6);
       return {structuredKm: reps*(repM+recM)/1000, workKm: reps*repM/1000, descBase:`Cruise intervals — ${reps} × ${repM}m at threshold pace ({pace}), 60–90s easy jog ({easy}) between`, paceKey:'tempoPerKm'};
     }
-    case 'tempo': return {structuredKm: blockKm, workKm: blockKm, descBase:'Continuous, comfortably hard at {pace}', paceKey:'tempoPerKm'};
+    case 'tempo': return {structuredKm: blockKm, workKm: blockKm, descBase:'Continuous, comfortably hard at threshold pace ({pace})', paceKey:'tempoPerKm'};
     case 'racepace': return {structuredKm: blockKm, workKm: blockKm, descBase: raceDistanceKm>=40 ? 'Continuous at marathon pace ({pace}) — rehearses the rhythm, fueling and focus of race day' : 'Continuous at race pace ({pace}) — rehearses exactly what race day should feel like', paceKey:'racePerKm'};
     default: return {structuredKm: blockKm, workKm: blockKm, descBase:'', paceKey:null};
   }
@@ -328,17 +328,17 @@ function buildWorkoutMeta(day, raceDistanceKm){
   const raceKm = raceDistanceKm || 10;
   switch(day.type){
     case 'long':{
-      const meta = {descBase:'Steady, relaxed aerobic effort — conversational start, settle into rhythm', paceKey:'longPerKm'};
+      const meta = {descBase:'Steady, relaxed aerobic effort at long-run pace ({pace}) — conversational start, settle into rhythm', paceKey:'longPerKm'};
       if(day.racePaceKm>0.5){
-        meta.descBase = 'Easy to steady at {pace} for most of it, then finish strong at race pace';
+        meta.descBase = 'Easy to steady at long-run pace ({pace}) for most of it, then the final {portion} strong at race pace ({pace2})';
         meta.paceKey2 = 'racePerKm'; meta.desc2 = `final ${day.racePaceKmLabel||'portion'}`;
       }
       return meta;
     }
     case 'easy':{
-      const descBase = day.easyRole==='recovery' ? 'Very easy, short recovery jog — slower than feels necessary'
-        : day.easyRole==='aerobic' ? 'Medium-long aerobic run, conversational pace throughout'
-        : 'Conversational, easy effort';
+      const descBase = day.easyRole==='recovery' ? 'Very easy, short recovery jog at easy pace ({pace}) — slower than feels necessary'
+        : day.easyRole==='aerobic' ? 'Medium-long aerobic run at easy pace ({pace}), conversational throughout'
+        : 'Conversational, easy effort ({pace})';
       return {descBase, paceKey:'easyPerKm'};
     }
     case 'tempo': case 'intervals': case 'overunder': case 'cruise': case 'racepace': case 'reps': case 'hills':{
@@ -353,22 +353,22 @@ function buildWorkoutMeta(day, raceDistanceKm){
         // around 10K effort - not a session, so it never counts as a hard day.
         const pickups = clamp(Math.round(day.km/2), 4, 6);
         return {
-          descBase: `Easy run at {pace} with ${pickups} relaxed 1-minute pickups spread through the middle (around 10K effort, smooth not strained), 2 min easy between — still an easy day`,
+          descBase: `Easy run at {pace} with ${pickups} relaxed 1-minute pickups spread through the middle (around 10K effort, roughly {pace2}, smooth not strained), 2 min easy between — still an easy day`,
           paceKey: 'easyPerKm', paceKey2: 'tempoPerKm', desc2: 'pickups, roughly',
         };
       }
       const surges = clamp(Math.round(day.km/1.5), 4, 8);
       return {
-        descBase: `${surges} surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort), 2 min easy jog between; the rest of the run stays easy at {pace}`,
+        descBase: `${surges} surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort, {pace2}), 2 min easy jog between; the rest of the run stays easy at {pace}`,
         paceKey: 'easyPerKm', paceKey2: 'intervalPerKm', desc2: 'each surge',
       };
     }
     case 'progression':{
       return day.progressionEasy
-        ? {descBase:'Progression — start at an easy jog ({pace}), gradually quicken through the second half, staying comfortable the whole way', paceKey:'easyPerKm', paceKey2:'marathonPerKm', desc2:'finish'}
-        : {descBase:'Progression — start easy at {pace}, gradually quicken so the final third sits at tempo effort', paceKey:'easyPerKm', paceKey2:'tempoPerKm', desc2:'final third'};
+        ? {descBase:'Progression — start at an easy jog ({pace}), gradually quicken through the second half to a steady finish ({pace2}), staying comfortable the whole way', paceKey:'easyPerKm', paceKey2:'marathonPerKm', desc2:'finish'}
+        : {descBase:'Progression — start easy at {pace}, gradually quicken so the final third sits at tempo effort ({pace2})', paceKey:'easyPerKm', paceKey2:'tempoPerKm', desc2:'final third'};
     }
-    case 'race': return {descBase:'Goal pace effort', paceKey:'racePerKm'};
+    case 'race': return {descBase:'Goal pace effort ({pace})', paceKey:'racePerKm'};
     case 'rest': return day.strength
       ? {descBase:'No running — strength session today, plus mobility', paceKey:null}
       : {descBase:'Full rest — or easy cross-training (bike, swim, elliptical) if you want to move', paceKey:null};
@@ -1717,7 +1717,7 @@ function generateRecoveryPlan(setup, dayOneOverride){
     const longKm = round1(Math.min(Math.max(weeklyKm*(runs<=4 ? 0.33 : DISTANCE_LONG_FRACTION), weeklyKm/runs*1.06), kmForMinutes(120, paces.longPerKm)));
     const built = buildWeekDays({weekStart, weeklyKm, longKm, longDow:c.longDow, phase:'recovery', isCutback:false, weekIndex:w, quality:[], runsPerWeek:runs, strides:0, raceKm:10, paces, medLong:false, unit:c.unit});
     finishWeekDays(built.days, 10);
-    built.days.forEach(d=>{ if(d.type==='long'){ d.paceKey='easyPerKm'; d.descBase='Longer easy run — relaxed, no pace pressure'; } });
+    built.days.forEach(d=>{ if(d.type==='long'){ d.paceKey='easyPerKm'; d.descBase='Longer easy run at easy pace ({pace}) — relaxed, no pace pressure'; } });
     placeStrengthDays(built.days, [], 0, 'recovery', w, {equipment: setup.equipment});
     list.push({weekIndex:w, runsPerWeek: runs, phase:'recovery', isCutback:false, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
   }
@@ -1921,8 +1921,8 @@ function repMetersForDay(day){
   const m = day.descBase.match(/(\d+) × (\d+)m/);
   return m ? Number(m[2]) : null;
 }
-function projectFitness(plan, logs, today){
-  today = today || todayDate();
+function projectFitness(plan, logs, today, opts){
+  today = today || todayDate(); opts = opts || {};
   const out = {startVdot: plan.startVdot, nowVdot:null, potentialVdot:null, anchor:null, earnedGain:0, remainingGain:0, workoutAdjust:0, decay:0, lowDays:0, evidence:[], raceLogs:[], sessionsDone:0, sessionsDue:0, nowBand:0, potentialBand:FITNESS.potentialBand, recentWeeklyKm:null};
   if(plan.startVdot==null || !plan.weeks || !plan.weeks.length) return out;
   const planStart = parseDate(plan.weeks[0].weekStart);
@@ -1936,6 +1936,9 @@ function projectFitness(plan, logs, today){
   if(races.length){ anchorVdot = vdotFromRace(races[0].distanceKm, races[0].durationSec); anchorDate = parseDate(races[0].date); anchorKind = 'race'; }
   out.anchor = {kind:anchorKind, date:fmtDate(anchorDate), vdot:round1(anchorVdot)};
 
+  // Weeks before the tracking start ("I've been training, skip the old runs") are taken as
+  // done in full - owner decision: a runner who says they have been training gets credit for it.
+  const trackingStart = opts.trackingStart ? parseDate(opts.trackingStart) : planStart;
   // 2. Scheduled gain, credited per completed quality session since the anchor.
   const rampWeeks = plan.weeks.filter(w=>w.phase==='build' || w.phase==='peak');
   const totalGain = Math.max(0, (plan.endVdot!=null ? plan.endVdot : plan.startVdot) - plan.startVdot);
@@ -1953,7 +1956,7 @@ function projectFitness(plan, logs, today){
       if(dd>today){ remaining += per; return; }
       if(dd<=anchorDate) return; // already reflected in the race result
       due++;
-      if(loggedDates.has(d.date)){ earned += per; done++; }
+      if(dd<trackingStart || loggedDates.has(d.date)){ earned += per; done++; }
     });
   });
   out.earnedGain = round1(earned); out.remainingGain = round1(remaining); out.sessionsDone = done; out.sessionsDue = due;
@@ -1985,9 +1988,15 @@ function projectFitness(plan, logs, today){
   out.evidence = recent; out.workoutAdjust = round1(adjust);
 
   // 4. Detraining: two weeks under half the planned volume, then a slow decline.
+  // Missing logs are only evidence of missed running once the runner has started logging:
+  // nothing before the tracking start ("skip the old runs") or before the first logged run
+  // counts, and a runner who has logged nothing at all is not assumed to have stopped.
+  const firstLog = inPlan.length ? inPlan.map(l=>parseDate(l.date)).sort((a,b)=>a-b)[0] : null;
+  const evidenceStart = firstLog ? new Date(Math.max(planStart, trackingStart, firstLog)) : null;
   const lowWindow = endDate => {
+    if(!evidenceStart) return false;
     const start = addDays(endDate, -(FITNESS.lowWindowDays-1));
-    if(start<planStart || endDate<=anchorDate) return false;
+    if(start<evidenceStart || endDate<=anchorDate) return false;
     let planned = 0, logged = 0;
     for(let i=0;i<FITNESS.lowWindowDays;i++){ const h = byDate[fmtDate(addDays(start,i))]; if(h && h.day.type!=='race') planned += h.day.km||0; }
     inPlan.forEach(l=>{ const d = parseDate(l.date); if(d>=start && d<=endDate) logged += l.distanceKm; });
