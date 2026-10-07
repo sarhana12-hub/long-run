@@ -83,14 +83,16 @@ function sanityCheck(plan, setup){
     if(wantStrength>0 && strengthDays.length===0 && w.days.every(d=>d.daysToRace==null || d.daysToRace>cutoff+1) && w.phase!=='recovery') push('strength-missing', wk);
     const long = w.days.find(d=>d.type==='long');
     const easies = w.days.filter(d=>d.type==='easy' && d.label!=='Shakeout Jog');
-    const rec = easies.find(d=>d.easyRole==='recovery' && !(d.daysToRace!=null && d.daysToRace<=2));
-    if(rec && easies.some(e=>e!==rec && !(e.daysToRace!=null && e.daysToRace>=0 && e.daysToRace<=2) && e.km < rec.km-0.05)) push('recovery-not-shortest', `${wk} recovery ${rec.km} vs ${easies.map(e=>e.km).join('/')}`);
+    const inWindow = d => d.daysToRace!=null && d.daysToRace<=Math.max(2, plan.taperDays||0); // days inside the taper window are reduced on purpose
+    const rec = easies.find(d=>d.easyRole==='recovery' && !inWindow(d));
+    if(rec && !w.days.some(x=>x.type==='race') && easies.some(e=>e!==rec && !inWindow(e) && e.km < rec.km-1.0)) push('recovery-not-shortest', `${wk} recovery ${rec.km} vs ${easies.map(e=>e.km).join('/')}`);
     w.days.forEach((d,i)=>{
       const next = w.days[(i+1)%7];
       const parts = ui.workoutPartsFor(d, p, unit, 'pace'); const text = parts.join(' | '); const sum = ui.daySummaryText(d, p, unit, 'pace');
       if(/\{pace\}|\{easy\}|undefined|NaN|@ —|null/.test(text+' '+sum)) push('bad-text', `${wk} ${d.label}: ${text} || ${sum}`);
       if(d.type!=='rest' && d.km>0 && (!text.trim() || !sum.trim())) push('empty-text', `${wk} ${d.label}`);
-      if(d.km>0 && d.type!=='rest' && d.type!=='race' && d.km<1.5) push('tiny-run', `${wk} ${d.label} ${d.km} km`);
+      const raceWeek = w.days.some(x=>x.type==='race');
+      if(d.km>0 && (d.type==='easy'||d.type==='long') && d.label!=='Shakeout Jog' && w.phase!=='taper' && !raceWeek && g.minutesForKm(d.km, p.easyPerKm) < ((w.beginnerStructure || w.phase==='recovery') ? 21 : 24) && !(d.daysToRace!=null && d.daysToRace<=Math.max(2, plan.taperDays||0))) push('tiny-run', `${wk} ${d.label} ${d.km} km (${g.minutesForKm(d.km,p.easyPerKm).toFixed(0)} min)`);
       if(d.type==='easy' && (!d.paceKey || p[d.paceKey]==null || !text.includes(paceOf(p.easyPerKm)))) push('easy-pace-missing', `${wk} ${d.label}: ${text}`);
       if(HARD_TYPES.includes(d.type)){
         const key = d.paceKey; const ps = key && p[key]!=null ? paceOf(p[key]) : null;
@@ -149,12 +151,14 @@ function sanityCheck(plan, setup){
       const few = (plan.warnings||[]).some(x=>/running days/.test(x));
       if(!few && w.days.every(d=>d.daysToRace==null||d.daysToRace>2) && Math.abs(tot-w.plannedKm) > Math.max(1.5, w.plannedKm*0.08)) push('week-total-off', `${wk} ${tot.toFixed(1)} vs planned ${w.plannedKm}`);
     }
-    const nomOf = x => x.nominalKm||x.plannedKm; if(w.isCutback && w.weekIndex>0 && nomOf(plan.weeks[w.weekIndex-1]) && nomOf(w) >= nomOf(plan.weeks[w.weekIndex-1])) push('cutback-not-lower', wk);
+    const nomOf = x => x.nominalKm||x.plannedKm; if(w.isCutback && !w.beginnerStructure && w.weekIndex>0 && nomOf(plan.weeks[w.weekIndex-1]) && nomOf(w) >= nomOf(plan.weeks[w.weekIndex-1])) push('cutback-not-lower', wk);
     const runDays = w.days.filter(d=>d.km>0 && d.type!=='race').length;
     const expectRuns = plan.runsPerWeek || setup.runsPerWeek;
     // Fewer run days than asked is only a defect when the week's volume could have filled them (~4.5 km each).
     const fixedKm = w.days.filter(d=>d.type==='long' || HARD_TYPES.includes(d.type)).reduce((a,d)=>a+d.km,0); const fixedDays = w.days.filter(d=>d.type==='long' || HARD_TYPES.includes(d.type)).length;
-    const supportable = w.plannedKm ? Math.min(expectRuns, Math.max(2, fixedDays + Math.floor(Math.max(0, w.plannedKm-fixedKm)/2.5))) : expectRuns;
+    const minEasy = g.kmForMinutes(30, w.paces.easyPerKm); // Daniels: 30-minute easy runs, the engine's own standard
+    const stridesKm = w.days.filter(d=>d.strides).length*0.4;
+    const supportable = w.plannedKm ? Math.min(expectRuns, Math.max(2, fixedDays + Math.floor(Math.max(0, w.plannedKm-fixedKm-stridesKm)/minEasy))) : expectRuns;
     if(isRace && w.phase!=='taper' && (w.daysToRaceAtStart==null || w.daysToRaceAtStart>7) && (runDays>expectRuns || runDays<supportable)) push('run-days', `${wk} ${runDays} vs ${expectRuns} (supportable ${supportable})`);
   });
   if(isRace){

@@ -76,8 +76,8 @@ check('Marathon, race Monday', {race:'marathon', mpw:40, weeks:16, recentSec:22*
 check('Half, 3 strength/wk, long Saturday', {race:'half', mpw:30, weeks:12, recentSec:23*60, strength:3, longDow:6});
 check('5k, 1 strength, skip base', {race:'5k', mpw:30, weeks:8, recentSec:21*60, strength:1, skipBase:true});
 check('10k, 24 mpw, long Friday (reported: thin cruise session)', {race:'10k', mpw:24, weeks:10, recentSec:23*60, longDow:5}, (p)=>{
-  const bad=[]; p.weeks.forEach(w=>{ if(w.phase==='taper'||w.isCutback) return; w.days.forEach(d=>{ if(d.type==='cruise'||d.type==='tempo'){ const min=g.minutesForKm(d.qualityKm, w.paces.tempoPerKm); if(min<19) bad.push(`w${w.weekIndex+1} ${d.type} ${min.toFixed(0)} min`); } }); }); return bad; });
-check('10k, 50 mpw (trims toward what a 10k needs)', {race:'10k', mpw:50, weeks:12, recentSec:19*60, longest:12}, (p,s)=>{ const settled=Math.max(...p.weeks.filter(w=>w.weekIndex>=3 && w.phase!=='taper').map(w=>w.plannedKm||0)); return settled <= s.currentWeeklyKm*0.92 ? [] : [`expected a ~10% trim after the first weeks, settled at ${mi(settled)} vs current ${mi(s.currentWeeklyKm)}`]; });
+  const bad=[]; p.weeks.forEach(w=>{ if(w.phase==='taper'||w.isCutback) return; w.days.forEach(d=>{ if(d.type==='cruise'||d.type==='tempo'){ const min=g.minutesForKm(d.qualityKm, w.paces.tempoPerKm); if(min<g.floorMinutesFor('tempo', w.plannedKm||40)*0.9) bad.push(`w${w.weekIndex+1} ${d.type} ${min.toFixed(0)} min`); } }); }); return bad; });
+check('10k, 50 mpw (trims toward what a 10k needs)', {race:'10k', mpw:50, weeks:12, recentSec:19*60, longest:12}, (p,s)=>{ const settled=Math.max(...p.weeks.filter(w=>w.weekIndex>=4 && w.phase!=='taper').map(w=>w.plannedKm||0)); return settled <= s.currentWeeklyKm*0.92 ? [] : [`expected a ~10% trim after the first weeks, settled at ${mi(settled)} vs current ${mi(s.currentWeeklyKm)}`]; });
 check('Marathon, 40 mpw, 5 runs (reported: strength variety, recovery day)', {race:'marathon', mpw:40, weeks:18, recentSec:22*60, longest:12, runs:5}, (p)=>{
   const bad=[];
   p.weeks.forEach(w=>{

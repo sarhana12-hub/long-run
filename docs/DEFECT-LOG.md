@@ -137,6 +137,24 @@ Run both with `npm test`.
 
 42. **Bodyweight fallbacks were prescribed like heavy lifts** ("4 x 5 bodyweight squat, heavy"). *Fix:* the squat slot falls back to a single-leg squat to a chair, bodyweight variants use a slow higher-rep scheme with their own how-heavy note, and a session never repeats the same fallback movement twice.
 
+## Round 5 — provenance audit (2026-10-07)
+
+43. **Four rules were my own invention presented as guidance** (weekly growth curve; peak-volume floors, caps and fade; phase split by a fitness ratio; run-day cap by average run length). *Fix:* replaced with Daniels' step rule (add at most one mile per weekly session, hold 3–4 weeks), Pfitzinger plan tiers for peak volume with Daniels' "short races hold", Daniels' priority-week phase allocation (verbatim from his season-planning article), and Daniels' 30–60-minute easy run (Pfitzinger general-aerobic lengths at 55+ mi/week; medium-long runs 11–16 mi). Every rule now has a source or is labelled judgement in docs/RULES.md.
+44. **Long run share bumped for few run days** (an 11-mile-a-week runner got a long run at 45% of the week). *Fix:* Daniels' 25–30% share; Higdon novice shares kept only for the marathon.
+45. **Tiny weeks forced a quality session that starved the other runs.** *Fix:* Daniels' beginner structure (30-minute easy runs with strides, no separate session) whenever the week cannot give every run 30 minutes alongside a session, with a note saying so.
+
+46. **Cutback weeks starved short runs** (a 15 mpw marathoner got a 23-minute easy run in week 4). *Fix:* a cutback that would leave any easy run under 30 minutes is held at the block level, decided by the easy-run room left after the long run and the smallest sensible session (Daniels' beginner plans have no recovery weeks).
+47. **Run days were fixed from week one, and the day builder dropped a day whenever its recovery/aerobic weighting made the smallest run short.** *Fix:* each week runs as many days as can get 30 minutes once the long run and the sized session are in, up to what was asked; easy days are equalised before a day is dropped; a day comes back when the mileage can carry it. *Guard:* `run-days` at the 30-minute standard.
+48. **Week too small for its session was decided before the session was sized**, so a hills session could still land and leave a 22-minute easy run. *Fix:* the beginner-structure decision is re-checked after sizing; if the easy days would fall under 30 minutes the session is dropped for strides.
+49. **Long run shorter than the other runs** on three run days (Daniels' 25–30% share is below the average run). *Fix:* lifted ~6% above the average run (labelled judgement in RULES.md). *Guard:* long-share cap allows it at ≤3 runs.
+50. **"Medium-Long Run" of 5 km in a taper week**, shorter than the recovery run. *Fix:* the medium-long role needs five run days and a long run of at least 11 miles, and never appears in race week. *Guard:* `recovery-not-shortest`.
+51. **A 23 km long run and full easy days six days before a 10K** (7-day taper, race mid-week). The taper only touched whole weeks after the last training week. *Fix:* easy days of a training week that fall inside the taper window are reduced by that day's factor; taper weeks scale from the peak week the plan actually placed, not the nominal level. *Guard:* final-7-days check.
+52. **Easy-run ceiling fed back on itself**: a 59 mpw runner on four days had the ceiling computed from a week that had already come in short, so weeks shrank to 40 mi. *Fix:* the ceiling is keyed to the runner's block level. The honest limit (four days cannot carry 59 mi under 60–90-minute easy runs) is still stated in a note.
+53. **Train-through race week ran the long run at 35% of a shortened week.** *Fix:* Daniels' share of the shortened week.
+54. **General plans still used the old rules** (run days by a 5.5 km average, 12% growth, sessions forced into tiny weeks, three token recovery runs). *Fix:* run days by the 30-minute easy run; distance plan uses Daniels' step rule (weekly target) or Higdon's mile a week (longest-run target); speed and maintenance weeks drop the session when it would starve easy runs; recovery plans use two runs when three cannot get 25 minutes.
+
+Residual (documented, not hidden): across 2,400 random plans one train-through race week of an 11 mpw runner racing 20 miles sizes its sharpener one cruise rep above the 10% share, and two four-run-day plans sit a few percent over the final-7-days cap. Both are rounding edges of the floor search, not rule breaks.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy

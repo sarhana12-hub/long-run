@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 11; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 12; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -914,45 +914,44 @@ function taperLongFactor(raceKm, d){
   if(cls==='half') return interp([[0,0],[4,0.4],[7,0.55],[14,0.8],[21,1]], d);
   return interp([[0,0],[4,0.5],[7,0.65],[14,1]], d);
 }
-// Safe weekly growth (fraction) as a function of current volume - the familiar "about 10%"
-// at low volume, tapering as absolute jumps get bigger.
-function weeklyGrowthRateFor(km){ return interp([[25,0.10],[45,0.08],[65,0.065],[90,0.05]], km); }
-// Where a plan should aim its peak week, before growth limits. Short races hold volume (the
-// stimulus shifts to quality, not more miles); longer races build toward a distance-specific
-// floor that recreational plans converge on (Pfitzinger's lowest tiers, Higdon intermediate).
+// Peak weekly volume.
+// 5K/10K: Daniels - racing short needs no extra mileage; train at the volume you already run
+// (the owner's choice to trim ~10% for runners far above what the race needs is kept, and
+// labelled as such). 15K to half: Pfitzinger, Faster Road Racing, plan tiers (up to 40 mi,
+// 40-55, 55-70), peaking at the top of the runner's tier. Marathon: Pfitzinger, Advanced
+// Marathoning, tiers (up to 55 mi, 55-70, 70-85). A runner above the top tier holds. The
+// Daniels step rule below decides how fast the peak can actually be reached.
+const PFITZ_TIERS_MI = { half:[40,55,70], marathon:[55,70,85] };
 function targetPeakWeeklyKm(raceKm, currentKm, longEmphasis, nTrainWeeks){
   const cls = raceClass(raceKm);
-  const floorKm = {'5k':30,'10k':38,'mid':45,'half':48,'marathon':60}[cls];
-  const growth = {'5k':1.05,'10k':1.10,'mid':1.15,'half':1.22,'marathon':1.40}[cls];
-  const capKm = {'5k':75,'10k':85,'mid':95,'half':100,'marathon':120}[cls];
-  const emph = longEmphasis==='high' ? 1.08 : longEmphasis==='low' ? 0.94 : 1;
-  // Someone already running far more than the race typically needs gains little from more
-  // volume (the stimulus should shift to quality), so the growth share fades as current
-  // volume climbs past the floor: full growth at/below the floor, ~30% of it at 2x the floor.
-  const damp = clamp((floorKm*2 - currentKm)/floorKm, 0.3, 1);
-  let target = Math.max(currentKm*((growth-1)*emph*damp+1), Math.min(floorKm, currentKm*1.6));
-  if(nTrainWeeks<=4) target = Math.min(target, currentKm*1.1);
-  target = Math.min(target, capKm);
-  // A 5K/10K doesn't need more aerobic volume than it needs: a runner already well past
-  // the "plenty" mark for the distance settles ~10% lower, which buys recovery for the
-  // sharper quality work rather than carrying volume for its own sake. Longer races never
-  // trim - the volume IS the specific preparation there.
-  const plentyKm = {'5k':55,'10k':65,'mid':75}[cls];
-  if(plentyKm && currentKm > plentyKm) return Math.max(plentyKm, currentKm*0.9);
-  return Math.max(currentKm, target);
+  const curMi = kmToUnit(currentKm, 'mi');
+  if(cls==='5k' || cls==='10k'){
+    // Owner decision: well above what a short race needs -> ease down ~10%.
+    const plentyKm = {'5k':55,'10k':65}[cls];
+    if(currentKm > plentyKm) return Math.max(plentyKm, currentKm*0.9);
+    return currentKm;
+  }
+  const tiers = PFITZ_TIERS_MI[cls==='marathon' ? 'marathon' : 'half'];
+  const top = tiers.find(t=>curMi<=t);
+  if(top==null) return currentKm; // above the top tier: hold
+  let peakMi = top;
+  // Long-run emphasis nudges within the tier rather than changing it.
+  if(longEmphasis==='low') peakMi = Math.max(curMi, top-5);
+  if(longEmphasis==='high' && top<tiers[tiers.length-1]) peakMi = top+5;
+  return Math.max(currentKm, unitToKm(peakMi, 'mi'));
 }
 function peakLongTargetKm(raceKm, peakWeeklyKm, longEmphasis, runsPerWeek){
   const cls = raceClass(raceKm);
   const emph = longEmphasis==='high' ? 1.12 : longEmphasis==='low' ? 0.88 : 1;
   // Fewer run days -> each run is a bigger share, including the long one (Daniels' 25-30%
   // assumes 5-7 runs; a 4-day runner's long run sits nearer a third of the week).
-  const bump = (runsPerWeek||5)<=3 ? 0.07 : (runsPerWeek||5)===4 ? 0.04 : 0;
+  // Daniels' share (30% under 40 mi/wk, 25% above); Pfitzinger's long-run distances for the
+  // half (up to 16-20 mi) and marathon (20-22 mi) as the ceilings.
+  const share = peakWeeklyKm < 64 ? 0.30 : 0.25;
   let t;
-  if(cls==='5k') t = clamp(peakWeeklyKm*(0.26+bump), 9, 18);
-  else if(cls==='10k') t = clamp(peakWeeklyKm*(0.28+bump), 11, 21);
-  else if(cls==='mid') t = clamp(peakWeeklyKm*(0.30+bump), 14, 23);
-  else if(cls==='half') t = clamp(Math.max(19, peakWeeklyKm*(0.30+bump)), 18, 24);
-  else t = clamp(Math.max(30, peakWeeklyKm*(0.32+bump)), 29, 35);
+  if(cls==='5k' || cls==='10k') t = peakWeeklyKm*share;
+  else if(cls==='mid' || cls==='half') t = Math.min(peakWeeklyKm*Math.max(share, 0.30), unitToKm(20,'mi'));
+  else t = Math.min(Math.max(unitToKm(20,'mi'), peakWeeklyKm*0.32), unitToKm(22,'mi'));
   return t*emph;
 }
 // Ceiling on the long run as a share of that week's volume. Recreational marathon plans run
@@ -960,12 +959,33 @@ function peakLongTargetKm(raceKm, peakWeeklyKm, longEmphasis, runsPerWeek){
 // the week still needs real easy running around it.
 function longFracCap(raceKm, weeklyKm, runsPerWeek){
   const cls = raceClass(raceKm);
-  const fewBump = runsPerWeek<=3 ? 0.05 : 0;
-  if(cls==='marathon') return interp([[40,0.50],[55,0.45],[70,0.38],[90,0.33],[110,0.28]], weeklyKm) + fewBump;
-  if(cls==='half') return interp([[30,0.42],[45,0.36],[65,0.31],[90,0.27]], weeklyKm) + fewBump;
-  return interp([[25,0.40],[40,0.35],[60,0.31],[90,0.27]], weeklyKm) + (runsPerWeek<=3 ? 0.05 : 0);
+  // Daniels: the long run is the lesser of 25% of weekly mileage (30% below ~40 mi/week) or
+  // 150 min. Marathon exception: Higdon's novice plans run a 20-mile long run on a ~40-mile
+  // week (50%), tapering to Daniels' share as volume rises.
+  if(cls==='marathon') return interp([[64,0.50],[80,0.40],[100,0.30],[120,0.25]], weeklyKm);
+  return weeklyKm < 64 ? 0.30 : 0.25;
 }
 function longTimeCapMin(raceKm){ return raceKm>=40 ? 195 : 150; }
+
+/* ============================= phase allocation (Daniels) ============================= */
+// Daniels, "Setting Up a Season of Training" (and Running Formula, Figure 8.2): a 24-week
+// season has four 6-week phases; with fewer weeks, each week of each phase has a priority
+// number and you take the lowest numbers first. Verbatim from the figure:
+//   Phase I   (foundation / injury prevention): 1, 2, 3, 13, 21, 23
+//   Phase II  (initial quality: reps, hills, strides): 10, 11, 12, 18, 19, 20
+//   Phase III (transition quality: the hardest, interval phase): 7, 8, 9, 14, 15, 16
+//   Phase IV  (final quality: threshold + race-specific): 4, 5, 6, 17, 22, 24
+// His examples check out: 6 weeks -> I 3, IV 3; 10 weeks -> I 3, II 1, III 3, IV 3.
+// Beyond 24 weeks the extra weeks extend Phase I (foundation), which is the only extension
+// the method implies; that part is mine.
+const DANIELS_PRIORITY = { I:[1,2,3,13,21,23], II:[10,11,12,18,19,20], III:[7,8,9,14,15,16], IV:[4,5,6,17,22,24] };
+function danielsPhaseWeeks(totalWeeks){
+  const n = Math.max(1, Math.round(totalWeeks));
+  const counts = {I:0, II:0, III:0, IV:0};
+  Object.keys(DANIELS_PRIORITY).forEach(ph=>{ counts[ph] = DANIELS_PRIORITY[ph].filter(p=>p<=Math.min(n,24)).length; });
+  if(n>24) counts.I += n-24;
+  return counts;
+}
 
 /* ============================= session sizing ============================= */
 // Minutes of hard running by type, phase and position in the phase (0..1), for the primary
@@ -1009,7 +1029,7 @@ function paceKeyForType(type){
 function sizeQuality(type, cls, phase, t, scale, weeklyKm, longKm, raceKm, paces){
   if(type==='progression' || type==='fartlek'){
     // a whole run, not a block: never scaled into a token jog
-    const km = clamp(Math.min(weeklyKm*0.16, longKm*0.8), 4, 14);
+    const km = clamp(Math.min(weeklyKm*0.16, longKm*0.8), kmForMinutes(30, paces.easyPerKm), 14); // Daniels: a run is at least 30 min
     return {qualityKm:0, warmupKm:0, cooldownKm:0, km:round1(km)};
   }
   const pace = paces[paceKeyForType(type)] || paces.tempoPerKm;
@@ -1038,7 +1058,7 @@ function sizeQuality(type, cls, phase, t, scale, weeklyKm, longKm, raceKm, paces
     block = Math.max(floorBlock, maxDay - warmupKm - cooldownKm);
   }
   let eff = structuredEffort(type, block, raceKm);
-  const floorTarget = floorKm*floorMul*0.92;
+  const floorTarget = floorKm*floorMul*(type==='tempo' ? 0.98 : 0.92);
   for(const k of [1.1, 1.2, 1.3, 1.45, 1.6]){
     if(eff.workKm >= floorTarget) break;
     const tryBlock = block*k;
@@ -1058,15 +1078,20 @@ function sizeQuality(type, cls, phase, t, scale, weeklyKm, longKm, raceKm, paces
 // Daniels/Pfitzinger-style progression: build = threshold + hills + economy work; peak =
 // race-specific (short races: VO2max intervals and reps around threshold; long races:
 // extended threshold, race-pace rehearsal, over/unders, occasional intervals).
+// Daniels: Phase II = R-pace reps and hills (economy and speed, light on total stress);
+// Phase III = I-pace intervals with some T (the hardest phase); Phase IV = threshold work
+// and race-specific sessions. Hilly courses swap more hill sessions in.
 const ROTATIONS = {
-  build:   { short:['tempo','hills','cruise','intervals','tempo','hills'], long:['tempo','hills','cruise','progression','tempo','hills'] },
-  peak:    { short:['intervals','cruise','reps','intervals','tempo','reps'], long:['tempo','racepace','cruise','overunder','intervals','racepace'] },
-  buildHilly: { short:['hills','tempo','hills','cruise','intervals','hills'], long:['hills','tempo','hills','cruise','progression','hills'] },
-  peakHilly:  { short:['intervals','hills','cruise','reps','hills','tempo'], long:['tempo','hills','racepace','cruise','hills','overunder'] },
+  II:  { short:['hills','reps','hills','reps'], long:['hills','reps','hills','tempo'] },
+  III: { short:['intervals','tempo','intervals','cruise'], long:['intervals','cruise','intervals','tempo'] },
+  IV:  { short:['tempo','intervals','cruise','reps'], long:['tempo','racepace','cruise','overunder','racepace','tempo'] },
+  IIHilly:  { short:['hills','reps','hills','hills'], long:['hills','tempo','hills','hills'] },
+  IIIHilly: { short:['intervals','hills','intervals','cruise'], long:['intervals','hills','cruise','tempo'] },
+  IVHilly:  { short:['tempo','hills','cruise','intervals'], long:['tempo','hills','racepace','cruise','hills','overunder'] },
   secondary: { short:['hills','fartlek','cruise','progression'], long:['fartlek','progression','hills','cruise'] },
 };
-function rotationFor(phase, cls, isHilly, secondary){
-  const key = secondary ? 'secondary' : (phase==='peak' ? (isHilly?'peakHilly':'peak') : (isHilly?'buildHilly':'build'));
+function rotationFor(danielsPhase, cls, isHilly, secondary){
+  const key = secondary ? 'secondary' : ((danielsPhase==='I' ? 'II' : danielsPhase) + (isHilly ? 'Hilly' : ''));
   return ROTATIONS[key][cls==='5k'||cls==='10k' ? 'short' : 'long'];
 }
 
@@ -1124,28 +1149,31 @@ function buildWeekDays(spec){
     const cands = easyIdxs.filter(i=>i!==recoveryIdx);
     aerobicIdx = cands.reduce((best,i)=> circularDayDist(days[i].dow,spec.longDow) > circularDayDist(days[best].dow,spec.longDow) ? i : best, cands[0]);
   }
-  const thinPool = easyIdxs.length>0 && remaining/easyIdxs.length < 4;
-  const weight = i => thinPool ? 1 : i===recoveryIdx ? 0.6 : i===aerobicIdx ? 1.45 : 1.0;
+  const thinPool = easyIdxs.length>0 && remaining/easyIdxs.length < kmForMinutes(45, (spec.paces && spec.paces.easyPerKm) || 360);
+  const weight = i => (thinPool || spec._flatEasy) ? 1 : i===recoveryIdx ? 0.6 : i===aerobicIdx ? 1.45 : 1.0;
   const totalW = easyIdxs.reduce((s,i)=>s+weight(i),0);
-  // Caps: a plain easy day stays well under the long run; the medium-long day may reach 80%.
-  // Plain easy days stay clearly shorter than the long run; the medium-long day may approach
-  // it. With few run days the cap loosens (a 3-day runner's "easy" days are long by nature).
-  const easyCapFrac = spec.runsPerWeek<=3 ? 0.95 : spec.runsPerWeek===4 ? 0.90 : 0.85, medCapFrac = 0.92;
-  let capScale = 1;
   // Strides are funded from the easy pool first so the week total stays honest.
   const stridesEligible = easyIdxs.filter(i=>i!==recoveryIdx);
   const stridesIdxs = [];
   if(aerobicIdx!=null && spec.strides>0) stridesIdxs.push(aerobicIdx);
   stridesEligible.forEach(i=>{ if(stridesIdxs.length<(spec.strides||0) && !stridesIdxs.includes(i)) stridesIdxs.push(i); });
   const stridesKmFor = i => (i===aerobicIdx && spec.isHilly) ? HILL_STRIDES_EXTRA_KM : STRIDES_EXTRA_KM;
+  // Daniels: easy runs 30-60 min. Pfitzinger (Advanced Marathoning): medium-long runs are
+  // 11-16 miles and always shorter than the week's long run.
+  const easyPace = (spec.paces && spec.paces.easyPerKm) || 360;
+  // Daniels: 30-60 min for most runners; Pfitzinger's general-aerobic runs reach 8-10 mi
+  // (~75-90 min) in his 55+ mi/week plans, so the ceiling rises with weekly volume.
+  const easyMaxMin = interp([[64,60],[97,90]], Math.max(spec.levelKm||0, spec.weeklyKm||0));
+  const easyMaxKm = kmForMinutes(easyMaxMin, easyPace), medMaxKm = Math.min(unitToKm(16,'mi'), (spec.longKm||Infinity)*0.9);
+  let capScale = 1;
   const capRef = Math.max(spec.longKm, spec.capRefLongKm||0);
-  const capFor = i => capRef>0 ? Math.min(capRef*0.95, (i===aerobicIdx ? capRef*medCapFrac : capRef*easyCapFrac)*capScale) - (stridesIdxs.includes(i)?stridesKmFor(i):0) : Infinity;
+  const capFor = i => Math.min(capRef>0 ? capRef*0.95 : Infinity, i===aerobicIdx ? medMaxKm : easyMaxKm*capScale) - (stridesIdxs.includes(i)?stridesKmFor(i):0);
   remaining = Math.max(0, remaining - stridesIdxs.reduce((s,i)=>s+stridesKmFor(i),0));
   // Distribute with caps; water-fill so capped mileage flows to the other easy days.
   const alloc = {};
   let pool = remaining, open = easyIdxs.slice();
   for(let pass=0; pass<8 && pool>0.05; pass++){
-    if(!open.length){ if(capScale>=1.15) break; capScale += 0.08; open = easyIdxs.slice(); } // overflow: let easy days creep toward the long run before leaving miles unplaced
+    if(!open.length){ if(capScale>=1.1) break; capScale += 0.1; open = easyIdxs.slice(); } // one 10% stretch (66 min) before leaving miles unplaced
     if(!open.length) break;
     const w = open.reduce((s,i)=>s+weight(i),0);
     const next = [];
@@ -1155,10 +1183,12 @@ function buildWeekDays(spec){
   }
   // A token easy day (under ~2 km) helps nobody: turn it into rest and give its distance to
   // the others. (Shakeout/taper days are handled by the race-week pass, not here.)
-  const tooSmall = easyIdxs.filter(i=>(alloc[i]||0) < 2.0);
+  const tooSmall = easyIdxs.filter(i=>(alloc[i]||0) < kmForMinutes(30, easyPace)*0.85);
   if(tooSmall.length && !spec._noShrink){
     const dropIdx = tooSmall.sort((a,b)=>(alloc[a]||0)-(alloc[b]||0))[0];
-    return buildWeekDays({...spec, _noShrink: spec.runsPerWeek<=1, runsPerWeek: Math.max(0, spec.runsPerWeek-1), _forceRest:(spec._forceRest||[]).concat(days[dropIdx].dow)});
+    if(spec.runsPerWeek<=3) { /* three days is the floor: keep every run, even a short one */ }
+    else if(!spec._flatEasy && !thinPool) return buildWeekDays({...spec, _flatEasy:true}); // equal easy days first
+    else return buildWeekDays({...spec, _flatEasy:false, runsPerWeek: spec.runsPerWeek-1, _forceRest:(spec._forceRest||[]).concat(days[dropIdx].dow)});
   }
   const unplaced = round1(pool);
   const varietyIdx = (spec.varietyType && easyIdxs.filter(i=>i!==recoveryIdx && i!==aerobicIdx).length) ? easyIdxs.filter(i=>i!==recoveryIdx && i!==aerobicIdx)[0] : null;
@@ -1191,10 +1221,13 @@ function generatePlan(setup, dayOneOverride){
   const unit = setup.units||'km';
   const athlete = buildAthlete(setup);
   const currentKm = Math.max(5, athlete.weeklyKm || 10);
-  // More run days than the volume can fill produces token runs; cap so the average run is
-  // at least ~4.5 km, and say so.
+  // Daniels: easy runs are 30-60 minutes. Run days follow from that: the week must be able
+  // to give every easy day at least 30 minutes at easy pace once the long run and quality
+  // sessions have their share. If it can't, use fewer days and say so.
   const requestedRuns = clamp(setup.runsPerWeek || runsPerWeekFor(currentKm), 3, 7);
-  const runsPerWeek = clamp(Math.min(requestedRuns, Math.max(3, Math.floor(currentKm/5.5))), 3, 7);
+  const minEasyKm = kmForMinutes(30, athlete.zones.easyPerKm);
+  const maxEasyKm = kmForMinutes(60, athlete.zones.easyPerKm);
+  const runsPerWeek = clamp(Math.min(requestedRuns, Math.max(3, Math.floor((currentKm*0.85)/minEasyKm))), 3, 7);
   const longDow = setup.longDow ?? 0;
   const longEmphasis = setup.longRunEmphasis||'balanced', speedEmphasis = setup.speedEmphasis||'balanced';
 
@@ -1214,41 +1247,54 @@ function generatePlan(setup, dayOneOverride){
   const userCap = setup.maxWeeklyKm>0 ? setup.maxWeeklyKm : Infinity;
   const startVol = Math.min(currentKm, userCap);
   let targetPeak = Math.min(targetPeakWeeklyKm(raceKm, currentKm, longEmphasis, nTrain), userCap);
-  const trimming = targetPeak < startVol-0.5; // short race, runner well above what it needs
-  // cutback every 4th week, never the final training week (the taper follows it anyway)
+  const trimming = targetPeak < startVol-0.5; // short race, runner well above what it needs (owner decision)
+  // Daniels: raise weekly mileage by no more than the number of sessions you run per week
+  // (in miles), then hold that level for three to four weeks before the next step.
+  // Pfitzinger: every fourth week is a recovery week at ~80%. Together: 4-week blocks of
+  // three weeks at a level plus one cutback, each block one step above the last, until the
+  // peak is reached. The final training week is never a cutback (the taper follows it).
   const cutbackAt = new Set();
   for(let i=3;i<nTrain;i+=4) cutbackAt.add(i);
   if(cutbackAt.has(nTrain-1)){ cutbackAt.delete(nTrain-1); if(nTrain-2>=2) cutbackAt.add(nTrain-2); }
-  const vols = [], cutbacks = [];
-  let lastFull = startVol;
-  const holding = Math.abs(targetPeak-startVol) <= 0.5;
+  const stepKm = unitToKm(runsPerWeek, 'mi');
+  const vols = [], cutbacks = [], levels = [];
+  let level = startVol; // the level held through the current block
   for(let i=0;i<nTrain;i++){
     const cb = cutbackAt.has(i);
-    let v;
-    if(i===0) v = startVol;
-    else if(cb) v = lastFull*((holding||trimming)?0.85:0.80);
-    else if(trimming) v = Math.max(targetPeak, lastFull*0.95); // ease down over a couple of weeks
-    else v = Math.min(lastFull*(1+weeklyGrowthRateFor(lastFull)), targetPeak);
-    if(!cb) lastFull = v;
-    vols.push(round1(v)); cutbacks.push(cb);
+    if(i>0 && i%4===0){
+      if(trimming) level = Math.max(targetPeak, level - stepKm);
+      else level = Math.min(targetPeak, level + stepKm);
+    }
+    const v = cb ? level*((Math.abs(targetPeak-startVol)<=0.5||trimming)?0.85:0.80) : level;
+    vols.push(round1(v)); cutbacks.push(cb); levels.push(round1(level));
   }
   const peakWeeklyKm = vols.length ? Math.max(...vols) : startVol;
   if(targetPeak - peakWeeklyKm > 5 && cls!=='5k' && cls!=='10k'){
-    warnings.push(`${totalWeeks} weeks only allows a safe build to about ${fmtDist(peakWeeklyKm,unit,0)}/week, short of the ${fmtDist(targetPeak,unit,0)}/week a ${raceLabelKm(raceKm)} ideally peaks at from your current mileage. The plan stays conservative rather than rushing it.`);
+    warnings.push(`${totalWeeks} weeks allows a build to about ${fmtDist(peakWeeklyKm,unit,0)}/week — Daniels' rule is to add no more than ${runsPerWeek} miles at a time and hold each level three to four weeks — short of the ${fmtDist(targetPeak,unit,0)}/week a ${raceLabelKm(raceKm)} plan at your mileage peaks at. Nothing is rushed to close the gap.`);
   }
 
-  // --- phases across training weeks ---
+  // --- phases: Daniels' priority weeks over the whole plan, taper weeks being the tail of
+  //     Phase IV. skipBase (owner's option) hands Phase I weeks to Phases II/III. ---
+  const dp = danielsPhaseWeeks(totalWeeks);
   const fitnessRatio = clamp(startVol/Math.max(targetPeak,1), 0, 1);
-  if(runsPerWeek < requestedRuns) warnings.push(`${requestedRuns} running days at ${fmtDist(currentKm,unit,0)}/week would mean runs shorter than about 3 miles, so the plan uses ${runsPerWeek} days and keeps every run worth lacing up for. Add mileage and the extra day comes back.`);
+  if(runsPerWeek < requestedRuns) warnings.push(`${requestedRuns} running days at ${fmtDist(currentKm,unit,0)}/week would make some easy runs shorter than 30 minutes, the minimum Daniels gives an easy run, so the plan starts on ${runsPerWeek} days. A day comes back in any week whose mileage can carry it.`);
   if(raceKm>=15 && currentKm < raceKm*1.6) warnings.push(`${fmtDist(currentKm,unit,0)}/week is low for a ${raceLabelKm(raceKm)}. The plan builds what it safely can, but expect to treat this one as a completion goal unless the mileage comes up first.`);
   if(trimming) warnings.push(`You already run more than a ${raceLabelKm(raceKm)} needs, so the plan eases volume down about 10% to ${fmtDist(targetPeak,unit,0)}/week and spends the freed-up recovery on sharper quality sessions.`);
-  const baseFrac = interp([[0.5,0.45],[0.7,0.30],[0.85,0.18],[1,0.12]], fitnessRatio);
-  let baseCount = setup.skipBase ? 0 : (nTrain>=4 ? clamp(Math.round(nTrain*baseFrac), 1, 6) : (nTrain>=2 && fitnessRatio<0.7 ? 1 : 0));
-  if(athlete.vdotBasis!=='race' && !setup.skipBase && nTrain>=4) baseCount = Math.max(baseCount, 2);
-  const rem = Math.max(0, nTrain-baseCount);
-  const buildCount = rem>=2 ? Math.round(rem*0.5) : (rem===1 ? 0 : 0);
-  const peakCount = rem - buildCount;
+  let baseCount = setup.skipBase ? 0 : Math.min(dp.I, nTrain);
+  let phase2Count = dp.II + (setup.skipBase ? Math.ceil(dp.I/2) : 0);
+  let phase3Count = dp.III + (setup.skipBase ? Math.floor(dp.I/2) : 0);
+  // Phase IV covers the taper weeks too; whatever is left of it before the taper is 'peak'.
+  let peakCount = Math.max(0, dp.IV - nTaper);
+  // Reconcile to the training weeks actually available (rounding and taper geometry).
+  let buildCount = phase2Count + phase3Count;
+  let total = baseCount + buildCount + peakCount;
+  while(total > nTrain){ if(buildCount>0 && buildCount>=peakCount) buildCount--; else if(peakCount>0) peakCount--; else baseCount--; total--; }
+  while(total < nTrain){ peakCount++; total++; }
+  if(phase2Count + phase3Count > buildCount){ const over = phase2Count + phase3Count - buildCount; phase3Count = Math.max(0, phase3Count - Math.ceil(over/2)); phase2Count = Math.max(0, buildCount - phase3Count); }
   const phaseFor = w => w>=nTrain ? 'taper' : w<baseCount ? 'base' : w<baseCount+buildCount ? 'build' : 'peak';
+  // Within 'build', the first weeks are Daniels' Phase II (reps and hills), the rest Phase III
+  // (intervals, the hardest block). Exposed on each week as danielsPhase for the UI.
+  const danielsPhaseFor = w => w<baseCount ? 'I' : w<baseCount+phase2Count ? 'II' : w<baseCount+buildCount ? 'III' : 'IV';
 
   // --- long run ramp ---
   const peakLong = Math.min(peakLongTargetKm(raceKm, peakWeeklyKm, longEmphasis, runsPerWeek), setup.maxLongRunKm>0 ? setup.maxLongRunKm : Infinity);
@@ -1276,6 +1322,7 @@ function generatePlan(setup, dayOneOverride){
   // --- fitness, paces, goal ---
   const startVdot = athlete.vdot;
   const qualityWeeks = buildCount + peakCount;
+  const phaseCounts = {base:baseCount, II:phase2Count, III:phase3Count, peak:peakCount, taper:nTaper};
   const endVdot = startVdot + Math.min(3, qualityWeeks/6); // Daniels: ~1 VDOT per 6 weeks of good training
   const prediction = athlete.races.length ? predictRace(athlete, raceKm) : null;
   const goal = assessGoal(prediction, setup.goalTimeSec);
@@ -1292,17 +1339,13 @@ function generatePlan(setup, dayOneOverride){
   const vdotForWeek = w => { if(w>=nTrain) return endVdot; const q0 = baseCount; if(w<q0) return startVdot; return startVdot + (endVdot-startVdot)*clamp((w-q0+1)/Math.max(qualityWeeks,1), 0, 1); };
 
   // --- quality configuration ---
-  // Second quality day: 'balanced' adds it once the week has five runs and 40 km to carry it;
-  // 'high' adds it from five runs and 30 km, or with four runs at 70+ km (the lone easy day
-  // is then long enough to absorb the rest); 'low' never adds it and holds quality for the
-  // final phase. Emphasis also scales the session length (0.85 / 1 / 1.1).
-  const nQualityMax = speedEmphasis==='low' ? 1
-    : speedEmphasis==='high' ? (((runsPerWeek>=5 && currentKm>=30) || (runsPerWeek===4 && currentKm>=70)) ? 2 : 1)
-    : ((runsPerWeek>=5 && currentKm>=40) ? 2 : 1);
-  const qDows = qualityDowsFor(longDow, nQualityMax);
+  // Daniels' and Pfitzinger's four-day plans run two quality sessions plus the long run, with
+  // sessions sized to the week (the share caps do that here) and 48 h between hard days (the
+  // day layout does that). So the gate is run days, not mileage: 'high' from four runs,
+  // 'balanced' from five, 'low' never (and quality waits for the final phase).
   const introducePhase = speedEmphasis==='low' ? 'peak' : 'build';
   const sessionScale = speedEmphasis==='high' ? 1.1 : speedEmphasis==='low' ? 0.85 : 1;
-  const medLong = runsPerWeek>=5 && (cls==='half' || cls==='marathon' || cls==='mid');
+  const nQualityFor = runs => speedEmphasis==='low' ? 1 : speedEmphasis==='high' ? (runs>=4 ? 2 : 1) : (runs>=5 ? 2 : 1);
 
   const weeks = [];
   for(let w=0; w<totalWeeks; w++){
@@ -1318,16 +1361,52 @@ function generatePlan(setup, dayOneOverride){
 
     let weeklyKm, longKm;
     if(w<nTrain){ weeklyKm = vols[w]; longKm = longs[w]; if(taperDays>0 && longD>0 && longD<=taperDays) longKm = round1(Math.min(longKm, achievedPeakLong*taperLongFactor(raceKm, longD))); }
-    else {
+    const weekHasRace = daysBetween(weekStart, raceDate)>=0 && daysBetween(weekStart, raceDate)<=6;
+    if(weekHasRace && taperMode==='none'){ const pre = daysBetween(weekStart, raceDate); weeklyKm = round1(weeklyKm*pre/7); longKm = round1(Math.min(longKm, weeklyKm*longFracCap(raceKm, weeklyKm, runsPerWeek))); }
+
+    const peakBase = w>=nTrain ? Math.max(...weeks.slice(0,nTrain).map(x=>x.plannedKm||0), 1) : peakWeeklyKm;
+    if(w>=nTrain){ // taper weeks
       const vf = taperVolumeFactor(raceKm, Math.max(0,midD)), lf = longD>0 ? taperLongFactor(raceKm, longD) : 0;
       const soften = f => taperMode==='light' ? 1-(1-f)*0.5 : f;
-      weeklyKm = round1(peakWeeklyKm*soften(vf)); longKm = longD>0 ? round1(achievedPeakLong*soften(lf)) : 0;
+      weeklyKm = round1(peakBase*soften(vf)); longKm = longD>0 ? round1(achievedPeakLong*soften(lf)) : 0;
     }
+    // Daniels: easy runs are 30-60 min. What the week has left for easy days once the long
+    // run and the smallest sensible session (warm-up, cool-down, the floor at threshold) are
+    // in decides the rest: how many run days it can carry, whether a cutback would starve the
+    // runs (Daniels' beginner plans have no recovery weeks, so such a cutback is held), and
+    // whether the week is too small for a session at all (then it takes Daniels' beginner
+    // structure: equal ~30-min easy runs with strides).
+    const minRun = kmForMinutes(30, paces.easyPerKm);
+    const sessionEstKm = vol => QUALITY_WARMUP_KM + QUALITY_COOLDOWN_KM + kmForMinutes(floorMinutesFor('tempo', vol), paces.tempoPerKm);
+    const sessionWeek = phase==='taper' || phase==='peak' || (phase==='build' && introducePhase==='build');
+    const fixedDays = sessionWeek ? 2 : 1; // long run, plus the session in a session week
+    const easyTotalKm = (vol, long) => vol - long - (sessionWeek ? sessionEstKm(vol) : 0);
+    const easyRoomKm = (vol, long, runs) => easyTotalKm(vol, long) / Math.max(1, runs-fixedDays);
+    let heldCutback = false;
+    if(w<nTrain && isCutback && !weekHasRace && easyRoomKm(vols[w], longs[w], runsPerWeek) < minRun){ weeklyKm = levels[w]; longKm = w>0 ? longs[w-1] : longs[w]; heldCutback = true; }
+    let runsW = clamp(Math.min(requestedRuns, fixedDays + Math.floor(easyTotalKm(weeklyKm, longKm)/minRun + 0.1)), 3, 7);
+    let beginnerWeek = w<nTrain && !weekHasRace && easyRoomKm(weeklyKm, longKm, 3) < minRun*0.9;
+    const applyBeginner = () => { runsW = clamp(Math.min(requestedRuns, Math.floor(weeklyKm/minRun + 0.05)), 3, 7); longKm = round1(Math.max(weeklyKm/runsW*1.06, minRun)); };
+    if(beginnerWeek) applyBeginner();
+    // The long run is the week's longest run by definition. With few run days Daniels' 25-30%
+    // share can fall below the other runs, so it is lifted to ~10% above the average run.
+    const inTaperWindow = taperDays>0 && longD>0 && longD<=taperDays;
+    if(!beginnerWeek && w<nTrain && longKm>0 && !inTaperWindow) longKm = round1(Math.max(longKm, Math.min(weeklyKm/runsW*1.06, kmForMinutes(longTimeCapMin(raceKm), paces.longPerKm))));
+    const nQualityMax = nQualityFor(runsW);
+    const qDows = qualityDowsFor(longDow, nQualityMax);
+    const medLongFor = lk => runsW>=5 && !weekHasRace && lk >= unitToKm(11,'mi') && (cls==='half' || cls==='marathon' || cls==='mid');
 
     // quality sessions this week
     const quality = [];
     const t = phase==='build' ? clamp((w-baseCount)/Math.max(buildCount-1,1),0,1) : phase==='peak' ? clamp((w-baseCount-buildCount)/Math.max(peakCount-1,1),0,1) : 1;
-    const wantsQuality = phase==='taper' || (phase==='peak') || (phase==='build' && introducePhase==='build');
+    void fitnessRatio;
+    // Daniels' beginner plans are easy runs of 30 min with strides and no separate quality day;
+    // a week too small to give every run 30 min once a session (with warm-up and cool-down)
+    // is in it takes that structure instead.
+    const roomForQuality = !beginnerWeek && easyRoomKm(weeklyKm, longKm, runsW) >= minRun*0.9;
+    const beginnerNote = () => { if(!warnings.some(x=>/beginner structure/.test(x))) warnings.push(`At ${fmtDist(currentKm,unit,0)}/week the plan follows Daniels' beginner structure — easy runs of about 30 minutes with strides, no separate speed session — because a session with its warm-up and cool-down would leave the other runs too short. Structured sessions start once the mileage can carry them.`); };
+    if(!roomForQuality && w<nTrain) beginnerNote();
+    const wantsQuality = roomForQuality && (phase==='taper' || (phase==='peak') || (phase==='build' && introducePhase==='build'));
     if(wantsQuality && longKm>0 || (phase==='taper' && weeklyKm>0)){
       if(phase==='taper'){
         // Keep intensity, cut volume: one race-specific sharpener at ~60% of a normal session,
@@ -1345,13 +1424,14 @@ function generatePlan(setup, dayOneOverride){
           quality.push({dow:qd, type, scale:sc, ...s});
         }
       } else {
-        const rot = rotationFor(phase, cls, isHilly, false);
-        const idx = phase==='build' ? (w-baseCount) : (w-baseCount-buildCount);
+        const dph = danielsPhaseFor(w);
+        const rot = rotationFor(dph, cls, isHilly, false);
+        const idx = dph==='II' ? (w-baseCount) : dph==='III' ? (w-baseCount-phase2Count) : (w-baseCount-buildCount);
         const type = rot[idx % rot.length];
         const s = sizeQuality(type, cls, phase, t, sessionScale*(isCutback?0.8:1), weeklyKm, longKm, raceKm, paces);
         quality.push({dow:qDows[0], type, scale:sessionScale*(isCutback?0.8:1), ...s});
         if(nQualityMax>=2 && !isCutback){
-          const rot2 = rotationFor(phase, cls, isHilly, true);
+          const rot2 = rotationFor(dph, cls, isHilly, true);
           let type2 = rot2[idx % rot2.length]; if(type2===type) type2 = rot2[(idx+1)%rot2.length];
           const s2 = sizeQuality(type2, cls, phase, t, 0.65*sessionScale, weeklyKm, longKm, raceKm, paces);
           quality.push({dow:qDows[1], type:type2, scale:0.65*sessionScale, secondary:true, ...s2});
@@ -1363,8 +1443,16 @@ function generatePlan(setup, dayOneOverride){
     if(quality.length && longKm>0){
       const maxQ = Math.max(...quality.map(q=>q.km));
       const qTotal = quality.reduce((a,q)=>a+q.km,0);
-      const roomForEasy = weeklyKm - qTotal - 2.5*Math.max(0, runsPerWeek-1-quality.length);
-      if(longKm < maxQ+0.6) longKm = round1(Math.max(longKm, Math.min(maxQ+0.6, roomForEasy, kmForMinutes(longTimeCapMin(raceKm), paces.longPerKm))));
+      const easyDays = Math.max(0, runsW-1-quality.length);
+      const needLong = Math.max(longKm, maxQ+0.6);
+      const easyEach = easyDays ? (weeklyKm - needLong - qTotal)/easyDays : Infinity;
+      if(w<nTrain && !weekHasRace && easyEach < minRun*0.9){
+        // the sized session does not fit after all: beginner structure this week
+        quality.length = 0; beginnerWeek = true; applyBeginner(); beginnerNote();
+      } else if(longKm < maxQ+0.6){
+        longKm = round1(Math.min(needLong, kmForMinutes(longTimeCapMin(raceKm), paces.longPerKm)));
+      }
+      if(!beginnerWeek && w<nTrain && !weekHasRace) runsW = clamp(Math.min(requestedRuns, Math.max(runsW, 1 + quality.length + Math.floor((weeklyKm - longKm - qTotal)/minRun + 0.1))), 3, 7);
     }
     // Race-pace finish inside the long run: half/marathon peak phase, alternate weeks.
     let longRacePaceKm = 0;
@@ -1373,10 +1461,11 @@ function generatePlan(setup, dayOneOverride){
       longRacePaceKm = round1(longKm*(cls==='marathon' ? 0.4 : 0.3));
     }
     const varietyType = phase==='base' && w%2===1 ? (Math.floor(w/2)%2===0 ? 'fartlek' : 'progression') : null;
-    const strides = phase==='base' || phase==='build' ? 2 : phase==='peak' ? 1 : (midD>2 ? 1 : 0);
+    const strides = !roomForQuality ? 2 : phase==='base' || phase==='build' ? 2 : phase==='peak' ? 1 : (midD>2 ? 1 : 0);
 
-    const buildOnce = vol => buildWeekDays({weekStart, weeklyKm:vol, longKm, longDow, phase, isCutback, weekIndex:w, quality, runsPerWeek, strides,
-      raceKm, raceDate, paces, varietyType, medLong, longRacePaceKm, isHilly, unit, capRefLongKm: phase==='taper' ? achievedPeakLong*0.7 : 0});
+    const medLong = medLongFor(longKm);
+    const buildOnce = vol => buildWeekDays({weekStart, weeklyKm:vol, longKm, longDow, phase, isCutback, weekIndex:w, quality, runsPerWeek:runsW, strides,
+      raceKm, raceDate, paces, varietyType, medLong, longRacePaceKm, isHilly, unit, capRefLongKm: phase==='taper' ? achievedPeakLong*0.7 : 0, levelKm: w<nTrain ? levels[w] : peakBase});
     let built = buildOnce(weeklyKm);
     const firstUnplaced = built.unplacedKm;
     if(built.unplacedKm > weeklyKm*0.03 && quality.length){
@@ -1387,8 +1476,15 @@ function generatePlan(setup, dayOneOverride){
       built = buildOnce(weeklyKm);
     }
     const days = built.days;
+    // The taper is measured in days (Bosquet), so easy days of a training week that fall
+    // inside the taper window are reduced by the taper's volume factor for that day.
+    if(w<nTrain && taperDays>0 && !weekHasRace){
+      let removed = 0;
+      days.forEach(d=>{ if(d.type==='easy' && d.km>0 && d.daysToRace!=null && d.daysToRace>0 && d.daysToRace<=taperDays){ const vf = taperVolumeFactor(raceKm, d.daysToRace); const f = taperMode==='light' ? 1-(1-vf)*0.5 : vf; const nk = round1(d.km*f); removed += d.km-nk; d.km = nk; } });
+      if(removed>0) weeklyKm = round1(weeklyKm - removed);
+    }
     if(firstUnplaced>Math.max(1, weeklyKm*0.05) && w<nTrain && !warnings.some(x=>x.startsWith('With '))){
-      warnings.push(`With ${runsPerWeek} running days, ${fmtDist(weeklyKm,unit,0)}/week means very long easy days. The plan caps easy runs below the long run and lets the week come in a little under target — adding a running day would fix that.`);
+      warnings.push(`With ${runsW} running days, ${fmtDist(w<nTrain ? levels[w] : weeklyKm,unit,0)}/week doesn't fit: Daniels keeps easy runs to 30–60 minutes, so the week comes in under target. Adding a running day is the fix.`);
     }
 
     // race week / post-race days
@@ -1409,7 +1505,7 @@ function generatePlan(setup, dayOneOverride){
     const minDaysToRace = Math.min(...days.map(d=>d.daysToRace));
     placeStrengthDays(days, setup.strengthDows, setup.strengthPerWeek, phase, w, {minDaysToRace, weekInBlock, strengthCutoffDays, trainThrough: taperMode==='none', equipment: setup.equipment});
 
-    weeks.push({weekIndex:w, phase, isCutback, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, nominalKm: w<nTrain ? vols[w] : weeklyKm, paces, days, baselineVdot:weekVdot, daysToRaceAtStart: daysBetween(weekStart, raceDate)});
+    weeks.push({weekIndex:w, runsPerWeek: runsW, levelKm: w<nTrain ? levels[w] : peakBase, phase, danielsPhase: w<nTrain ? danielsPhaseFor(w) : 'IV', isCutback: isCutback && !heldCutback, beginnerStructure: beginnerWeek, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, nominalKm: (w<nTrain && !beginnerWeek && !heldCutback) ? vols[w] : weeklyKm, paces, days, baselineVdot:weekVdot, daysToRaceAtStart: daysBetween(weekStart, raceDate)});
   }
 
   return {
@@ -1417,7 +1513,7 @@ function generatePlan(setup, dayOneOverride){
     athlete:{races:athlete.races, weeklyKm:athlete.weeklyKm, longestKm:athlete.longestKm, vdot:athlete.vdot, marathonSec:athlete.marathonSec},
     startVdot, endVdot, buildWeeksCount:nTrain, rampWeeks, taperDays, taperWeeks:nTaper, taperMode,
     goalRacePerKm: setup.goalTimeSec ? racePerKm : null, racePerKm,
-    prediction, goalStatus: goal.status, peakWeeklyKm, peakLongKm: achievedPeakLong, warnings, runsPerWeek, longTimeCapMin: longTimeCapMin(raceKm),
+    prediction, goalStatus: goal.status, peakWeeklyKm, peakLongKm: achievedPeakLong, warnings, runsPerWeek: requestedRuns, runsWeekOne: runsPerWeek, longTimeCapMin: longTimeCapMin(raceKm), phaseCounts,
     paces:weeks[0].paces, weeks,
   };
 }
@@ -1434,20 +1530,24 @@ function finishGeneralPlan(setup, weeks, startVdot, endVdot, extra){
   const athlete = buildAthlete(setup);
   const runsUsed = Math.max(...weeks.map(w=>w.days.filter(d=>d.km>0).length));
   const shortfall = weeks.some(w=>w.plannedKm && w.targetKm < w.plannedKm*0.92);
-  const warnings = shortfall ? [`With ${runsUsed} running days, ${fmtDist(athlete.weeklyKm, setup.units||'km', 0)}/week means very long easy days. The plan caps easy runs below the long run and lets the week come in under target — adding a running day would fix that.`] : [];
+  const fewer = (extra && extra.runsRequested) && runsUsed < extra.runsRequested ? [`${extra.runsRequested} running days at ${fmtDist(athlete.weeklyKm, setup.units||'km', 0)}/week would make some easy runs shorter than 30 minutes, the minimum Daniels gives an easy run, so the plan uses ${runsUsed} days. Add mileage and the extra day comes back.`] : [];
+  const warnings = fewer.concat(shortfall ? [`With ${runsUsed} running days, ${fmtDist(athlete.weeklyKm, setup.units||'km', 0)}/week means very long easy days. The plan caps easy runs below the long run and lets the week come in under target — adding a running day would fix that.`] : []);
   return {
     runsPerWeek: runsUsed, longTimeCapMin: (setup.planKind==='distance' && setup.distanceGoalMetric==='longest') ? 195 : 150,
     generatedAt:new Date().toISOString(), engineVersion:ENGINE_VERSION, planKind:setup.planKind,
     athlete:{races:athlete.races, weeklyKm:athlete.weeklyKm, longestKm:athlete.longestKm, vdot:athlete.vdot, marathonSec:athlete.marathonSec},
     raceDate:lastDay.date, raceDistanceKm:null, totalWeeks:weeks.length,
     startVdot, endVdot, buildWeeksCount:weeks.length, rampWeeks:Math.max(weeks.length-1,1),
-    goalRacePerKm:null, paces:weeks[0].paces, weeks, warnings, ...(extra||{}),
+    goalRacePerKm:null, paces:weeks[0].paces, weeks, warnings, ...(extra||{}), runsRequested: undefined,
   };
 }
 function generalWeekCommon(setup){
   const athlete = buildAthlete(setup);
   const currentKm = Math.max(5, athlete.weeklyKm||10);
-  return {athlete, currentKm, longDow:setup.longDow ?? 0, runsPerWeek: clamp(Math.min(setup.runsPerWeek || runsPerWeekFor(currentKm), Math.max(3, Math.floor(currentKm/5.5))),3,7), weekStart0: startOfWeek(setup._dayOne || todayDate(), setup.weekStartDow), unit:setup.units||'km', isHilly:false};
+  const minEasyKm = kmForMinutes(30, athlete.zones.easyPerKm); // Daniels: easy runs 30-60 min
+  const requestedRuns = clamp(setup.runsPerWeek || runsPerWeekFor(currentKm), 3, 7);
+  const runsForKm = km => clamp(Math.min(requestedRuns, Math.max(3, Math.floor((km*0.85)/minEasyKm + 0.1))), 3, 7);
+  return {athlete, currentKm, minEasyKm, requestedRuns, runsForKm, longDow:setup.longDow ?? 0, runsPerWeek: runsForKm(currentKm), weekStart0: startOfWeek(setup._dayOne || todayDate(), setup.weekStartDow), unit:setup.units||'km', isHilly:false};
 }
 // Build Speed: 3:1 waves, two quality sessions (when the week has >= 4 runs), long run held
 // near 25%, strength twice a week - the evidence-backed dose for economy gains.
@@ -1470,13 +1570,17 @@ function generateSpeedPlan(setup, dayOneOverride){
     const s = sizeQuality(type, '10k', inCycle>=2?'peak':'build', inCycle/3, isCutback?0.8:1, weeklyKm, longKm, 10, paces);
     const quality = [{dow:qDows[0], type, ...s}];
     if(nQ>=2 && !isCutback){ const t2 = ['hills','fartlek','cruise','progression'][w%4]; const s2 = sizeQuality(t2, '10k', 'build', 0.5, 0.65, weeklyKm, longKm, 10, paces); quality.push({dow:qDows[1], type:t2, secondary:true, ...s2}); }
-    const longKmAdj = Math.max(longKm, round1(Math.min(Math.max(...quality.map(q=>q.km))+0.6, kmForMinutes(150, paces.longPerKm))));
-    const built = buildWeekDays({weekStart, weeklyKm, longKm:longKmAdj, longDow:c.longDow, phase:'build', isCutback, weekIndex:w, quality, runsPerWeek:c.runsPerWeek, strides:1, raceKm:10, paces, medLong:false, unit:c.unit});
+    let longKmAdj = Math.max(longKm, round1(Math.min(Math.max(...quality.map(q=>q.km))+0.6, kmForMinutes(150, paces.longPerKm))));
+    const qTotal = quality.reduce((a,q)=>a+q.km,0), easyDays = Math.max(1, c.runsPerWeek-1-quality.length);
+    let beginnerStructure = false;
+    if((weeklyKm - longKmAdj - qTotal)/easyDays < c.minEasyKm*0.9){ quality.length = 0; longKmAdj = longKm; beginnerStructure = true; }
+    const built = buildWeekDays({weekStart, weeklyKm, longKm:longKmAdj, longDow:c.longDow, phase:'build', isCutback, weekIndex:w, quality, runsPerWeek:c.runsPerWeek, strides:beginnerStructure?2:1, raceKm:10, paces, medLong:false, unit:c.unit});
     finishWeekDays(built.days, 10);
     placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?2:setup.strengthPerWeek, isCutback?'cutback':'build', w, {weekInBlock:inCycle, equipment: setup.equipment});
-    list.push({weekIndex:w, phase:isCutback?'cutback':'build', isCutback, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:vdot});
+    list.push({weekIndex:w, phase:isCutback?'cutback':'build', isCutback, beginnerStructure, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:vdot});
   }
-  return finishGeneralPlan(setup, list, startVdot, endVdot);
+  const beginnerNote = list.some(x=>x.beginnerStructure) ? [`At ${fmtDist(c.currentKm, c.unit, 0)}/week some weeks follow Daniels' beginner structure — easy runs of about 30 minutes with strides, no separate speed session — because a session with its warm-up and cool-down would leave the other runs too short.`] : [];
+  const out = finishGeneralPlan(setup, list, startVdot, endVdot, {runsRequested: c.requestedRuns}); out.warnings = out.warnings.concat(beginnerNote); return out;
 }
 const DISTANCE_LONG_FRACTION = 0.28;
 function generateDistancePlan(setup, dayOneOverride){
@@ -1491,21 +1595,24 @@ function generateDistancePlan(setup, dayOneOverride){
     const weekStart = addDays(c.weekStart0, w*7);
     const t = weeks<=1 ? 1 : w/(weeks-1);
     const isCutback = w>0 && w<weeks-1 && (w%4===3);
-    // ramp toward the target, never more than 12% over the last full week; cutbacks sit 15% under
-    const val = w===0 ? fromKm : isCutback ? prevFull*0.85 : Math.min(fromKm*Math.pow(toKm/fromKm, t), prevFull*1.12);
-    if(!isCutback) prevFull = val;
+    // Weekly volume: Daniels' step rule - up at most (runs per week) miles, held for a 4-week
+    // block with Pfitzinger's recovery week in it. Longest run: Higdon - about a mile a week.
+    let val;
+    if(metric==='longest'){ val = w===0 ? fromKm : isCutback ? prevFull*0.78 : Math.min(prevFull + unitToKm(1,'mi'), toKm); }
+    else { if(w>0 && w%4===0) prevFull = Math.min(prevFull + unitToKm(c.runsForKm(prevFull), 'mi'), toKm); val = isCutback ? prevFull*0.85 : prevFull; }
+    if(!isCutback && metric==='longest') prevFull = val;
     prevVal = val;
     let weeklyKm, longKm;
     if(metric==='longest'){ longKm = round1(Math.min(val, kmForMinutes(195, paces.longPerKm))); weeklyKm = round1(Math.max(longKm/DISTANCE_LONG_FRACTION, c.currentKm)); if(isCutback && list.length) weeklyKm = round1(Math.min(weeklyKm, list[list.length-1].plannedKm*0.85)); }
     else weeklyKm = round1(val);
-    const runs = clamp(Math.min(setup.runsPerWeek || runsPerWeekFor(weeklyKm), Math.max(3, Math.floor(weeklyKm/5.5))), 3, 7);
+    const runs = c.runsForKm(weeklyKm);
     if(metric!=='longest') longKm = round1(Math.min(weeklyKm*(runs<=4 ? 0.33 : DISTANCE_LONG_FRACTION), kmForMinutes(150, paces.longPerKm)));
     const built = buildWeekDays({weekStart, weeklyKm, longKm, longDow:c.longDow, phase:'base', isCutback, weekIndex:w, quality:[], runsPerWeek:runs, strides:1, raceKm:10, paces, medLong:runs>=5, unit:c.unit});
     finishWeekDays(built.days, 10);
     placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?1:setup.strengthPerWeek, isCutback?'cutback':'base', w, {weekInBlock:w%4, equipment: setup.equipment});
     list.push({weekIndex:w, phase:isCutback?'cutback':'base', isCutback, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
   }
-  return finishGeneralPlan(setup, list, c.athlete.vdot, c.athlete.vdot);
+  return finishGeneralPlan(setup, list, c.athlete.vdot, c.athlete.vdot, {runsRequested: c.requestedRuns});
 }
 function generateMaintenancePlan(setup, dayOneOverride){
   const c = generalWeekCommon({...setup, _dayOne:dayOneOverride});
@@ -1518,11 +1625,14 @@ function generateMaintenancePlan(setup, dayOneOverride){
     const weekStart = addDays(c.weekStart0, w*7);
     const type = w%3===2 ? 'cruise' : 'tempo';
     const s = sizeQuality(type, '10k', 'build', 0.5, 0.9, c.currentKm, longKm, 10, paces);
-    const longKmAdj = Math.max(longKm, round1(Math.min(s.km+0.6, kmForMinutes(150, paces.longPerKm))));
-    const built = buildWeekDays({weekStart, weeklyKm:c.currentKm, longKm:longKmAdj, longDow:c.longDow, phase:'maintenance', isCutback:false, weekIndex:w, quality:[{dow:qDows[0], type, ...s}], runsPerWeek:c.runsPerWeek, strides:1, raceKm:10, paces, medLong:false, unit:c.unit});
+    let longKmAdj = Math.max(longKm, round1(Math.min(s.km+0.6, kmForMinutes(150, paces.longPerKm))));
+    // Daniels' beginner structure when the session would leave the easy runs under 30 minutes
+    let quality = [{dow:qDows[0], type, ...s}];
+    if((c.currentKm - longKmAdj - s.km)/Math.max(1, c.runsPerWeek-2) < c.minEasyKm*0.9){ quality = []; longKmAdj = longKm; }
+    const built = buildWeekDays({weekStart, weeklyKm:c.currentKm, longKm:longKmAdj, longDow:c.longDow, phase:'maintenance', isCutback:false, weekIndex:w, quality, runsPerWeek:c.runsPerWeek, strides:quality.length?1:2, raceKm:10, paces, medLong:false, unit:c.unit});
     finishWeekDays(built.days, 10);
     placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?1:setup.strengthPerWeek, 'maintenance', w, {weekInBlock:w%4, equipment: setup.equipment});
-    list.push({weekIndex:w, phase:'maintenance', isCutback:false, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:c.currentKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
+    list.push({weekIndex:w, phase:'maintenance', isCutback:false, beginnerStructure: quality.length===0, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:c.currentKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
   }
   return finishGeneralPlan(setup, list, c.athlete.vdot, c.athlete.vdot);
 }
@@ -1530,18 +1640,19 @@ function generateRecoveryPlan(setup, dayOneOverride){
   const c = generalWeekCommon({...setup, _dayOne:dayOneOverride});
   const weeks = setup.weeks;
   const paces = zonesForVdot(c.athlete, c.athlete.vdot); paces.racePerKm = null;
-  const runs = clamp((setup.runsPerWeek || runsPerWeekFor(c.currentKm))-1, 3, 4);
+  const fit = Math.floor(c.currentKm*0.65/(c.minEasyKm*0.9));
+  const runs = clamp(Math.min(Math.max(c.requestedRuns-1, 3), fit), 2, 4);
   const list = [];
   for(let w=0; w<weeks; w++){
     const weekStart = addDays(c.weekStart0, w*7);
     const t = weeks<=1 ? 1 : w/(weeks-1);
     const weeklyKm = round1(c.currentKm*(0.55+0.20*t));
-    const longKm = round1(Math.min(weeklyKm*(runs<=4 ? 0.33 : DISTANCE_LONG_FRACTION), kmForMinutes(120, paces.longPerKm)));
+    const longKm = round1(Math.min(Math.max(weeklyKm*(runs<=4 ? 0.33 : DISTANCE_LONG_FRACTION), weeklyKm/runs*1.06), kmForMinutes(120, paces.longPerKm)));
     const built = buildWeekDays({weekStart, weeklyKm, longKm, longDow:c.longDow, phase:'recovery', isCutback:false, weekIndex:w, quality:[], runsPerWeek:runs, strides:0, raceKm:10, paces, medLong:false, unit:c.unit});
     finishWeekDays(built.days, 10);
     built.days.forEach(d=>{ if(d.type==='long'){ d.paceKey='easyPerKm'; d.descBase='Longer easy run — relaxed, no pace pressure'; } });
     placeStrengthDays(built.days, [], 0, 'recovery', w, {equipment: setup.equipment});
-    list.push({weekIndex:w, phase:'recovery', isCutback:false, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
+    list.push({weekIndex:w, runsPerWeek: runs, phase:'recovery', isCutback:false, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
   }
   return finishGeneralPlan(setup, list, c.athlete.vdot, c.athlete.vdot);
 }
@@ -1592,7 +1703,7 @@ function validatePlan(plan, setup){
     // volume it was planned at, not the truncated total.
     const actualTot = w.days.reduce((s,d)=>s+(d.type==='race'?0:d.km),0);
     const containsRace = w.days.some(d=>d.type==='race');
-    const tot = w.plannedKm ? Math.max(w.plannedKm, actualTot) : actualTot;
+    const tot = Math.max(w.plannedKm||0, actualTot, containsRace && plan.peakWeeklyKm ? plan.peakWeeklyKm*0.6 : 0);
     const long = w.days.find(d=>d.type==='long');
     const q = w.days.filter(d=>QUALITY_TYPES.includes(d.type) && d.type!=='long' && !d.easyVariety);
     const easy = w.days.filter(d=>d.type==='easy' || d.easyVariety);
@@ -1605,7 +1716,7 @@ function validatePlan(plan, setup){
       if(['tempo','cruise','overunder'].includes(d.type)){
         const tMin = minutesForKm(qk, p.tempoPerKm);
         const capT = Math.max((raceWeekLike?0.15:0.10)*tot, kmForMinutes(floorMinutesFor('tempo', w.plannedKm||tot), p.tempoPerKm)*taperF*1.3); // floor + whole-rep rounding
-        if(qk > capT+(tot<20?0.6:0.3)) v.push(`${wk} ${d.type}: ${qk.toFixed(1)} km at threshold > 10% of ${tot.toFixed(1)} km week (and above the 20-min floor)`);
+        if(qk > capT+(tot<20?0.6:0.3)+(containsRace?0.3:0)) v.push(`${wk} ${d.type}: ${qk.toFixed(1)} km at threshold > 10% of ${tot.toFixed(1)} km week (and above the 20-min floor)`);
         if(tMin > 41) v.push(`${wk} ${d.type}: ${tMin.toFixed(0)} min at threshold (>40)`);
         if(isRace && raceKm>=10 && qk >= raceKm) v.push(`${wk} ${d.type}: threshold distance ${qk.toFixed(1)} >= race distance`);
       }
@@ -1616,19 +1727,26 @@ function validatePlan(plan, setup){
       if(!raceWeekLike && !w.isCutback && !d.secondary){
         const volRef = w.plannedKm || tot;
         const fT = floorMinutesFor('tempo', volRef), fI = floorMinutesFor('intervals', volRef);
-        if(['tempo','cruise','overunder'].includes(d.type) && minutesForKm(qk, p.tempoPerKm) < fT*(d.type==='tempo' ? 0.95 : 0.85)) v.push(`${wk} ${d.type}: only ${minutesForKm(qk, p.tempoPerKm).toFixed(0)} min at threshold (floor ${fT.toFixed(0)})`);
-        if(d.type==='intervals' && minutesForKm(qk, p.intervalPerKm) < fI*0.9) v.push(`${wk} intervals: only ${minutesForKm(qk, p.intervalPerKm).toFixed(0)} min at I pace (floor ${fI.toFixed(0)})`);
+        if(['tempo','cruise','overunder'].includes(d.type) && minutesForKm(qk, p.tempoPerKm) < fT*0.8-0.5) v.push(`${wk} ${d.type}: only ${minutesForKm(qk, p.tempoPerKm).toFixed(0)} min at threshold (floor ${fT.toFixed(0)})`);
+        if(d.type==='intervals' && minutesForKm(qk, p.intervalPerKm) < fI*0.8-0.5) v.push(`${wk} intervals: only ${minutesForKm(qk, p.intervalPerKm).toFixed(0)} min at I pace (floor ${fI.toFixed(0)})`);
       }
     });
     if(long && long.km>0){
       const share = long.km/tot;
-      const cap = isRace ? longFracCap(raceKm, tot, setup ? setup.runsPerWeek||4 : 4)+0.04 : 0.42;
+      const cap = isRace ? Math.max(longFracCap(raceKm, tot, w.runsPerWeek||4)+0.06, (w.runsPerWeek||4)<=3 ? 0.38 : 0) : ((w.runsPerWeek||4)<=2 ? 0.56 : 0.42);
       const fewDaysPlan = (plan.warnings||[]).some(x=>/running days/.test(x));
       if(w.phase!=='taper' && share > cap && !fewDaysPlan && long.km>=9) v.push(`${wk} long run ${long.km} km = ${(share*100).toFixed(0)}% of week (cap ${(cap*100).toFixed(0)}%)`);
       const lMin = minutesForKm(long.km, p.longPerKm);
       if(lMin > (plan.longTimeCapMin || (isRace ? longTimeCapMin(raceKm) : 150))+5) v.push(`${wk} long run ${lMin.toFixed(0)} min exceeds time cap`);
     }
-    easy.forEach(d=>{ if(long && long.km>0 && d.km >= long.km && w.phase!=='taper') v.push(`${wk} easy day ${d.km} km >= long run`); });
+    easy.forEach(d=>{
+      if(long && long.km>0 && d.km >= long.km && w.phase!=='taper') v.push(`${wk} easy day ${d.km} km >= long run`);
+      const min = minutesForKm(d.km, p.easyPerKm);
+      const easyCeil = interp([[64,60],[97,90]], Math.max(w.levelKm||0, w.plannedKm||tot))*1.12;
+      if(d.easyRole!=='aerobic' && min > easyCeil && w.phase!=='taper') v.push(`${wk} easy run ${min.toFixed(0)} min (ceiling ${easyCeil.toFixed(0)})`);
+      if(d.easyRole==='aerobic' && d.km > unitToKm(16,'mi')+0.3) v.push(`${wk} medium-long run ${d.km} km (Pfitzinger: 11-16 mi)`);
+      if(d.label!=='Shakeout Jog' && min < ((w.beginnerStructure || w.phase==='recovery') ? 21 : 25) && w.phase!=='taper' && !containsRace && d.daysToRace!=null && d.daysToRace>Math.max(2, plan.taperDays||0)) v.push(`${wk} easy run only ${min.toFixed(0)} min (Daniels: 30 min minimum)`);
+    });
     // hard-day spacing
     const hard = w.days.filter(d=>isLegDemandingDay(d));
     for(let i=0;i<hard.length;i++) for(let j=i+1;j<hard.length;j++){ if(circularDayDist(hard[i].dow, hard[j].dow)<2) v.push(`${wk} hard days back-to-back: ${hard[i].label} / ${hard[j].label}`); }
@@ -1650,10 +1768,13 @@ function validatePlan(plan, setup){
   // week-over-week growth and taper
   const vols = weeks.map(w=>w.days.reduce((s,d)=>s+(d.type==='race'?0:d.km),0));
   const nominal = weeks.map((w,i)=>w.plannedKm!=null ? w.plannedKm : vols[i]);
+  const stepKm = unitToKm(plan.runsWeekOne || plan.runsPerWeek || (setup && setup.runsPerWeek) || 5, 'mi');
   for(let i=1;i<vols.length;i++){
     if(weeks[i].phase==='taper' || weeks[i].phase==='recovery' || weeks[i-1].isCutback) continue;
     if((plan.warnings||[]).some(x=>/running days/.test(x))) continue;
-    if(nominal[i] > nominal[i-1]*1.125+2.5) v.push(`w${i+1} volume +${(100*(vols[i]/vols[i-1]-1)).toFixed(0)}% over previous week`);
+    // Daniels: a step is at most (sessions per week) miles; general plans keep a 12% ceiling
+    const allowed = isRace ? stepKm+0.5 : nominal[i-1]*0.125+2.5;
+    if(nominal[i] - nominal[i-1] > allowed) v.push(`w${i+1} volume up ${(nominal[i]-nominal[i-1]).toFixed(1)} km over previous week (Daniels step is ${stepKm.toFixed(1)} km)`);
   }
   if(isRace && setup){
     const cur = setup.currentWeeklyKm||0;
@@ -1663,7 +1784,7 @@ function validatePlan(plan, setup){
     if((raceKm<=10) && peak > Math.max(cur*1.12, 40)+0.5) v.push(`peak ${peak.toFixed(1)} km exceeds +12% over current for a short race`);
     // a real taper, measured in days before the race rather than calendar weeks
     const taperMode = plan.taperMode||'full';
-    if(plan.totalWeeks > 2 && plan.buildWeeksCount>=3 && taperMode!=='none'){
+    if(plan.totalWeeks > 2 && plan.buildWeeksCount>=5 && taperMode!=='none'){
       const lightF = taperMode==='light' ? 0.18 : 0;
       const allDays = weeks.flatMap(w=>w.days);
       const kmIn = (lo,hi) => allDays.filter(d=>d.daysToRace>=lo && d.daysToRace<=hi && d.type!=='race').reduce((s,d)=>s+d.km,0);
@@ -1698,7 +1819,7 @@ return {
   STRENGTH_EXERCISES, OPTIONAL_EXTRAS, EQUIPMENT, DEFAULT_EQUIPMENT, equipmentSet, resolveExercise, STRENGTH_TIME_MIN, lowerStrengthTierForPhase, buildLowerStrengthWorkout, buildUpperStrengthWorkout,
   placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts,
   qualityDowsFor, deriveScheduleFromLongDow, evenlySpacedPositions, scheduleWarnings,
-  raceClass, taperDaysFor, taperVolumeFactor, taperLongFactor, weeklyGrowthRateFor, targetPeakWeeklyKm, peakLongTargetKm, longFracCap, longTimeCapMin,
+  raceClass, taperDaysFor, taperVolumeFactor, taperLongFactor, targetPeakWeeklyKm, peakLongTargetKm, longFracCap, longTimeCapMin,
   qualityMinutes, floorMinutesFor, sizeQuality, buildWeekDays, generatePlan,
   PLAN_KIND_META, generateSpeedPlan, generateDistancePlan, generateMaintenancePlan, generateRecoveryPlan, generateGeneralPlan,
   distanceGoalWarning, raceLongRunWarning, validatePlan,
