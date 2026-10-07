@@ -226,6 +226,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 86. **A runner who said they had been training since August got no credit for it.** Sessions before the tracking start earned nothing, so "now" sat at the start fitness (and, before item 84, below it). *Owner rule:* assume full adherence to the plan for the weeks before today when the plan is back-dated. *Fix:* quality sessions dated before the tracking start are credited as completed; "now" then carries the gain those weeks were scheduled to bring. *Guard:* tests/projection.js 6b.
 
+87. **"Not logged" badges (and the missed-session prompt) on days before the tracking start**, which the runner had asked to skip and which the projection now credits as done. *Fix:* days before the tracking start never show as not logged or missed.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
