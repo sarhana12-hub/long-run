@@ -104,3 +104,9 @@ projection.
 The setup projections stand on the best published work for recreational runners. The
 in-plan adjustment is the weak part: it is driven by a scheduled ramp plus a noisy signal
 from workouts, while the strongest evidence (races and missed sessions) is ignored.
+
+## Status (2026-10-07, same day)
+
+Built: a race log (manual and Strava) that resets the number; average rep time for interval, cruise and rep sessions (typed, or read from Strava laps when they match the rep distance) so those sessions count; the scheduled gain credited per completed quality session; a two-week detraining rule; the three-number card with a headline inside its range; a goal line; marathon mileage term fed with logged mileage for "now" and peak mileage for the potential; training paces that follow the evidence-led number. Rules and their status are in docs/RULES.md under "Fitness projection". Tests: tests/projection.js.
+
+Not built: Tanda as a mid-plan cross-check (needs eight weeks of logs and a display decision); widening the setup band with the distance gap and the age of the race result.

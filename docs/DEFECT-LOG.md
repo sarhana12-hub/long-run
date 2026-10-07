@@ -163,6 +163,11 @@ Residual (documented, not hidden): across 2,400 random plans one train-through r
 58. **Onboarding copy contradicted the plan** (lower-body strength "on easy or rest days"; base phase "scaled to your mileage"). *Fix:* copy matches the rules.
 59. **Treadmill was only reachable through Edit, and only for hill days.** *Fix:* a Treadmill switch inside every run day shows belt speed and the incline note (Jones & Doust 1996: 1% grade matches outdoor effort).
 
+## Round 7 — projections (2026-10-07)
+
+60. **The projection was a scheduled promise.** "On pace for X" rose on a fixed VDOT ramp from day one, never fell for missed sessions, and workouts fed it through a noisy blend that counted interval recovery jogs as the effort. *Fix:* evidence-led fitness model (engine projectFitness): races reset it, logged tempo/interval sessions nudge it within caps (intervals only with a rep time), the scheduled gain is credited per completed session, two weeks of light training eases it. Three numbers with ranges replace the single figure. *Guard:* tests/projection.js.
+61. **Nowhere to log a race or an interval session properly.** *Fix:* "This was a race" on both manual and Strava logging; an average-rep-time field on interval-type days, pre-filled from Strava laps when they match the rep distance.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy

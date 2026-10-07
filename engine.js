@@ -239,11 +239,11 @@ function zonesForPlanVdot(plan, vdot){
 // Race-time projection for the Progress tab: scale the athlete's recorded races to the
 // given VDOT (what they'd run those distances at today) and run the mileage-adjusted
 // prediction from there, so the headline projection uses the same honest model as setup.
-function projectRaceTime(plan, vdot, km){
+function projectRaceTime(plan, vdot, km, weeklyKmOverride){
   const a = plan && plan.athlete;
   if(a && a.races && a.races.length && a.vdot){
     const races = a.races.map(r=>({km:r.km, sec:r.sec*predictedTimeMinFromVdot(vdot, r.km)/predictedTimeMinFromVdot(a.vdot, r.km)}));
-    const p = predictRace({races, weeklyKm:a.weeklyKm, longestKm:a.longestKm}, km);
+    const p = predictRace({races, weeklyKm: weeklyKmOverride!=null ? weeklyKmOverride : a.weeklyKm, longestKm:a.longestKm}, km);
     if(p) return {sec:p.sec, lowSec:p.lowSec, highSec:p.highSec};
   }
   const sec = predictedTimeMinFromVdot(vdot, km)*60;
@@ -1806,7 +1806,163 @@ function validatePlan(plan, setup){
   return v;
 }
 
+/* ============================= fitness projection ============================= */
+/* Three numbers for the Progress tab: fitness at the start of the plan, fitness now, and
+   fitness if the rest of the plan is completed - all in VDOT, all turned into race times by
+   projectRaceTime so they share one model (Vickers & Vertosick above 40 km with the mileage
+   term, Riegel 1.07 below).
+
+   "Now" is evidence-led, in Daniels' order of trust:
+   1. A race result resets fitness outright (Daniels: VDOT comes from races).
+   2. The scheduled gain - about one VDOT per six weeks of quality training (Daniels) - is
+      credited only for quality sessions actually logged. Daniels gives the rate; crediting
+      it per completed session is judgement.
+   3. Logged quality sessions nudge it: tempos and over/unders through the threshold %VO2max,
+      cruise, interval and rep sessions through their own %VO2max once the rep time is known.
+      One session moves it a fraction of its own reading and the sum is capped at +/-2 VDOT,
+      so a tempo run too hard never counts for more than a race would - judgement.
+   4. Two weeks of running under half the planned volume start a slow decline of 0.5 VDOT per
+      further week, capped at 2. Mujika & Padilla (2000) report VO2max falling 4-14% over
+      2-8 weeks of detraining; the per-week figure sits inside that range (judgement).
+   "If you complete the plan" adds the scheduled gain still to come, in full. */
+const FITNESS = {
+  halfLifeDays:21, sessionCapUp:2, sessionCapDown:3, totalCap:2, damping:1.5, recentSessions:5, lookbackDays:42,
+  typeWeight:{tempo:1, overunder:0.8, cruise:1, intervals:0.8, reps:0.5},
+  lowWindowDays:14, lowFraction:0.5, decayPerWeek:0.5, decayCap:2,
+  potentialBand:0.6, noEvidenceBand:1.0,
+};
+// Pace of the quality portion of a logged tempo-type run: back the warm-up and cool-down
+// out at easy pace, then whatever time is left belongs to the effort.
+function effortPaceSecPerKm(day, log, easyPaceSecPerKm){
+  const blended = log.durationSec/log.distanceKm;
+  const easyKm = (day.warmupKm||0)+(day.cooldownKm||0);
+  if(!(easyKm>0.15) || !(log.distanceKm>easyKm+0.3) || !(easyPaceSecPerKm>0)) return blended;
+  const qKm = log.distanceKm-easyKm, qSec = Math.max(0, log.durationSec-easyKm*easyPaceSecPerKm);
+  return qSec>0 ? qSec/qKm : blended;
+}
+// Rep distance for an interval-type day, read from its own session text ("5 × 800m ...").
+function repMetersForDay(day){
+  if(!day || !day.descBase) return null;
+  const m = day.descBase.match(/(\d+) × (\d+)m/);
+  return m ? Number(m[2]) : null;
+}
+function projectFitness(plan, logs, today){
+  today = today || todayDate();
+  const out = {startVdot: plan.startVdot, nowVdot:null, potentialVdot:null, anchor:null, earnedGain:0, remainingGain:0, workoutAdjust:0, decay:0, lowDays:0, evidence:[], raceLogs:[], sessionsDone:0, sessionsDue:0, nowBand:0, potentialBand:FITNESS.potentialBand, recentWeeklyKm:null};
+  if(plan.startVdot==null || !plan.weeks || !plan.weeks.length) return out;
+  const planStart = parseDate(plan.weeks[0].weekStart);
+  const byDate = {}; plan.weeks.forEach(w=>w.days.forEach(d=>{ byDate[d.date] = {day:d, week:w}; }));
+  const inPlan = (logs||[]).filter(l=>l && l.distanceKm>0 && l.durationSec>0 && parseDate(l.date)>=planStart && parseDate(l.date)<=today);
+
+  // 1. Anchor: the most recent race in the plan, else the setup fitness.
+  const races = inPlan.filter(l=>l.kind==='race' && l.distanceKm>=3).sort((a,b)=>a.date<b.date?1:-1);
+  let anchorVdot = plan.startVdot, anchorDate = planStart, anchorKind = 'start';
+  out.raceLogs = races.map(r=>({date:r.date, distanceKm:r.distanceKm, durationSec:r.durationSec, vdot: round1(vdotFromRace(r.distanceKm, r.durationSec))}));
+  if(races.length){ anchorVdot = vdotFromRace(races[0].distanceKm, races[0].durationSec); anchorDate = parseDate(races[0].date); anchorKind = 'race'; }
+  out.anchor = {kind:anchorKind, date:fmtDate(anchorDate), vdot:round1(anchorVdot)};
+
+  // 2. Scheduled gain, credited per completed quality session since the anchor.
+  const rampWeeks = plan.weeks.filter(w=>w.phase==='build' || w.phase==='peak');
+  const totalGain = Math.max(0, (plan.endVdot!=null ? plan.endVdot : plan.startVdot) - plan.startVdot);
+  const gPerWeek = rampWeeks.length ? totalGain/rampWeeks.length : 0;
+  const isSession = d => d.km>0 && QUALITY_TYPES.includes(d.type) && d.type!=='long';
+  const loggedDates = new Set(inPlan.filter(l=>l.kind!=='race').map(l=>l.date));
+  let earned = 0, remaining = 0, done = 0, due = 0;
+  rampWeeks.forEach(w=>{
+    const sessions = w.days.filter(isSession);
+    const wEnd = addDays(parseDate(w.weekStart), 6);
+    if(!sessions.length){ if(wEnd<=today){ if(wEnd>anchorDate) earned += gPerWeek; } else remaining += gPerWeek; return; }
+    const per = gPerWeek/sessions.length;
+    sessions.forEach(d=>{
+      const dd = parseDate(d.date);
+      if(dd>today){ remaining += per; return; }
+      if(dd<=anchorDate) return; // already reflected in the race result
+      due++;
+      if(loggedDates.has(d.date)){ earned += per; done++; }
+    });
+  });
+  out.earnedGain = round1(earned); out.remainingGain = round1(remaining); out.sessionsDone = done; out.sessionsDue = due;
+
+  // 3. Workout evidence since the anchor.
+  const samples = [];
+  inPlan.filter(l=>l.kind!=='race').forEach(l=>{
+    const hit = byDate[l.date]; if(!hit) return;
+    const {day, week} = hit; const dd = parseDate(l.date);
+    if(dd<=anchorDate || daysBetween(dd, today) > FITNESS.lookbackDays) return;
+    const type = day.type; let pace = null, pct = null;
+    if(type==='tempo' || type==='overunder'){
+      const baseVdot = week.baselineVdot!=null ? week.baselineVdot : plan.startVdot;
+      pace = effortPaceSecPerKm(day, l, zonesForPlanVdot(plan, baseVdot).easyPerKm); pct = THRESHOLD_PCT;
+    } else if((type==='cruise' || type==='intervals' || type==='reps') && l.repSec>0 && l.repMeters>0){
+      pace = l.repSec/(l.repMeters/1000); pct = type==='cruise' ? THRESHOLD_PCT : type==='intervals' ? INTERVAL_PCT : REP_PCT;
+    }
+    if(pace==null || !(pace>120 && pace<900)) return;
+    const implied = impliedVdotFromPace(pace, pct);
+    const delta = clamp(implied - (anchorVdot + earned), -FITNESS.sessionCapDown, FITNESS.sessionCapUp);
+    const weight = (FITNESS.typeWeight[type]||0.5) * Math.pow(0.5, daysBetween(dd, today)/FITNESS.halfLifeDays);
+    samples.push({date:l.date, type, impliedVdot: round1(implied), delta: round1(delta), weight: Math.round(weight*100)/100});
+  });
+  samples.sort((a,b)=>a.date<b.date?1:-1);
+  const recent = samples.slice(0, FITNESS.recentSessions);
+  const sumW = recent.reduce((s,x)=>s+x.weight, 0);
+  let adjust = sumW>0 ? recent.reduce((s,x)=>s+x.weight*x.delta, 0)/(sumW+FITNESS.damping) : 0;
+  adjust = clamp(adjust, -FITNESS.totalCap, FITNESS.totalCap);
+  out.evidence = recent; out.workoutAdjust = round1(adjust);
+
+  // 4. Detraining: two weeks under half the planned volume, then a slow decline.
+  const lowWindow = endDate => {
+    const start = addDays(endDate, -(FITNESS.lowWindowDays-1));
+    if(start<planStart || endDate<=anchorDate) return false;
+    let planned = 0, logged = 0;
+    for(let i=0;i<FITNESS.lowWindowDays;i++){ const h = byDate[fmtDate(addDays(start,i))]; if(h && h.day.type!=='race') planned += h.day.km||0; }
+    inPlan.forEach(l=>{ const d = parseDate(l.date); if(d>=start && d<=endDate) logged += l.distanceKm; });
+    return planned>0 && logged < planned*FITNESS.lowFraction;
+  };
+  let lowDays = 0;
+  if(lowWindow(today)){ lowDays = FITNESS.lowWindowDays; let k=1; while(k<180 && lowWindow(addDays(today,-k))){ lowDays++; k++; } }
+  const decay = Math.min(FITNESS.decayCap, Math.max(0, lowDays-FITNESS.lowWindowDays)/7*FITNESS.decayPerWeek);
+  out.lowDays = lowDays; out.decay = round1(decay);
+
+  out.nowVdot = round1(anchorVdot + earned + adjust - decay);
+  out.potentialVdot = round1(out.nowVdot + remaining);
+  const strength = anchorKind==='race' ? 1 : Math.min(1, sumW/2);
+  out.nowBand = Math.round((1-strength)*FITNESS.noEvidenceBand*10)/10;
+
+  // Mileage actually run over the last eight weeks, for the marathon model's mileage term.
+  const eightWeeksAgo = addDays(today, -55);
+  const weeksOfLogs = Math.min(8, Math.max(1, Math.ceil((daysBetween(planStart, today)+1)/7)));
+  const recentKm = inPlan.filter(l=>parseDate(l.date)>=eightWeeksAgo).reduce((s,l)=>s+l.distanceKm, 0);
+  out.recentWeeklyKm = weeksOfLogs>=3 && recentKm>0 ? round1(recentKm/weeksOfLogs) : null;
+  return out;
+}
+// Start / now / potential as race times at `km`, each with its range. The marathon model's
+// mileage term uses the mileage that applies to each number: setup mileage at the start,
+// recent logged mileage now (setup mileage until three weeks of logs exist), the plan's
+// peak for the potential.
+function fitnessProjections(plan, logs, today, km, goalSec){
+  const f = projectFitness(plan, logs, today);
+  if(f.nowVdot==null) return null;
+  const a = plan.athlete || {};
+  const at = (vdot, band, weeklyKm) => {
+    const mid = projectRaceTime(plan, vdot, km, weeklyKm);
+    const fast = band ? projectRaceTime(plan, vdot+band, km, weeklyKm) : mid;
+    const slow = band ? projectRaceTime(plan, vdot-band, km, weeklyKm) : mid;
+    return {vdot: round1(vdot), sec: mid.sec, lowSec: Math.min(mid.lowSec, fast.lowSec), highSec: Math.max(mid.highSec, slow.highSec), paceSecPerKm: mid.sec/km};
+  };
+  const start = at(f.startVdot, 0, a.weeklyKm);
+  const now = at(f.nowVdot, f.nowBand, f.recentWeeklyKm!=null ? f.recentWeeklyKm : a.weeklyKm);
+  const peakKm = Math.max(plan.peakWeeklyKm||0, a.weeklyKm||0) || a.weeklyKm;
+  const potential = at(f.potentialVdot, f.potentialBand, peakKm);
+  let goal = null;
+  if(goalSec>0){
+    const status = goalSec>=potential.sec ? 'inside' : goalSec>=potential.lowSec ? 'edge' : 'beyond';
+    goal = {sec: goalSec, status};
+  }
+  return {start, now, potential, goal, fitness: f};
+}
+
 return {
+  FITNESS, effortPaceSecPerKm, repMetersForDay, projectFitness, fitnessProjections,
   KM_PER_MI, ENGINE_VERSION, pad2, uid, clamp, round1, fmtDate, parseDate, addDays, daysBetween, startOfWeek, todayDate,
   kmToUnit, unitToKm, fmtDist, interp, parseDurationToSec, secToClock, paceStr, speedStr, paceOrSpeedStr, circularDayDist,
   kmForMinutes, minutesForKm,

@@ -252,6 +252,14 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .sx-row .sx-more{font-size:12.5px; color:var(--ink-soft); margin-top:6px; line-height:1.45;}
 .sx-row .sx-more b{color:var(--ink);}
 .sx-row.done .sx-name{color:var(--muted); text-decoration:line-through;}
+/* projection card */
+.proj-row{display:grid; grid-template-columns:1fr auto; gap:2px 12px; align-items:baseline; padding:9px 0; border-bottom:1px solid var(--line-soft);}
+.proj-row:last-child{border-bottom:none;}
+.proj-row .proj-l{font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);}
+.proj-row .proj-v{font-family:var(--font-mono); font-weight:800; font-size:18px; text-align:right;}
+.proj-row.now .proj-v{font-size:26px; color:var(--accent-strong);}
+.proj-row .proj-r{grid-column:1 / -1; font-size:12.5px; color:var(--ink-soft);}
+.proj-row.now .proj-r{color:var(--ink); font-weight:600;}
 /* settings collapsibles */
 .settings-details summary{list-style:none; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 0; cursor:pointer; -webkit-tap-highlight-color:transparent;}
 .settings-details summary::-webkit-details-marker{display:none;}
@@ -517,26 +525,47 @@ function baselineVdotForWeek(plan, week){
   const frac = week.weekIndex>=plan.buildWeeksCount ? 1 : clamp(week.weekIndex/plan.rampWeeks, 0, 1);
   return plan.startVdot + (plan.endVdot-plan.startVdot)*frac;
 }
+// The fitness model (engine: projectFitness) is computed once per render for the live plan
+// and logs; other callers (a what-if without one log) compute their own.
+let _fitnessMemo = {key:null, value:null};
+function fitnessFor(plan, logs){
+  const key = plan===state.plan && logs===state.logs
+    ? [plan.generatedAt, plan.engineVersion, logs.length, logs[0] ? logs[0].id : '', fmtDate(todayDate())].join('|')
+    : null;
+  if(key && _fitnessMemo.key===key) return _fitnessMemo.value;
+  const value = projectFitness(plan, logs);
+  if(key) _fitnessMemo = {key, value};
+  return value;
+}
+// Fitness the paces of a given week should follow: past weeks keep the baseline they were
+// run at; the current week runs at today's evidence-led fitness; later weeks add the
+// scheduled gain still to come between now and then (Daniels' rate), so training paces
+// step up on schedule only from where the evidence says the runner is.
+function fitnessVdotForWeek(plan, week, logs){
+  const baselineVdot = baselineVdotForWeek(plan, week);
+  const isPastWeek = addDays(parseDate(week.weekStart),6) < todayDate();
+  if(isPastWeek) return baselineVdot;
+  const f = fitnessFor(plan, logs);
+  if(f.nowVdot==null) return baselineVdot;
+  const ti = todayWeekIndex(plan);
+  const rampWeeks = plan.weeks.filter(w=>w.phase==='build' || w.phase==='peak');
+  const gPerWeek = rampWeeks.length ? Math.max(0, plan.endVdot-plan.startVdot)/rampWeeks.length : 0;
+  const ahead = rampWeeks.filter(w=>w.weekIndex>ti && w.weekIndex<=week.weekIndex).length;
+  return f.nowVdot + gPerWeek*ahead;
+}
 function getWeekPaces(plan, week, logs){
   if(plan.startVdot==null){
     return week.paces || plan.paces; // plans saved before the vdot model existed
   }
-  const baselineVdot = baselineVdotForWeek(plan, week);
-  const weekStartDate = parseDate(week.weekStart);
-  const isPastWeek = addDays(weekStartDate,6) < todayDate();
-
-  let effectiveVdot = baselineVdot;
-  let effectiveEndVdot = plan.endVdot;
-  const recal = isPastWeek ? null : computeRecalibration(plan, logs);
-  if(recal){
-    effectiveVdot = baselineVdot*(1-recal.weight) + recal.perfImpliedVdot*recal.weight;
-    effectiveEndVdot = plan.endVdot*(1-recal.weight) + recal.perfImpliedVdot*recal.weight;
-  }
-  const zones = zonesForPlanVdot(plan, effectiveVdot);
+  const vdot = fitnessVdotForWeek(plan, week, logs);
+  const zones = zonesForPlanVdot(plan, vdot);
   if(plan.raceDistanceKm==null) zones.racePerKm = null;
   else if(plan.goalRacePerKm!=null) zones.racePerKm = plan.goalRacePerKm;
-  else if(plan.racePerKm!=null && !recal) zones.racePerKm = plan.racePerKm;
-  else zones.racePerKm = projectRaceTime(plan, effectiveEndVdot, plan.raceDistanceKm).sec/plan.raceDistanceKm;
+  else {
+    const f = fitnessFor(plan, logs);
+    const peakKm = Math.max(plan.peakWeeklyKm||0, (plan.athlete&&plan.athlete.weeklyKm)||0) || undefined;
+    zones.racePerKm = projectRaceTime(plan, f.potentialVdot!=null ? f.potentialVdot : plan.endVdot, plan.raceDistanceKm, peakKm).sec/plan.raceDistanceKm;
+  }
   return zones;
 }
 
@@ -554,11 +583,7 @@ function findWeekForToday(plan){
 // can answer "what would I run right now" independent of training-pace display.
 function currentEffectiveVdot(plan, logs){
   if(plan.startVdot==null) return null;
-  const week = findWeekForToday(plan);
-  const baselineVdot = baselineVdotForWeek(plan, week);
-  const isPastWeek = addDays(parseDate(week.weekStart),6) < todayDate();
-  const recal = isPastWeek ? null : computeRecalibration(plan, logs);
-  return recal ? baselineVdot*(1-recal.weight) + recal.perfImpliedVdot*recal.weight : baselineVdot;
+  return fitnessFor(plan, logs).nowVdot;
 }
 // The plan's own end-of-plan VDOT, recalibrated the same way currentEffectiveVdot() is -
 // "what this plan is on pace for by its final week, assuming you complete the rest of it."
@@ -567,10 +592,7 @@ function currentEffectiveVdot(plan, logs){
 // number - "full adherence" means finishing out the plan, not ignoring how it's gone so far.
 function goalEffectiveVdot(plan, logs){
   if(plan.startVdot==null) return null;
-  const week = findWeekForToday(plan);
-  const isPastWeek = addDays(parseDate(week.weekStart),6) < todayDate();
-  const recal = isPastWeek ? null : computeRecalibration(plan, logs);
-  return recal ? plan.endVdot*(1-recal.weight) + recal.perfImpliedVdot*recal.weight : plan.endVdot;
+  return fitnessFor(plan, logs).potentialVdot;
 }
 // Fixed distances general (non-race) plans project against, since there's no single race
 // to headline the way a race plan has.
@@ -1052,6 +1074,20 @@ async function fetchStravaRuns(){
     }));
 }
 
+// Average rep time from an activity's laps: laps within 25% of the planned rep distance are
+// taken as the reps (recovery jogs and the warm-up are a different length), and their mean
+// pace is scaled to the rep distance. null when fewer than two laps match.
+async function fetchStravaRepSec(activityId, repMeters){
+  const token = await ensureStravaToken();
+  if(!token || !repMeters) return null;
+  const res = await fetch(`https://www.strava.com/api/v3/activities/${activityId}/laps`, {headers:{Authorization:`Bearer ${token}`}});
+  if(!res.ok) return null;
+  const laps = await res.json();
+  const reps = (laps||[]).filter(l=>l.distance>0 && l.moving_time>0 && Math.abs(l.distance-repMeters)/repMeters<=0.25);
+  if(reps.length<2) return null;
+  const paceSecPerM = reps.reduce((s,l)=>s+l.moving_time/l.distance,0)/reps.length;
+  return Math.round(paceSecPerM*repMeters);
+}
 function defaultDraft(){
   return {
     name: state.name || '',
@@ -2166,11 +2202,12 @@ function computeProgressStats(){
   // don't project a speed improvement, only race plans and Build Speed do), so this stays
   // null there rather than repeating the same value a third time.
   const hasGoal = goalVdot!=null && plan.startVdot!=null && Math.abs(goalVdot-plan.startVdot) > 0.05;
+  void hasGoal;
   const raceProjection = (!isGeneralPlan(state.setup) && plan.startVdot!=null && currentVdot!=null)
-    ? { km: plan.raceDistanceKm, start: raceProjectionFor(plan.startVdot, plan.raceDistanceKm), current: raceProjectionFor(currentVdot, plan.raceDistanceKm), goal: hasGoal ? raceProjectionFor(goalVdot, plan.raceDistanceKm) : null }
+    ? (()=>{ const p = fitnessProjections(plan, state.logs, todayDate(), plan.raceDistanceKm, state.setup.goalTimeSec||0); return p ? { km: plan.raceDistanceKm, start:p.start, current:p.now, goal:p.potential, goalCheck:p.goal, fitness:p.fitness } : null; })()
     : null;
   const generalProjections = (isGeneralPlan(state.setup) && plan.startVdot!=null && currentVdot!=null)
-    ? PROJECTION_DISTANCES.map(d=>({ ...d, start: raceProjectionFor(plan.startVdot, d.km), current: raceProjectionFor(currentVdot, d.km), goal: hasGoal ? raceProjectionFor(goalVdot, d.km) : null }))
+    ? PROJECTION_DISTANCES.map(d=>{ const p = fitnessProjections(plan, state.logs, todayDate(), d.km, 0); return { ...d, start:p.start, current:p.now, goal: Math.abs(p.potential.vdot-p.now.vdot)>0.05 ? p.potential : null, fitness:p.fitness }; })
     : null;
 
   return {
@@ -2583,9 +2620,34 @@ function evaluateAndTriggerAchievements(newLog){
 // comparison below, both the race-plan tile and each general-plan distance row.
 function projectionDeltaText(startTimeSec, currentTimeSec){
   const deltaSec = startTimeSec - currentTimeSec; // positive = current is the faster (lower) time
-  if(!computeRecalibration(state.plan, state.logs)) return 'moves once you log tempo or interval sessions';
-  if(Math.abs(deltaSec) < 5) return 'about the same as at the start';
+  if(Math.abs(deltaSec) < 5) return 'No change yet — moves as you log quality sessions and races';
   return `${secToClock(Math.abs(deltaSec))} ${deltaSec>0?'faster':'slower'} than at the start`;
+}
+// What the "now" number rests on, in one line.
+function projectionEvidenceText(f){
+  if(!f) return '';
+  const bits = [];
+  if(f.anchor && f.anchor.kind==='race'){ const r = f.raceLogs[0]; bits.push(`your ${raceLabelKm(r.distanceKm)} on ${niceDate(parseDate(r.date))}`); }
+  else bits.push('your race result at setup');
+  if(f.evidence.length) bits.push(`${f.evidence.length} logged quality session${f.evidence.length===1?'':'s'}`);
+  if(f.sessionsDue>0) bits.push(`${f.sessionsDone} of ${f.sessionsDue} quality sessions done`);
+  let text = 'Based on ' + bits.join(', ') + '.';
+  if(f.decay>0) text += ` Easing after ${f.lowDays} days of light training.`;
+  return text;
+}
+function goalCheckText(goalCheck, potential){
+  if(!goalCheck) return '';
+  const goal = secToClock(goalCheck.sec);
+  if(goalCheck.status==='inside') return `Your goal of ${goal} sits inside what this plan can reach.`;
+  if(goalCheck.status==='edge') return `Your goal of ${goal} is at the fast edge of the range — possible, not assured.`;
+  return `Your goal of ${goal} is beyond what this plan supports; the realistic range is ${secToClock(potential.lowSec)}–${secToClock(potential.highSec)}.`;
+}
+function projectionRowsHtml(p, unit, fmt){
+  const range = x => `${secToClock(x.lowSec)}–${secToClock(x.highSec)}`;
+  return `
+    <div class="proj-row"><div class="proj-l">At the start</div><div class="proj-v">${secToClock(p.start.sec)}</div><div class="proj-r">${paceOrSpeedStr(p.start.paceSecPerKm,unit,fmt)} · range ${range(p.start)}</div></div>
+    <div class="proj-row now"><div class="proj-l">Now</div><div class="proj-v">${secToClock(p.current.sec)}</div><div class="proj-r">${paceOrSpeedStr(p.current.paceSecPerKm,unit,fmt)} · likely ${range(p.current)}</div></div>
+    ${p.goal ? `<div class="proj-row"><div class="proj-l">If you complete the plan</div><div class="proj-v">${secToClock(p.goal.sec)}</div><div class="proj-r">${paceOrSpeedStr(p.goal.paceSecPerKm,unit,fmt)} · likely ${range(p.goal)}</div></div>` : ''}`;
 }
 // Race plans headline their one actual race distance as a tappable tile, matching the
 // existing 4-tile stat pattern; general plans show three fixed reference distances as
@@ -2596,19 +2658,19 @@ function renderRaceProjectionSection(stats, unit, fmt){
     const p = stats.raceProjection;
     return `
     <div class="section-title" style="padding:0; margin-top:0;">Projected race performance</div>
-    <button class="card stat-tile" data-act="open-stat-detail" data-stat="race-projection" style="padding:16px; margin-bottom:16px;">
-      <div class="v">${secToClock(p.current.timeSec)}</div>
-      <div class="l">projected finish today (${paceOrSpeedStr(p.current.paceSecPerKm,unit,fmt)})${p.current.lowSec ? ` · likely ${secToClock(p.current.lowSec)}–${secToClock(p.current.highSec)}` : ''}</div>
-      <div class="hint" style="margin-top:6px;">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}</div>
-      ${p.goal ? `<div class="hint" style="margin-top:2px; color:var(--accent-strong);">Could reach about ${secToClock(p.goal.lowSec||p.goal.timeSec)}–${secToClock(p.goal.highSec||p.goal.timeSec)} by race week if training goes to plan</div>` : ''}
+    <button class="card stat-tile" data-act="open-stat-detail" data-stat="race-projection" style="padding:6px 16px 12px; margin-bottom:16px;">
+      ${projectionRowsHtml(p, unit, fmt)}
+      <div class="hint" style="margin-top:8px;">${projectionDeltaText(p.start.sec, p.current.sec)}. The range is the reliable part; the headline is its middle.</div>
+      <div class="hint" style="margin-top:4px;">${esc(projectionEvidenceText(p.fitness))}</div>
+      ${p.goalCheck ? `<div class="hint" style="margin-top:4px; color:${p.goalCheck.status==='beyond' ? 'var(--z-tempo)' : 'var(--accent-strong)'};">${esc(goalCheckText(p.goalCheck, p.goal))}</div>` : ''}
     </button>`;
   }
   if(stats.generalProjections){
     const rows = stats.generalProjections.map(p=>`
       <div class="settings-row" data-act="open-stat-detail" data-stat="general-projection-${p.key}" style="cursor:pointer;">
-        <div><div class="lbl">${p.label}</div><div class="sub">${projectionDeltaText(p.start.timeSec, p.current.timeSec)}${p.goal ? `<br>Could reach about ${secToClock(p.goal.timeSec)} by the plan's end if training goes to plan` : ''}</div></div>
+        <div><div class="lbl">${p.label}</div><div class="sub">${projectionDeltaText(p.start.sec, p.current.sec)}<br>likely ${secToClock(p.current.lowSec)}–${secToClock(p.current.highSec)}${p.goal ? `<br>Could reach about ${secToClock(p.goal.sec)} by the plan's end if training goes to plan` : ''}</div></div>
         <div style="text-align:right;">
-          <div class="mono" style="font-weight:700;">${secToClock(p.current.timeSec)}</div>
+          <div class="mono" style="font-weight:700;">${secToClock(p.current.sec)}</div>
           <div class="hint" style="margin:0;">${paceOrSpeedStr(p.current.paceSecPerKm,unit,fmt)}</div>
         </div>
       </div>`).join('');
@@ -3255,7 +3317,7 @@ function renderSettingsTab(){
   const s = state.setup, unit = s.units, fmt = state.paceFormat;
   const currentWeek = state.plan.weeks[state.currentWeekIndex];
   const cw = getWeekPaces(state.plan, currentWeek, state.logs);
-  const recal = computeRecalibration(state.plan, state.logs);
+  const fit = fitnessFor(state.plan, state.logs);
   const speedUnitLabel = unit==='mi' ? 'mph' : 'km/h';
   return `
   <div class="container" style="padding-top:14px;">
@@ -3284,7 +3346,7 @@ function renderSettingsTab(){
       ${state.plan.prediction ? `<div class="settings-row"><div><div class="lbl">Projected finish from your recent result</div><div class="sub">${secToClock(state.plan.prediction.lowSec)}–${secToClock(state.plan.prediction.highSec)} · ${esc(state.plan.prediction.basis)}</div></div></div>` : ''}
       ${state.plan.warnings && state.plan.warnings.length ? `<div class="settings-row"><div><div class="lbl">Coach's notes</div><div class="sub">${state.plan.warnings.map(w=>esc(w)).join('<br><br>')}</div></div></div>` : ''}
       <div class="settings-row"><div><div class="lbl">This week's paces</div><div class="sub">Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)}${isGeneralPlan(s) ? '' : ` · Goal race pace ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}`}</div></div></div>
-      <div class="hint" style="padding:0 0 12px;">${isGeneralPlan(s) ? 'Training paces are calibrated to your current fitness.' : 'Training paces follow your current fitness and step up slowly through the build and peak phases (about one fitness point per six weeks of quality work), then hold through the taper.'}${recal ? ` Right now they're also adjusted based on your last ${recal.count} logged tempo/interval/over-under run${recal.count===1?'':'s'}.` : ''}</div>
+      <div class="hint" style="padding:0 0 12px;">${isGeneralPlan(s) ? 'Training paces are calibrated to your current fitness.' : 'Training paces follow your current fitness and step up slowly through the build and peak phases (about one fitness point per six weeks of quality work), then hold through the taper.'}${fit && fit.nowVdot!=null ? ` They follow your fitness number (${fit.nowVdot}), which moves with logged races and quality sessions — see Progress.` : ''}</div>
       ${!isGeneralPlan(s) && s.hillsMode==='hilly' && (s.strengthPerWeek||0)<2 ? `<div class="hint" style="padding:0 0 12px; color:var(--z-tempo);">Hilly course — most coaches recommend at least 2 strength sessions/week for the eccentric demand of climbs and descents. You're currently set to ${s.strengthPerWeek||0}.</div>` : ''}
     </div>
     ${!isGeneralPlan(s) ? `<button class="btn btn-block" data-act="open-pacing-sheet" style="margin:-4px 0 20px;">${ICONS.flag} Race-day pacing sheet</button>` : ''}
@@ -3393,7 +3455,7 @@ const TAB_HELP = {
     body: `
       <p><strong>Your trail</strong> is your whole plan as a climb: each colored stretch is a phase, the dot is today, and its color shows whether you're on pace or behind based on real logged miles versus what the plan called for by now. Tap it to jump straight to this week.</p>
       <p><strong>Peek the Peak</strong> is just for fun — a stylized mountain climb tied to the % of this plan's total mileage you've logged so far.</p>
-      <p><strong>Projected race performance</strong> compares your fitness today against where you started this plan, using your recent logged paces.</p>
+      <p><strong>Projected race performance</strong> shows three numbers: what you could run on day one, now, and if you complete the rest of the plan. "Now" moves on evidence — a logged race resets it, logged tempo and interval sessions nudge it (enter the average rep time for intervals), and two weeks of light training eases it down. The range around each number is the reliable part.</p>
       <p>The four stat tiles below (total logged, % of training miles logged, plan adherence, ahead/behind) are each tappable for the exact numbers behind them. Further down, the weekly mileage chart compares planned vs. actual, and the pace tracker shows whether your long runs and tempo runs are trending toward target.</p>
       <p><strong>Milestones & badges</strong> is a running gallery of everything you've earned — tap it any time, not just when a badge pops up.</p>
     `,
@@ -3540,15 +3602,11 @@ function renderStatDetailModal(statKey){
   } else if(statKey==='race-projection' || (statKey && statKey.startsWith('general-projection-'))){
     const p = statKey==='race-projection' ? s.raceProjection : s.generalProjections.find(x=>statKey===`general-projection-${x.key}`);
     title = statKey==='race-projection' ? 'Projected race performance' : `Projected ${p.label} performance`;
-    content = statCompareRowHtml(
-      secToClock(p.start.timeSec), 'at plan start',
-      secToClock(p.current.timeSec), 'today'
-    ) + statResultHtml(projectionDeltaText(p.start.timeSec, p.current.timeSec), 'change since you started', 'var(--accent-strong)');
-    if(p.goal){
-      content += `<div style="border-top:1px solid var(--line-soft); margin:18px 0 16px;"></div>` +
-        statNumberHtml(secToClock(p.goal.timeSec), `goal pace (${paceOrSpeedStr(p.goal.paceSecPerKm,unit,state.paceFormat)}) if you complete the rest of the plan`, {color:'var(--accent-strong)'});
-    }
-    footnote = `Pace: ${paceOrSpeedStr(p.start.paceSecPerKm,unit,state.paceFormat)} at the start vs ${paceOrSpeedStr(p.current.paceSecPerKm,unit,state.paceFormat)} today. Based on your training paces, not a specific logged race result.`;
+    content = `<div class="card" style="padding:4px 14px; margin-bottom:14px;">${projectionRowsHtml(p, unit, state.paceFormat)}</div>`
+      + statResultHtml(projectionDeltaText(p.start.sec, p.current.sec), 'change since you started', 'var(--accent-strong)')
+      + (p.goalCheck ? `<div class="hint" style="text-align:center; margin-top:10px; color:var(--ink);">${esc(goalCheckText(p.goalCheck, p.goal))}</div>` : '')
+      + `<div class="hint" style="margin-top:14px;">${esc(projectionEvidenceText(p.fitness))}</div>`;
+    footnote = `How it moves: a logged race resets the number (Daniels). Logged tempo, cruise and interval sessions nudge it — intervals and cruise reps count once you enter the average rep time — and a single session can only move it a fraction. Two weeks of running under half the plan starts a slow decline (Mujika & Padilla). "If you complete the plan" adds the fitness the remaining quality weeks are expected to bring, about one point per six weeks (Daniels). Times come from the same model as setup: Vickers & Vertosick for the half and marathon, Riegel for shorter races. The range is the reliable part.`;
   }
   return modalShell(title, `${content}${footnote?`<div class="hint" style="text-align:center; margin-top:16px;">${footnote}</div>`:''}`);
 }
@@ -3861,11 +3919,27 @@ function modalLogRun(){
   return modalShell('Log a run', switcher + body);
 }
 
+// Interval-type planned days ask for the average rep time; that is the only honest way to
+// read fitness off a session whose whole-run time blends reps with recovery jogs.
+function repFieldHtml(dateStr, repValue, idPrefix){
+  const found = plannedWorkoutForDate(dateStr);
+  const day = found && found.day;
+  if(!day || !['intervals','cruise','reps'].includes(day.type)) return '';
+  const repM = repMetersForDay(day);
+  if(!repM) return '';
+  return `<div class="field"><label class="field-label">Average time per ${repM} m rep (m:ss)</label><input class="input" type="text" inputmode="numeric" id="${idPrefix}-rep" value="${esc(repValue||'')}" placeholder="e.g. 3:45"><div class="hint">Your reps feed the fitness projection; the whole-run time alone can't, because it includes the recovery jogs.</div></div>`;
+}
 function modalLogManualHtml(d){
   const unit = state.setup.units;
   return `
     <div class="field"><label class="field-label">Date</label><input class="input" type="date" id="lr-date" value="${d.date}"></div>
-    <div id="lr-planned">${plannedWorkoutHtml(d.date)}</div>
+    <div class="chip-select" style="margin-bottom:14px;">
+      <button class="chip ${d.kind!=='race'?'active':''}" data-act="log-kind" data-kind="run">Training run</button>
+      <button class="chip ${d.kind==='race'?'active':''}" data-act="log-kind" data-kind="race">This was a race</button>
+    </div>
+    ${d.kind==='race' ? `<div class="hint" style="margin:-6px 0 14px;">A race result resets your fitness number and every training pace from here on.</div>` : ''}
+    <div id="lr-planned">${d.kind==='race' ? '' : plannedWorkoutHtml(d.date)}</div>
+    ${d.kind==='race' ? '' : repFieldHtml(d.date, d.rep, 'lr')}
     <div class="row">
       <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" inputmode="decimal" step="0.01" min="0" id="lr-dist" value="${d.dist}" placeholder="e.g. 5.2"></div>
       <div class="field"><label class="field-label">Time (h:mm:ss)</label><input class="input" type="text" inputmode="numeric" id="lr-time" value="${d.time}" placeholder="e.g. 45:30"></div>
@@ -3905,6 +3979,11 @@ function modalLogFromStravaHtml(strava){
       </div>
       <div class="field"><label class="field-label">Log this run as</label><input class="input" type="date" id="lr-strava-date" value="${strava.confirm.date}"></div>
       <div class="hint" style="margin-bottom:14px;">${strava.confirm.date===a.date ? "This is the date Strava recorded for this run." : "Changed from the date Strava recorded for this run."}</div>
+      <div class="chip-select" style="margin-bottom:14px;">
+        <button class="chip ${strava.confirm.kind!=='race'?'active':''}" data-act="strava-kind" data-kind="run">Training run</button>
+        <button class="chip ${strava.confirm.kind==='race'?'active':''}" data-act="strava-kind" data-kind="race">This was a race</button>
+      </div>
+      ${strava.confirm.kind==='race' ? '' : repFieldHtml(strava.confirm.date, strava.confirm.rep, 'lr-strava').replace('Your reps feed', (strava.confirm.rep && strava.confirm.lapsTried ? 'Read from your Strava laps — change it if that looks wrong. ' : '') + 'Your reps feed')}
       <button class="btn btn-primary btn-block" data-act="confirm-import-strava" style="margin-bottom:8px; padding:13px;">Log run</button>
       <button class="btn btn-block" data-act="cancel-import-strava">Back to list</button>
     `;
@@ -3957,20 +4036,24 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
   const paceCompareLine = paceDeltaLine(comparisonPaceSecPerKm, plannedPaceSecPerKm, unit, fmt);
 
   const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs', racepace:'race-pace runs', race:'race-day runs'};
-  const eligible = RECALIBRATION_TYPES.includes(day.type) && day.paceKey && RECALIBRATION_PCT[day.paceKey];
+  const repBased = ['intervals','cruise','reps'].includes(day.type);
+  const eligible = log.kind==='race' || day.type==='tempo' || day.type==='overunder' || (repBased && log.repSec>0);
   let impactLine;
-  if(!eligible){
+  if(log.kind==='race'){
+    impactLine = `A race result: it resets your fitness number and the training paces from here on.`;
+  } else if(!eligible){
     const noun = NONELIGIBLE_NOUNS[day.type];
-    impactLine = noun ? `No impact on future pacing — ${noun} aren't used to recalibrate paces.` : `No impact on future pacing — this run type isn't used to recalibrate paces.`;
+    impactLine = repBased ? `Not used for the projection: enter the average rep time to count this session.` : (noun ? `No impact on the projection — ${noun} aren't used for it.` : `No impact on the projection — this run type isn't used for it.`);
   } else {
     const withPaces = getWeekPaces(plan, week, logs);
     const withoutPaces = getWeekPaces(plan, week, logs.filter(l=>l.id!==log.id));
     const deltaSecPerKm = withPaces.tempoPerKm - withoutPaces.tempoPerKm;
     const deltaPerUnit = unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm;
+    const repNote = log.repSec>0 && log.repMeters>0 ? ` Reps averaged ${secToClock(log.repSec)} per ${log.repMeters} m.` : '';
     if(Math.abs(deltaPerUnit)<1){
-      impactLine = `No meaningful change to future pacing from this run alone.`;
+      impactLine = `Counted toward your fitness projection; no meaningful change to training paces from this run alone.${repNote}`;
     } else {
-      impactLine = `This run nudged your upcoming training paces about ${Math.round(Math.abs(deltaPerUnit))} sec/${unit} ${deltaPerUnit>0?'slower':'faster'}.`;
+      impactLine = `Counted toward your fitness projection — training paces moved about ${Math.round(Math.abs(deltaPerUnit))} sec/${unit} ${deltaPerUnit>0?'slower':'faster'}.${repNote}`;
     }
   }
 
@@ -4320,7 +4403,7 @@ function onClick(e){
   }
   if(act==='dismiss-help-card'){ state.helpSeen = true; Store.setFlag('help_seen', true); render(); return; }
   if(act==='export-ics'){ exportCalendar(); return; }
-  if(act==='open-log-for-date'){ state.modal={type:'log-run', data:{date:el.dataset.date, dist:'', time:'', notes:''}}; render(); return; }
+  if(act==='open-log-for-date'){ state.modal={type:'log-run', data:{date:el.dataset.date, dist:'', time:'', notes:'', kind:'run', rep:''}}; render(); return; }
   if(act==='toggle-treadmill'){
     const wi = Number(el.dataset.wi), di = Number(el.dataset.di);
     const day = state.plan.weeks[wi].days[di];
@@ -4427,10 +4510,11 @@ function onClick(e){
     state.modal = {
       type:'log-run',
       mode: state.stravaAuth ? 'strava' : 'manual',
-      data:{date:fmtDate(todayDate()), dist:'', time:'', notes:''},
+      data:{date:fmtDate(todayDate()), dist:'', time:'', notes:'', kind:'run', rep:''},
     };
     render(); return;
   }
+  if(act==='log-kind'){ state.modal.data.kind = el.dataset.kind; render(); return; }
   if(act==='log-mode-manual'){ state.modal.mode='manual'; render(); return; }
   if(act==='log-mode-strava'){ state.modal.mode='strava'; render(); return; }
   if(act==='connect-strava'){ window.location.href = stravaConnectUrl(); return; }
@@ -4446,7 +4530,10 @@ function onClick(e){
     const durSec = parseDurationToSec(d.time);
     const distV = Number(d.dist);
     if(!d.date || !distV || !durSec){ showToast('Enter date, distance and time'); return; }
-    commitLogEntry({date:d.date, distanceKm:unitToKm(distV,unit), durationSec:durSec, notes:d.notes, createdAt:new Date().toISOString()});
+    const entry = {date:d.date, distanceKm:unitToKm(distV,unit), durationSec:durSec, notes:d.notes, createdAt:new Date().toISOString()};
+    if(d.kind==='race') entry.kind = 'race';
+    else { const found = plannedWorkoutForDate(d.date); const repM = found ? repMetersForDay(found.day) : null; const repSec = parseDurationToSec(d.rep); if(repM && repSec>0){ entry.repSec = repSec; entry.repMeters = repM; } }
+    commitLogEntry(entry);
     return;
   }
   if(act==='pick-strava-activity'){
@@ -4454,16 +4541,26 @@ function onClick(e){
     const items = (state.modal.strava && state.modal.strava.items) || [];
     const a = items.find(x=>x.id===id);
     if(!a) return;
-    state.modal.strava.confirm = {item:a, date:a.date};
-    render(); return;
+    state.modal.strava.confirm = {item:a, date:a.date, kind:'run', rep:'', lapsTried:false};
+    render();
+    // interval-type planned day: try the activity's laps for the rep time
+    const found = plannedWorkoutForDate(a.date); const repM = found ? repMetersForDay(found.day) : null;
+    if(repM && ['intervals','cruise','reps'].includes(found.day.type)){
+      fetchStravaRepSec(a.id, repM).then(sec=>{ const c = state.modal && state.modal.strava && state.modal.strava.confirm; if(c && c.item.id===a.id){ c.lapsTried = true; if(sec && !c.rep) c.rep = secToClock(sec); render(); } }).catch(()=>{});
+    }
+    return;
   }
+  if(act==='strava-kind'){ state.modal.strava.confirm.kind = el.dataset.kind; render(); return; }
   if(act==='cancel-import-strava'){
     state.modal.strava.confirm = null;
     render(); return;
   }
   if(act==='confirm-import-strava'){
-    const {item:a, date} = state.modal.strava.confirm;
-    commitLogEntry({date, distanceKm:a.distanceKm, durationSec:a.durationSec, notes:a.name||'', createdAt:new Date().toISOString(), stravaId:a.id});
+    const c = state.modal.strava.confirm; const {item:a, date} = c;
+    const entry = {date, distanceKm:a.distanceKm, durationSec:a.durationSec, notes:a.name||'', createdAt:new Date().toISOString(), stravaId:a.id};
+    if(c.kind==='race') entry.kind = 'race';
+    else { const found = plannedWorkoutForDate(date); const repM = found ? repMetersForDay(found.day) : null; const repSec = parseDurationToSec(c.rep); if(repM && repSec>0){ entry.repSec = repSec; entry.repMeters = repM; } }
+    commitLogEntry(entry);
     return;
   }
   if(act==='delete-log'){
@@ -4534,7 +4631,7 @@ function onClick(e){
   if(act==='open-log-for-day'){
     const {weekIndex, dayIndex} = state.modal;
     const day = state.plan.weeks[weekIndex].days[dayIndex];
-    state.modal={type:'log-run', data:{date:day.date, dist:'', time:'', notes:''}};
+    state.modal={type:'log-run', data:{date:day.date, dist:'', time:'', notes:'', kind: day.type==='race' ? 'race' : 'run', rep:''}};
     render(); return;
   }
   if(act==='toggle-strength-done'){
@@ -4707,6 +4804,8 @@ function onInput(e){
     }
     if(e.target.id==='lr-dist'){ d.dist = e.target.value; }
     if(e.target.id==='lr-notes'){ d.notes = e.target.value; }
+    if(e.target.id==='lr-rep'){ const f = formatDurationDigits(e.target.value); e.target.value = f; d.rep = f; }
+    if(e.target.id==='lr-strava-rep' && state.modal.strava && state.modal.strava.confirm){ const f = formatDurationDigits(e.target.value); e.target.value = f; state.modal.strava.confirm.rep = f; }
     if(e.target.id==='lr-time' || e.target.id==='lr-dist'){
       const hintEl = document.getElementById('lr-pace-hint');
       if(hintEl){

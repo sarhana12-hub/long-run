@@ -119,3 +119,17 @@ rule would be.
 | General plans: run days by the 30-minute easy run; speed and maintenance weeks drop the session (strides instead) when it would leave easy runs under 30 min | `generalWeekCommon`, `generateSpeedPlan`, `generateMaintenancePlan` | Daniels | Sourced | — |
 | Maintenance: flat volume, one threshold session | `generateMaintenancePlan` | Daniels (T work as maintenance) | Sourced | — |
 | Recovery: 55% → 75% of volume, easy only, one fewer run day (two when the volume cannot give three runs 25 min) | `generateRecoveryPlan` | — | Judgement | None found; keep flagged |
+
+## Fitness projection (Progress tab)
+
+| Rule | Where | Source | Status | Replace with |
+|---|---|---|---|---|
+| Start / now / potential are VDOT values turned into race times by the same model as setup (Vickers & Vertosick above 40 km, Riegel 1.07 below) | `fitnessProjections` | Vickers & Vertosick 2016; Riegel | Sourced | — |
+| A logged race resets fitness to the race's VDOT | `projectFitness` | Daniels (VDOT comes from races) | Sourced | — |
+| Scheduled gain of about one VDOT per six weeks of quality training, credited only for quality sessions actually logged | `projectFitness` | Daniels (rate); per-session crediting | Sourced rate; crediting is Judgement | — |
+| Tempo and over/under sessions read through the threshold %VO2max; cruise, interval and rep sessions through their own %VO2max once the average rep time is known; whole-run times of interval sessions are never used | `projectFitness` | Daniels' zone definitions | Sourced | — |
+| One session moves the number a fraction (weights 0.5–1 by type, 21-day half-life, damping 1.5); per-session reading capped at +2/−3 VDOT; the sum capped at ±2 | `FITNESS` | — | Judgement (keeps a tempo run too hard from counting for more than a race) | Keep flagged |
+| After 14 days under half the planned volume, 0.5 VDOT per further week, capped at 2 | `FITNESS` | Mujika & Padilla 2000 (VO2max −4 to −14% over 2–8 weeks of detraining) | Sourced window; per-week figure Within source | — |
+| "Now" range widens by up to ±1 VDOT when there is no race or session evidence; the potential carries ±0.6 VDOT on top of the model's band | `FITNESS` | — | Judgement | Keep flagged |
+| Marathon-model mileage term: setup mileage at the start, logged mileage over the last eight weeks now (once three weeks of logs exist), the plan's peak for the potential | `fitnessProjections` | Vickers & Vertosick (mileage term) | Sourced | — |
+| Training paces follow the evidence-led number for the current week and add the scheduled gain for later weeks; past weeks keep the paces they were run at | `getWeekPaces` | Daniels (adjust paces after races; ~1 VDOT per 6 weeks otherwise) | Sourced | — |
