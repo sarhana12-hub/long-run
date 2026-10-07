@@ -3171,6 +3171,20 @@ function computeProgressStats(){
   const planScopedLoggedKm = state.logs.filter(l=>parseDate(l.date)>=planStart).reduce((s,l)=>s+l.distanceKm,0);
   const pctPlanMilesLogged = totalPlanTrainingKm>0 ? Math.round(100*Math.min(1, planScopedLoggedKm/totalPlanTrainingKm)) : 0;
 
+  // Strength sessions get their own count instead of being folded into adherence above:
+  // a run log carries real distance/duration data, while "mark strength completed" is a
+  // single tap with nothing behind it, so blending the two into one percentage would make
+  // adherence a murkier signal (an 80% could mean a skipped long run or two skipped taps).
+  // Same planStart lower bound as everything plan-relative here; the upper bound is
+  // yesterday unless today's own session is already marked done, mirroring how today gets
+  // the benefit of the doubt for runs (not "missed" while it's still morning).
+  const strengthDone = new Set(state.strengthDone);
+  const strengthCutoff = strengthDone.has(fmtDate(today)) ? today : addDays(today,-1);
+  const strengthDatesToDate = plan.weeks.flatMap(w=>w.days).filter(d=>d.strength && parseDate(d.date)>=planStart && parseDate(d.date)<=strengthCutoff).map(d=>d.date);
+  const strengthPlannedToDate = strengthDatesToDate.length;
+  const strengthCompletedToDate = strengthDatesToDate.filter(date=>strengthDone.has(date)).length;
+  const strengthPlannedTotal = plan.weeks.flatMap(w=>w.days).filter(d=>d.strength && parseDate(d.date)>=planStart).length;
+
   // "What would I run right now" vs "what would I have run on day one" — current fitness
   // compared to starting fitness, not the plan's own future goal. Race plans headline their
   // actual race distance; general plans have no single race, so they project three fixed
@@ -3194,6 +3208,7 @@ function computeProgressStats(){
     loggedKmToDate, plannedToDateKm, mileageDeltaKm, mileageStatusLabel,
     plannedRunDatesToDateCount: plannedRunDatesToDate.length, completedPlannedRuns, adherence,
     totalPlanTrainingKm, planScopedLoggedKm, pctPlanMilesLogged,
+    strengthPlannedToDate, strengthCompletedToDate, strengthPlannedTotal,
     raceProjection, generalProjections,
   };
 }
@@ -4088,6 +4103,21 @@ function renderProgressTab(){
     <button class="card stat-tile" data-act="open-stat-detail" data-stat="adherence"><div class="v">${stats.adherence}%</div><div class="l">plan adherence</div></button>
     <button class="card stat-tile" data-act="open-stat-detail" data-stat="mileage-delta"><div class="v">${fmtDist(Math.abs(stats.mileageDeltaKm),unit,0)}</div><div class="l">${stats.mileageStatusLabel}</div></button>
   </div>
+  ${stats.strengthPlannedTotal>0 ? `
+  <div class="container">
+    <div class="card" style="padding:14px 16px; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
+        <span style="font-weight:700; font-size:14px;">Strength sessions</span>
+        <span class="mono" style="font-size:12px; color:var(--muted);">${stats.strengthPlannedTotal} in plan</span>
+      </div>
+      <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:8px;">
+        <span class="mono" style="font-size:24px; font-weight:700;">${stats.strengthCompletedToDate}<span style="color:var(--muted);"> / ${stats.strengthPlannedToDate}</span></span>
+        <span style="font-size:12.5px; color:var(--muted);">${stats.strengthPlannedToDate===0 ? 'none scheduled yet' : 'done so far'}</span>
+      </div>
+      <div style="height:6px; border-radius:3px; background:var(--surface-2); overflow:hidden;"><div style="height:100%; width:${stats.strengthPlannedToDate>0 ? Math.round(100*stats.strengthCompletedToDate/stats.strengthPlannedToDate) : 0}%; background:var(--accent-strong);"></div></div>
+      <div class="hint" style="margin-top:8px;">Counted separately from plan adherence, which only tracks runs.</div>
+    </div>
+  </div>` : ''}
   <div class="container">
     <button class="card" data-act="open-achievements" style="display:flex; align-items:center; gap:12px; padding:14px 16px; width:100%; text-align:left; margin-bottom:16px;">
       <div style="width:40px; height:40px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; flex-shrink:0;"><div style="width:22px; height:22px;">${ICONS.summitBadge}</div></div>
