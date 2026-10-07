@@ -114,6 +114,12 @@ Run both with `npm test`.
 38. **No way to opt out of tapering.** *Fix:* race approach choice: full taper, light taper,
     or train through (only race day and the day before are protected; strength continues).
 
+39. **Strength library drifted into unfamiliar territory** (Nordic curl, Copenhagen plank,
+    hollow hold, drop jumps) with no how-to text. *Fix:* familiar movements only; every
+    exercise beyond the obvious carries a one-sentence how-to shown under "How to do these"
+    in the day sheet. *Guard:* `strength-howto` (every listed exercise either basic or
+    explained).
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy
