@@ -1262,7 +1262,7 @@ function generatePlan(setup, dayOneOverride){
   // --- volume ramp (training weeks) ---
   const userCap = setup.maxWeeklyKm>0 ? setup.maxWeeklyKm : Infinity;
   const startVol = Math.max(Math.min(currentKm, userCap), 3*minEasyKm);
-  if(startVol > Math.min(currentKm, userCap)+0.05) warnings.push(`${fmtDist(currentKm,unit,0)}/week cannot give three 30-minute runs at your pace, so the plan starts from ${fmtDist(startVol,unit,0)}/week — three 30-minute easy runs, the smallest week Daniels gives a beginner.`);
+  if(startVol > Math.min(currentKm, userCap)+0.05) warnings.push(`${fmtDist(currentKm,unit,0)}/week cannot give three 30-minute runs at your pace, so the plan starts from ${fmtDist(startVol,unit,0)}/week — three 30-minute easy runs, the smallest week worth building on.`);
   let targetPeak = Math.max(Math.min(targetPeakWeeklyKm(raceKm, currentKm, longEmphasis, nTrain), userCap), 3*minEasyKm); // never trims below the three-run floor
   const trimming = targetPeak < startVol-0.5; // short race, runner well above what it needs (owner decision)
   // Daniels: raise weekly mileage by no more than the number of sessions you run per week
@@ -1296,14 +1296,14 @@ function generatePlan(setup, dayOneOverride){
   if(targetPeak - peakWeeklyKm > 5 && cls!=='5k' && cls!=='10k'){
     warnings.push(buildPace==='faster'
       ? `${totalWeeks} weeks allows a build to about ${fmtDist(peakWeeklyKm,unit,0)}/week at 10% a week with cutbacks, short of the ${fmtDist(targetPeak,unit,0)}/week a ${raceLabelKm(raceKm)} plan at your mileage peaks at.`
-      : `${totalWeeks} weeks allows a build to about ${fmtDist(peakWeeklyKm,unit,0)}/week — Daniels' rule is to add no more than ${runsPerWeek} miles at a time and hold each level three to four weeks — short of the ${fmtDist(targetPeak,unit,0)}/week a ${raceLabelKm(raceKm)} plan at your mileage peaks at. Nothing is rushed to close the gap. Choosing "Faster" in the build-pace setting trades some injury risk for a higher peak.`);
+      : `${totalWeeks} weeks allows a build to about ${fmtDist(peakWeeklyKm,unit,0)}/week — the safe rule is to add no more than ${runsPerWeek} miles at a time and hold each level three to four weeks — short of the ${fmtDist(targetPeak,unit,0)}/week a ${raceLabelKm(raceKm)} plan at your mileage peaks at. Nothing is rushed to close the gap. Choosing "Faster" in the build-pace setting trades some injury risk for a higher peak.`);
   }
 
   // --- phases: Daniels' priority weeks over the whole plan, taper weeks being the tail of
   //     Phase IV. skipBase (owner's option) hands Phase I weeks to Phases II/III. ---
   const dp = danielsPhaseWeeks(totalWeeks);
   const fitnessRatio = clamp(startVol/Math.max(targetPeak,1), 0, 1);
-  if(runsPerWeek < requestedRuns) warnings.push(`${requestedRuns} running days at ${fmtDist(currentKm,unit,0)}/week would make some easy runs shorter than 30 minutes, the minimum Daniels gives an easy run, so the plan starts on ${runsPerWeek} days. A day comes back in any week whose mileage can carry it.`);
+  if(runsPerWeek < requestedRuns) warnings.push(`${requestedRuns} running days at ${fmtDist(currentKm,unit,0)}/week would make some easy runs shorter than 30 minutes, the minimum worth running, so the plan starts on ${runsPerWeek} days. A day comes back in any week whose mileage can carry it.`);
   if(raceKm>=15 && currentKm < raceKm*1.6) warnings.push(`${fmtDist(currentKm,unit,0)}/week is low for a ${raceLabelKm(raceKm)}. The plan builds what it safely can, but expect to treat this one as a completion goal unless the mileage comes up first.`);
   if(trimming) warnings.push(`You already run more than a ${raceLabelKm(raceKm)} needs, so the plan eases volume down about 10% to ${fmtDist(targetPeak,unit,0)}/week and spends the freed-up recovery on sharper quality sessions.`);
   let baseCount = setup.skipBase ? 0 : Math.min(dp.I, nTrain);
@@ -1433,7 +1433,7 @@ function generatePlan(setup, dayOneOverride){
     // a week too small to give every run 30 min once a session (with warm-up and cool-down)
     // is in it takes that structure instead.
     const roomForQuality = !beginnerWeek && easyRoomKm(weeklyKm, longKm, runsW) >= minRun*0.9;
-    const beginnerNote = () => { if(!warnings.some(x=>/beginner structure/.test(x))) warnings.push(`At ${fmtDist(currentKm,unit,0)}/week the plan follows Daniels' beginner structure — easy runs of about 30 minutes with strides, no separate speed session — because a session with its warm-up and cool-down would leave the other runs too short. Structured sessions start once the mileage can carry them.`); };
+    const beginnerNote = () => { if(!warnings.some(x=>/beginner structure/.test(x))) warnings.push(`At ${fmtDist(currentKm,unit,0)}/week the plan follows a beginner structure — easy runs of about 30 minutes with strides, no separate speed session — because a session with its warm-up and cool-down would leave the other runs too short. Structured sessions start once the mileage can carry them.`); };
     if(!roomForQuality && w<nTrain && sessionWeek) beginnerNote();
     const wantsQuality = roomForQuality && (phase==='taper' || (phase==='peak') || (phase==='build' && introducePhase==='build'));
     if(wantsQuality && longKm>0 || (phase==='taper' && weeklyKm>0)){
@@ -1525,7 +1525,7 @@ function generatePlan(setup, dayOneOverride){
     { const rec = days.find(d=>d.type==='easy' && d.easyRole==='recovery' && d.km>0);
       if(rec){ const others = days.filter(d=>d!==rec && d.type==='easy' && !d.easyVariety && d.easyRole!=='aerobic' && d.km>0 && !(d.daysToRace!=null && d.daysToRace<=2)).map(d=>d.km); if(others.length && rec.km > Math.min(...others)+0.05){ rec.easyRole='easy'; rec.label='Easy Run'; } } }
     if(firstUnplaced>Math.max(1, weeklyKm*0.05) && w<nTrain && !warnings.some(x=>/doesn't fit/.test(x))){
-      warnings.push(`From week ${w+1} on, ${fmtDist(w<nTrain ? levels[w] : weeklyKm,unit,0)}/week on ${runsW} running days doesn't fit: Daniels keeps easy runs to 30–60 minutes, so the week comes in under target. Adding a running day is the fix.`);
+      warnings.push(`From week ${w+1} on, ${fmtDist(w<nTrain ? levels[w] : weeklyKm,unit,0)}/week on ${runsW} running days doesn't fit: easy runs stay between 30 and 60 minutes, so the week comes in under target. Adding a running day is the fix.`);
     }
 
     // race week / post-race days
@@ -1588,7 +1588,7 @@ function finishGeneralPlan(setup, weeks, startVdot, endVdot, extra){
   const athlete = buildAthlete(setup);
   const runsUsed = Math.max(...weeks.map(w=>w.days.filter(d=>d.km>0).length));
   const shortfall = weeks.some(w=>w.plannedKm && w.targetKm < w.plannedKm*0.92);
-  const fewer = (extra && extra.runsRequested) && runsUsed < extra.runsRequested ? [`${extra.runsRequested} running days at ${fmtDist(athlete.weeklyKm, setup.units||'km', 0)}/week would make some easy runs shorter than 30 minutes, the minimum Daniels gives an easy run, so the plan uses ${runsUsed} days. Add mileage and the extra day comes back.`] : [];
+  const fewer = (extra && extra.runsRequested) && runsUsed < extra.runsRequested ? [`${extra.runsRequested} running days at ${fmtDist(athlete.weeklyKm, setup.units||'km', 0)}/week would make some easy runs shorter than 30 minutes, the minimum worth running, so the plan uses ${runsUsed} days. Add mileage and the extra day comes back.`] : [];
   const warnings = ((extra && extra.extraWarnings) || []).concat(fewer).concat(shortfall ? [`With ${runsUsed} running days, ${fmtDist(athlete.weeklyKm, setup.units||'km', 0)}/week means very long easy days. The plan caps easy runs below the long run and lets the week come in under target — adding a running day would fix that.`] : []);
   return {
     runsPerWeek: runsUsed, longTimeCapMin: (setup.planKind==='distance' && setup.distanceGoalMetric==='longest') ? 195 : 150,
@@ -1640,7 +1640,7 @@ function generateSpeedPlan(setup, dayOneOverride){
     placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?2:setup.strengthPerWeek, isCutback?'cutback':'build', w, {weekInBlock:inCycle, equipment: setup.equipment});
     list.push({weekIndex:w, phase:isCutback?'cutback':'build', isCutback, beginnerStructure, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:vdot});
   }
-  const beginnerNote = list.some(x=>x.beginnerStructure) ? [`At ${fmtDist(c.currentKm, c.unit, 0)}/week some weeks follow Daniels' beginner structure — easy runs of about 30 minutes with strides, no separate speed session — because a session with its warm-up and cool-down would leave the other runs too short.`] : [];
+  const beginnerNote = list.some(x=>x.beginnerStructure) ? [`At ${fmtDist(c.currentKm, c.unit, 0)}/week some weeks follow a beginner structure — easy runs of about 30 minutes with strides, no separate speed session — because a session with its warm-up and cool-down would leave the other runs too short.`] : [];
   const out = finishGeneralPlan(setup, list, startVdot, endVdot, {runsRequested: c.requestedRuns}); out.warnings = out.warnings.concat(beginnerNote); return out;
 }
 const DISTANCE_LONG_FRACTION = 0.28;
@@ -1678,7 +1678,7 @@ function generateDistancePlan(setup, dayOneOverride){
   const extraWarnings = [];
   if(metric!=='longest' && prevFull < toKm*0.98){
     const weeksNeeded = distanceWeeksNeeded(fromKm, toKm, c.runsForKm(fromKm));
-    extraWarnings.push(`${weeks} weeks reaches about ${fmtDist(prevFull, c.unit, 0)}/week, not ${fmtDist(toKm, c.unit, 0)}: Daniels adds at most ${c.runsForKm(fromKm)} miles at a time and holds each level for a four-week block. About ${weeksNeeded} weeks gets there; the plan builds what it safely can.`);
+    extraWarnings.push(`${weeks} weeks reaches about ${fmtDist(prevFull, c.unit, 0)}/week, not ${fmtDist(toKm, c.unit, 0)}: the plan adds at most ${c.runsForKm(fromKm)} miles at a time and holds each level for a four-week block. About ${weeksNeeded} weeks gets there; the plan builds what it safely can.`);
   }
   return finishGeneralPlan(setup, list, c.athlete.vdot, c.athlete.vdot, {runsRequested: c.requestedRuns, extraWarnings});
 }
@@ -1741,7 +1741,7 @@ function distanceWeeksNeeded(fromKm, toKm, runsPerWeek){
 function distanceGoalWarning(fromKm, toKm, weeks, runsPerWeek){
   if(!fromKm || !toKm || !weeks || toKm<=fromKm) return null;
   const weeksNeeded = distanceWeeksNeeded(fromKm, toKm, runsPerWeek);
-  if(weeks < weeksNeeded) return `Daniels' step rule — add about ${clamp(Math.round(runsPerWeek||4),3,7)} miles a week at a time and hold it for four weeks — needs about ${weeksNeeded} weeks for that jump. In ${weeks} week${weeks===1?'':'s'} the plan builds what it safely can; a longer plan or a lower target gets you all the way.`;
+  if(weeks < weeksNeeded) return `The safe rule — add about ${clamp(Math.round(runsPerWeek||4),3,7)} miles a week at a time and hold it for four weeks — needs about ${weeksNeeded} weeks for that jump. In ${weeks} week${weeks===1?'':'s'} the plan builds what it safely can; a longer plan or a lower target gets you all the way.`;
   return null;
 }
 // Cheap, generator-consistent preview of whether the long run can reach race readiness.
