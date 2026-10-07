@@ -4292,7 +4292,7 @@ function renderDayDetail(){
     ${strengthFocusNote ? `<div class="hint" style="margin:-10px 0 16px;">${esc(strengthFocusNote)}</div>` : ''}
     ${missedHtml}
     ${day.strength && day.strengthExercises && day.strengthExercises.length ? `
-    <div class="field-label" style="margin-bottom:8px;">Strength${day.strengthTimeMin ? ` — about ${day.strengthTimeMin} min${day.strengthExpress ? ', kept short because it shares a workout day — do it after the run' : ''}` : ''}</div>
+    <div class="field-label" style="margin-bottom:8px;">Strength${day.strengthTimeMin ? ` — about ${day.strengthTimeMin} min${day.strengthAfterRun ? ' — after the run, not before it' : ''}` : ''}</div>
     <div class="card" style="padding:2px 14px; margin-bottom:12px;">${strengthRowsHtml(day.strengthExercises, day.date, day.strengthHowTo, false)}</div>
     <div class="hint" style="margin:0 0 12px;">Tap an exercise for the effort, rest and how to do it. Tick each one as you go.</div>
     ${day.strengthLoadNote ? `<div class="hint" style="margin:-4px 0 14px;">${esc(day.strengthLoadNote)}</div>` : ''}

@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 13; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 14; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -757,7 +757,7 @@ const STRENGTH_LOAD_NOTE = {
 // Decide which days of an already-typed week carry strength, and what focus.
 function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex, opts){
   opts = opts||{};
-  days.forEach(d=>{ d.strength=false; d.strengthFocus=null; d.strengthExpress=false; d.strengthOrdinal=undefined; d.strengthExercises=undefined; d.strengthTimeMin=undefined; });
+  days.forEach(d=>{ d.strength=false; d.strengthFocus=null; d.strengthExpress=false; d.strengthAfterRun=false; d.strengthOrdinal=undefined; d.strengthExercises=undefined; d.strengthTimeMin=undefined; });
   let want = strengthPerWeek==null ? 2 : strengthPerWeek;
   if(phase==='taper' && !opts.trainThrough) want = Math.min(want, 1);
   else if(phase==='peak' && !opts.trainThrough) want = Math.min(want, 2);
@@ -768,7 +768,9 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex
   const usable = i => { const d = days[i]; return d.type!=='race' && !(d.daysToRace!=null && d.daysToRace>=0 && d.daysToRace<=Math.max(1,cutoff)) && !(d.daysToRace!=null && d.daysToRace<0); };
   // Lower body pairs with a RUN day (an easy run, ideally the recovery run after the long
   // run) - a rest day is for resting the legs, so it never gets heavy leg work. Needs a
-  // clear day before the next hard run; a quality day itself is the last resort (express).
+  // clear day before the next hard run (Doma & Deakin: running is still impaired the day
+  // after heavy legs). When no easy day qualifies, the session goes on the hard day itself,
+  // after the run, as a full session - the owner's call: leg days are never dropped.
   const lowerScore = i => {
     const d = days[i], next = days[(i+1)%n];
     if(!usable(i) || d.type==='rest' || d.type==='long' || hard((i+1)%n) || next.type==='race') return null;
@@ -804,11 +806,10 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex
     const l = lowerCount<2 ? bestLower() : null;
     const u = bestUpper();
     if(!l && !u) break;
-    if(l && l.sc>=0 && (!u || l.sc>=u.sc-1)) chosen.push({i:l.i, focus:'lower'});
-    else if(u) chosen.push({i:u.i, focus:'upper'});
-    else chosen.push({i:l.i, focus:'lower'});
+    if(l) chosen.push({i:l.i, focus:'lower'});
+    else chosen.push({i:u.i, focus:'upper'});
   }
-  chosen.forEach((c,k)=>{ const d=days[c.i]; d.strength=true; d.strengthFocus=c.focus; d.strengthExpress = c.focus==='lower' && hard(c.i); d.strengthOrdinal=k; });
+  chosen.forEach((c,k)=>{ const d=days[c.i]; d.strength=true; d.strengthFocus=c.focus; d.strengthExpress = false; d.strengthAfterRun = c.focus==='lower' && hard(c.i); d.strengthOrdinal=k; });
   refreshStrengthWorkouts(days, phase, weekIndex, opts);
 }
 // After a manual swap/edit: a lower-body session that now sits the day before a hard run
@@ -822,7 +823,7 @@ function recomputeStrengthFocus(days){
     const beforeHard = isLegDemandingDay(next) || next.type==='race';
     if(beforeHard || day.type==='long') day.strengthFocus = 'upper';
     else if(!day.strengthFocus) day.strengthFocus = 'lower';
-    day.strengthExpress = day.strengthFocus==='lower' && isLegDemandingDay(day);
+    day.strengthExpress = false; day.strengthAfterRun = day.strengthFocus==='lower' && isLegDemandingDay(day);
   });
 }
 // Attaches exercise content to every strength day for the runner's equipment
@@ -833,7 +834,7 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
   const avail = equipmentSet(opts.equipment);
   days.forEach(d=>{
     if(d.type==='rest') Object.assign(d, buildWorkoutMeta(d)); // rest-day text depends on whether strength landed there
-    if(!d.strength){ d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
+    if(!d.strength){ d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthAfterRun=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
     const tier = lowerStrengthTierForPhase(phase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace, opts.strengthCutoffDays);
     const variant = weekIndex*2 + (d.strengthOrdinal||0); // two sessions in a week draw different lifts
     _used.length = 0;

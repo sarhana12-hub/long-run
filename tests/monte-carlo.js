@@ -154,8 +154,9 @@ function sanityCheck(plan, setup){
           if(d.type==='rest') push('lower-on-rest', wk);
           if(d.type==='long') push('lower-on-long', wk);
           if(g.isLegDemandingDay(next) || next.type==='race') push('lower-before-hard', `${wk} ${d.label} -> ${next.label}`);
-          if(d.strengthExpress && !g.isLegDemandingDay(d)) push('express-on-easy', wk);
-          if(!d.strengthExpress && g.isLegDemandingDay(d)) push('full-lower-on-hard', wk);
+          if(g.isLegDemandingDay(d) && !d.strengthAfterRun) push('lower-on-hard-not-after-run', wk);
+          if(d.strengthExpress) push('express-retired', wk);
+          if(d.strengthTimeMin < 28 && !/taper|peak/.test(w.phase) && !(d.daysToRace!=null && d.daysToRace<=21)) push('lower-too-short', `${wk} ${d.strengthTimeMin} min`);
         }
         if(d.strengthFocus==='upper' && d.type==='long') push('upper-on-long', wk);
         if(!d.strengthExercises || d.strengthExercises.length<3) push('strength-empty', wk);
@@ -166,7 +167,6 @@ function sanityCheck(plan, setup){
         (d.strengthExercises||[]).forEach(line=>{ const m=line.match(/^\d+×\S+ (.+?) (each (side|way|hand) )?\(/); const nm=m?m[1].trim():''; if(!nm) return; const r=resolvable.get(nm); if(!r) push('strength-equipment', `${wk} ${nm} not available with [${[...avail].join(',')}]`); else if(r.how && !(d.strengthHowTo||[]).some(x=>x.name===nm)) push('strength-howto', `${wk} no how-to for ${nm}`); });
         (d.strengthOptional||[]).forEach(line=>{ const m=line.match(/^\d+×\S+ (.+?) \(/); const nm=m?m[1].trim():''; if(nm && !resolvable.has(nm)) push('strength-equipment', `${wk} optional ${nm} not available`); });
         if(!d.strengthTimeMin) push('strength-time', wk);
-        if(d.strengthExpress && d.strengthTimeMin>25) push('express-too-long', wk);
         if(d.type==='rest' && !/strength/i.test(text)) push('rest-strength-text', `${wk}: ${text}`);
       }
     });
@@ -210,8 +210,8 @@ for(let i=0;i<COUNT;i++){
   catch(e){ record(meta, [{rule:'THROWS', detail:String(e.stack||e).split('\n').slice(0,2).join(' ')}]); continue; }
   const list = g.validatePlan(plan, setup).map(d=>({rule:'invariant', detail:d})).concat(sanityCheck(plan, setup));
   record(meta, list);
-  if(ONLY===String(i)){ console.log(JSON.stringify(meta)); console.log(JSON.stringify(setup)); plan.weeks.forEach(w=>{ console.log(`-- week ${w.weekIndex+1} ${w.phase}${w.isCutback?' cb':''} planned ${w.plannedKm} target ${w.targetKm}  E ${g.paceStr(w.paces.easyPerKm,'km')} T ${g.paceStr(w.paces.tempoPerKm,'km')} L ${g.paceStr(w.paces.longPerKm,'km')}`); w.days.forEach(d=>console.log(`  ${['Su','Mo','Tu','We','Th','Fr','Sa'][d.dow]} ${d.label.padEnd(16)} ${d.km.toFixed(1).padStart(5)} km d${d.daysToRace}  ${ui.workoutPartsFor(d, w.paces, setup.units, 'pace').join(' | ')}${d.strength?'  [+'+d.strengthFocus+(d.strengthExpress?'/express':'')+']':''}`)); }); list.forEach(x=>console.log('  !! '+x.rule+' '+x.detail)); }
-  if(SHOW && shown<SHOW && !list.length){ shown++; console.log(`\n### sample plan #${i} ${JSON.stringify(meta)}`); plan.weeks.slice(0,2).concat(plan.weeks.slice(-2)).forEach(w=>{ console.log(`-- week ${w.weekIndex+1} ${w.phase}`); w.days.forEach(d=>console.log(`  ${['Su','Mo','Tu','We','Th','Fr','Sa'][d.dow]} ${d.label.padEnd(16)} ${d.km?d.km.toFixed(1).padStart(5)+' km':'        '} ${ui.daySummaryText(d, w.paces, setup.units, 'pace')}${d.strength?'  [+strength '+d.strengthFocus+(d.strengthExpress?'/express':'')+']':''}`)); }); }
+  if(ONLY===String(i)){ console.log(JSON.stringify(meta)); console.log(JSON.stringify(setup)); plan.weeks.forEach(w=>{ console.log(`-- week ${w.weekIndex+1} ${w.phase}${w.isCutback?' cb':''} planned ${w.plannedKm} target ${w.targetKm}  E ${g.paceStr(w.paces.easyPerKm,'km')} T ${g.paceStr(w.paces.tempoPerKm,'km')} L ${g.paceStr(w.paces.longPerKm,'km')}`); w.days.forEach(d=>console.log(`  ${['Su','Mo','Tu','We','Th','Fr','Sa'][d.dow]} ${d.label.padEnd(16)} ${d.km.toFixed(1).padStart(5)} km d${d.daysToRace}  ${ui.workoutPartsFor(d, w.paces, setup.units, 'pace').join(' | ')}${d.strength?'  [+'+d.strengthFocus+(d.strengthAfterRun?'/after run':'')+']':''}`)); }); list.forEach(x=>console.log('  !! '+x.rule+' '+x.detail)); }
+  if(SHOW && shown<SHOW && !list.length){ shown++; console.log(`\n### sample plan #${i} ${JSON.stringify(meta)}`); plan.weeks.slice(0,2).concat(plan.weeks.slice(-2)).forEach(w=>{ console.log(`-- week ${w.weekIndex+1} ${w.phase}`); w.days.forEach(d=>console.log(`  ${['Su','Mo','Tu','We','Th','Fr','Sa'][d.dow]} ${d.label.padEnd(16)} ${d.km?d.km.toFixed(1).padStart(5)+' km':'        '} ${ui.daySummaryText(d, w.paces, setup.units, 'pace')}${d.strength?'  [+strength '+d.strengthFocus+(d.strengthAfterRun?'/after run':'')+']':''}`)); }); }
 }
 // general plans
 const kinds = ['speed','distance','maintenance','recovery'];

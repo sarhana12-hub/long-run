@@ -38,7 +38,7 @@ PROFILES.forEach(p=>{
     w.days.forEach(d=>{
       const parts = ui.workoutPartsFor(d, w.paces, unit, 'pace');
       const sum = ui.daySummaryText(d, w.paces, unit, 'pace');
-      const str = d.strength ? `  [+${d.strengthFocus}${d.strengthExpress?'/express':''}${d.strengthTimeMin?' '+d.strengthTimeMin+'min':''}: ${(d.strengthExercises||[]).map(x=>x.split(' (')[0]).join('; ')}]` : '';
+      const str = d.strength ? `  [+${d.strengthFocus}${d.strengthAfterRun?'/after run':''}${d.strengthTimeMin?' '+d.strengthTimeMin+'min':''}: ${(d.strengthExercises||[]).map(x=>x.split(' (')[0]).join('; ')}]` : '';
       console.log(`  ${DOW[d.dow]} ${d.label.padEnd(16)} ${d.km?g.fmtDist(d.km,unit).padStart(7):'       '}  ${sum}${str}`);
       if(parts.length>1 || (parts[0] && parts[0]!==sum)) parts.forEach(x=>console.log(`       · ${x}`));
     });
