@@ -1257,11 +1257,18 @@ function generatePlan(setup, dayOneOverride){
   for(let i=3;i<nTrain;i+=4) cutbackAt.add(i);
   if(cutbackAt.has(nTrain-1)){ cutbackAt.delete(nTrain-1); if(nTrain-2>=2) cutbackAt.add(nTrain-2); }
   const stepKm = unitToKm(runsPerWeek, 'mi');
+  // Build pace (owner's option): 'standard' is Daniels' step rule above; 'faster' follows
+  // the common 10%-a-week guideline between cutbacks. Faster builds carry more injury
+  // risk (Nielsen et al. 2014: runners who raised volume by more than ~30% over two weeks
+  // were injured more often), which the onboarding hint says.
+  const buildPace = setup.buildPace==='faster' ? 'faster' : 'standard';
   const vols = [], cutbacks = [], levels = [];
   let level = startVol; // the level held through the current block
   for(let i=0;i<nTrain;i++){
     const cb = cutbackAt.has(i);
-    if(i>0 && i%4===0){
+    if(buildPace==='faster'){
+      if(i>0 && !cb) level = trimming ? Math.max(targetPeak, level*0.9) : Math.min(targetPeak, level*1.10);
+    } else if(i>0 && i%4===0){
       if(trimming) level = Math.max(targetPeak, level - stepKm);
       else level = Math.min(targetPeak, level + stepKm);
     }
@@ -1270,7 +1277,9 @@ function generatePlan(setup, dayOneOverride){
   }
   const peakWeeklyKm = vols.length ? Math.max(...vols) : startVol;
   if(targetPeak - peakWeeklyKm > 5 && cls!=='5k' && cls!=='10k'){
-    warnings.push(`${totalWeeks} weeks allows a build to about ${fmtDist(peakWeeklyKm,unit,0)}/week — Daniels' rule is to add no more than ${runsPerWeek} miles at a time and hold each level three to four weeks — short of the ${fmtDist(targetPeak,unit,0)}/week a ${raceLabelKm(raceKm)} plan at your mileage peaks at. Nothing is rushed to close the gap.`);
+    warnings.push(buildPace==='faster'
+      ? `${totalWeeks} weeks allows a build to about ${fmtDist(peakWeeklyKm,unit,0)}/week at 10% a week with cutbacks, short of the ${fmtDist(targetPeak,unit,0)}/week a ${raceLabelKm(raceKm)} plan at your mileage peaks at.`
+      : `${totalWeeks} weeks allows a build to about ${fmtDist(peakWeeklyKm,unit,0)}/week — Daniels' rule is to add no more than ${runsPerWeek} miles at a time and hold each level three to four weeks — short of the ${fmtDist(targetPeak,unit,0)}/week a ${raceLabelKm(raceKm)} plan at your mileage peaks at. Nothing is rushed to close the gap. Choosing "Faster" in the build-pace setting trades some injury risk for a higher peak.`);
   }
 
   // --- phases: Daniels' priority weeks over the whole plan, taper weeks being the tail of
@@ -1513,7 +1522,7 @@ function generatePlan(setup, dayOneOverride){
     athlete:{races:athlete.races, weeklyKm:athlete.weeklyKm, longestKm:athlete.longestKm, vdot:athlete.vdot, marathonSec:athlete.marathonSec},
     startVdot, endVdot, buildWeeksCount:nTrain, rampWeeks, taperDays, taperWeeks:nTaper, taperMode,
     goalRacePerKm: setup.goalTimeSec ? racePerKm : null, racePerKm,
-    prediction, goalStatus: goal.status, peakWeeklyKm, peakLongKm: achievedPeakLong, warnings, runsPerWeek: requestedRuns, runsWeekOne: runsPerWeek, longTimeCapMin: longTimeCapMin(raceKm), phaseCounts,
+    prediction, goalStatus: goal.status, peakWeeklyKm, peakLongKm: achievedPeakLong, warnings, buildPace, runsPerWeek: requestedRuns, runsWeekOne: runsPerWeek, longTimeCapMin: longTimeCapMin(raceKm), phaseCounts,
     paces:weeks[0].paces, weeks,
   };
 }
@@ -1772,8 +1781,8 @@ function validatePlan(plan, setup){
   for(let i=1;i<vols.length;i++){
     if(weeks[i].phase==='taper' || weeks[i].phase==='recovery' || weeks[i-1].isCutback) continue;
     if((plan.warnings||[]).some(x=>/running days/.test(x))) continue;
-    // Daniels: a step is at most (sessions per week) miles
-    const allowed = stepKm+0.5;
+    // Daniels: a step is at most (sessions per week) miles; 'faster' allows 10% a week
+    const allowed = (plan.buildPace==='faster' ? Math.max(stepKm, nominal[i-1]*0.10) : stepKm) + 0.5;
     if(nominal[i] - nominal[i-1] > allowed) v.push(`w${i+1} volume up ${(nominal[i]-nominal[i-1]).toFixed(1)} km over previous week (Daniels step is ${stepKm.toFixed(1)} km)`);
   }
   if(isRace && setup){

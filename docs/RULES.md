@@ -41,6 +41,7 @@ rule would be.
 | Week one equals current mileage | `generatePlan` | Daniels (start from current training) | Sourced | — |
 | Volume rises in steps of at most (sessions per week) miles, each level held for a 4-week block (3 weeks + a cutback) | `generatePlan` | Daniels (step rule); Pfitzinger (recovery weeks) | Sourced | — |
 | 3 build weeks then a cutback at 80% | `generatePlan` | Pfitzinger (recovery weeks every 3rd–4th week) | Sourced | — |
+| Build pace "Faster": mileage rises about 10% a week between cutbacks instead of Daniels' step | `generatePlan` | The common 10% guideline; Nielsen et al. 2014 on injury with fast increases (stated in the hint) | Owner's option, labelled | — |
 | A cutback that would leave an easy run under 30 min is held at the block level instead | `generatePlan` | Daniels (beginner plans have no recovery weeks) | Sourced | — |
 | Peak volume: 5K/10K hold current mileage; 15K–half peak at the top of the runner's Pfitzinger tier (up to 40 / 40–55 / 55–70 mi); marathon likewise (up to 55 / 55–70 / 70–85 mi); above the top tier, hold | `targetPeakWeeklyKm` | Daniels (short races need no extra volume); Pfitzinger, *Faster Road Racing* and *Advanced Marathoning* plan tiers | Sourced | — |
 | Long-run emphasis nudges the tier peak by ±5 mi | `targetPeakWeeklyKm` | — | Judgement | None found; keep flagged |

@@ -52,7 +52,7 @@ function randomSetup(i){
     maxLongRunKm: (race.km>=21 && rnd()<0.2) ? Math.round(between(14,20))*MI : null,
     maxWeeklyKm: (race.km>=21 && rnd()<0.2) ? Math.round(mpw*between(1.0,1.3))*MI : null,
     longRunEmphasis: pick(['low','balanced','balanced','high']), speedEmphasis: pick(['low','balanced','balanced','high']),
-    hillsMode: rnd()<0.25 ? 'hilly' : 'flat', skipBase: rnd()<0.2, taperMode,
+    hillsMode: rnd()<0.25 ? 'hilly' : 'flat', skipBase: rnd()<0.2, taperMode, buildPace: rnd()<0.3 ? 'faster' : 'standard',
     equipment: (()=>{ const r=rnd(); if(r<0.3) return g.DEFAULT_EQUIPMENT.slice(); if(r<0.36) return []; if(r<0.5) return ['dumbbells','bench']; return g.EQUIPMENT.map(e=>e.id).filter(()=>rnd()<0.55); })(),
   };
   if(hasRecent && goalMode!=='none'){
