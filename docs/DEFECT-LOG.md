@@ -120,6 +120,13 @@ Run both with `npm test`.
     in the day sheet. *Guard:* `strength-howto` (every listed exercise either basic or
     explained).
 
+40. **Library assumed equipment the owner doesn't have** (trap bar, cable machine) and
+    included the Pallof press, which fails the familiarity test. *Fix:* reconfigured to the
+    confirmed kit (barbell, dumbbells, kettlebells, bench/box, leg press, pull-up bar, mini
+    bands): Romanian deadlift replaces the trap-bar lift, leg press and kettlebell swings
+    join the lower pools, mini-band side steps and suitcase carries replace the Pallof press,
+    pull-ups and hanging knee raises use the bar.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy

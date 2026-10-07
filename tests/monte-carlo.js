@@ -128,8 +128,8 @@ function sanityCheck(plan, setup){
         }
         if(d.strengthFocus==='upper' && d.type==='long') push('upper-on-long', wk);
         if(!d.strengthExercises || d.strengthExercises.length<3) push('strength-empty', wk);
-        const BASIC = ['Plank','Dumbbell bench press','Push-ups','Lat pulldown','Dumbbell shoulder press','Glute bridge'];
-        (d.strengthExercises||[]).forEach(line=>{ const m=line.match(/^\d+×\S+ (.+?) (each side )?\(/); const nm=m?m[1].trim():''; if(nm && !BASIC.includes(nm) && !(d.strengthHowTo||[]).some(x=>x.name===nm)) push('strength-howto', `${wk} no how-to for ${nm}`); });
+        const BASIC = ['Plank','Dumbbell bench press','Push-ups','Dumbbell shoulder press','Glute bridge'];
+        (d.strengthExercises||[]).forEach(line=>{ const m=line.match(/^\d+×\S+ (.+?) (each (side|way|hand) )?\(/); const nm=m?m[1].trim():''; if(nm && !BASIC.includes(nm) && !(d.strengthHowTo||[]).some(x=>x.name===nm)) push('strength-howto', `${wk} no how-to for ${nm}`); });
         if(!d.strengthTimeMin) push('strength-time', wk);
         if(d.strengthExpress && d.strengthTimeMin>25) push('express-too-long', wk);
         if(d.type==='rest' && !/strength/i.test(text)) push('rest-strength-text', `${wk}: ${text}`);
