@@ -3800,6 +3800,10 @@ function renderDayDetail(){
     ${day.strength && day.strengthExercises && day.strengthExercises.length ? `
     <div class="field-label" style="margin-bottom:8px;">Strength${day.strengthTimeMin ? ` — about ${day.strengthTimeMin} min${day.strengthExpress ? ', kept short because it shares a workout day — do it after the run' : ''}` : ''}</div>
     <ul style="font-size:14.5px; color:var(--ink-soft); margin:0 0 16px; padding-left:20px; line-height:1.5;">${day.strengthExercises.map(p=>`<li style="margin-bottom:6px;">${esc(p)}</li>`).join('')}</ul>
+    ${day.strengthLoadNote ? `<div class="hint" style="margin:-8px 0 14px;">${esc(day.strengthLoadNote)}</div>` : ''}
+    ${day.strengthOptional && day.strengthOptional.length ? `
+    <div class="field-label" style="margin-bottom:6px;">Optional extras — only if you have time</div>
+    <ul style="font-size:13.5px; color:var(--muted); margin:0 0 14px; padding-left:20px; line-height:1.5;">${day.strengthOptional.map(p=>`<li style="margin-bottom:4px;">${esc(p)}</li>`).join('')}</ul>` : ''}
     ${day.strengthHowTo && day.strengthHowTo.length ? `
     <details style="margin:-6px 0 16px;">
       <summary style="font-size:13px; font-weight:700; color:var(--muted); cursor:pointer; -webkit-tap-highlight-color:transparent;">How to do these</summary>

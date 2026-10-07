@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 7; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 8; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -379,17 +379,17 @@ function buildWorkoutMeta(day, raceDistanceKm){
    No trap bar, no cable machine. Every exercise is a familiar movement; anything beyond the
    obvious carries a one-sentence how-to shown in the day sheet. */
 const STRENGTH_EXERCISES = {
-  backSquat: {name:'Back squat', equip:'barbell; or goblet squat with a heavy kettlebell', unit:'reps', how:'Bar across the upper back, feet shoulder-width, sit down and back until the thighs are about level with the floor, chest up, then drive through the whole foot to stand.'},
+  backSquat: {name:'Back squat', equip:'barbell; or a hack squat machine; or goblet squat with a heavy kettlebell', unit:'reps', how:'Bar across the upper back, feet shoulder-width, sit down and back until the thighs are about level with the floor, chest up, then drive through the whole foot to stand.'},
   legPress: {name:'Leg press', equip:'machine', unit:'reps', how:'Feet shoulder-width on the plate, lower until the knees are near a right angle without the lower back peeling off the pad, then press back without locking the knees out.'},
-  romanianDeadlift: {name:'Romanian deadlift', equip:'barbell, or a dumbbell in each hand', unit:'reps', how:'Stand tall holding the weight against the thighs, push the hips back and hinge forward with a flat back until the weight reaches mid-shin, then stand up by squeezing the glutes. The knees stay slightly bent throughout.'},
-  hipThrust: {name:'Barbell hip thrust', equip:'barbell across hips, shoulders on a bench; or a heavy dumbbell', unit:'reps', how:'Upper back on a bench, feet flat, weight across the hips; drive the hips up until the body is a straight line from shoulders to knees, squeeze the glutes, lower slowly.'},
+  romanianDeadlift: {name:'Romanian deadlift', equip:'barbell, or a dumbbell in each hand; or the back-extension machine', unit:'reps', how:'Stand tall holding the weight against the thighs, push the hips back and hinge forward with a flat back until the weight reaches mid-shin, then stand up by squeezing the glutes. The knees stay slightly bent throughout.'},
+  hipThrust: {name:'Barbell hip thrust', equip:'barbell across hips, shoulders on a bench; or a heavy dumbbell; or the hip thrust / glute drive machine', unit:'reps', how:'Upper back on a bench, feet flat, weight across the hips; drive the hips up until the body is a straight line from shoulders to knees, squeeze the glutes, lower slowly.'},
   bulgarianSplitSquat: {name:'Bulgarian split squat', equip:'rear foot on a bench, dumbbells in hand', unit:'reps', per:'leg', how:'Stand a long stride in front of a bench with the top of the rear foot resting on it; lower straight down until the front thigh is about level, then push up through the front heel.'},
-  stepUps: {name:'Weighted step-ups', equip:'knee-high box, dumbbells in hand', unit:'reps', per:'leg', how:'Place one whole foot on the box, stand up through that leg without pushing off the floor foot, then step down under control.'},
+  stepUps: {name:'Weighted step-ups', equip:'knee-high box, dumbbells in hand (or a barbell across the back)', unit:'reps', per:'leg', how:'Place one whole foot on the box, stand up through that leg without pushing off the floor foot, then step down under control.'},
   singleLegRDL: {name:'Single-leg Romanian deadlift', equip:'one dumbbell or kettlebell', unit:'reps', per:'leg', how:'Stand on one leg, hinge forward at the hip with a flat back while the free leg extends behind you, lower the weight toward the floor, then return to standing. Hold a wall if balance is the limiter.'},
   walkingLunges: {name:'Walking lunges', equip:'dumbbells in hand', unit:'reps', per:'leg', how:'Step forward and lower until both knees are at about right angles, then drive through the front foot into the next step.'},
   kettlebellSwing: {name:'Kettlebell swing', equip:'one kettlebell', unit:'reps', how:'Hinge at the hips (not a squat), hike the bell back between the legs, then snap the hips forward so the bell floats to chest height with the arms relaxed; let it swing back and repeat. Power comes from the hips, not the shoulders.'},
-  calfRaiseStraight: {name:'Standing single-leg calf raise', equip:'ball of the foot on a step, hold a rail; add a dumbbell once 12 is easy', unit:'reps', per:'leg', how:'Rise onto the ball of the foot as high as you can, pause, then lower slowly (about three seconds) until the heel is below the step.'},
-  calfRaiseBent: {name:'Seated calf raise', equip:'sitting, a dumbbell or kettlebell resting on the knee', unit:'reps', how:'Knee bent at a right angle, raise the heel as high as possible against the weight, pause, lower slowly. Works the lower calf the standing version misses.'},
+  calfRaiseStraight: {name:'Standing single-leg calf raise', equip:'ball of the foot on a step, hold a rail; add a dumbbell once 12 is easy; or the standing calf machine', unit:'reps', per:'leg', how:'Rise onto the ball of the foot as high as you can, pause, then lower slowly (about three seconds) until the heel is below the step.'},
+  calfRaiseBent: {name:'Seated calf raise', equip:'sitting, a dumbbell or kettlebell resting on the knee; or the seated calf machine', unit:'reps', how:'Knee bent at a right angle, raise the heel as high as possible against the weight, pause, lower slowly. Works the lower calf the standing version misses.'},
   hamstringCurl: {name:'Hamstring curl', equip:'machine; or single-leg glute bridges if there is no machine', unit:'reps', how:'On the machine, curl the heels toward the glutes and lower slowly. Without one: lie on your back, one foot flat, the other leg straight, and drive the hips up through the planted heel.'},
   bandWalk: {name:'Mini-band side steps', equip:'mini resistance band around the legs just above the knees', unit:'reps', per:'side', how:'Band just above the knees, feet hip-width, slight knee bend; step sideways keeping tension in the band and the toes pointing forward, then step the other way. Builds the hip muscles that keep the knee tracking straight when you run.'},
   sidePlank: {name:'Side plank', equip:'bodyweight', unit:'hold', per:'side', how:'On one forearm with the elbow under the shoulder, lift the hips so the body makes a straight line, and hold without letting the hips sag.'},
@@ -400,12 +400,12 @@ const STRENGTH_EXERCISES = {
   hangingKneeRaise: {name:'Hanging knee raise', equip:'pull-up bar', unit:'reps', how:'Hang from the bar with straight arms, lift the knees toward the chest without swinging, lower slowly.'},
   pogoHops: {name:'Pogo hops', equip:'bodyweight', unit:'reps', how:'Small quick hops in place on the balls of the feet with the knees nearly straight and the ankles doing the work; think of bouncing a ball, not jumping high.'},
   boxJumps: {name:'Box jumps', equip:'knee-high box', unit:'reps', how:'From a quarter squat, swing the arms and jump to land softly on the box with both feet; step down rather than jumping down.'},
-  benchPress: {name:'Dumbbell bench press', equip:'bench + dumbbells', unit:'reps'},
+  benchPress: {name:'Dumbbell bench press', equip:'bench + dumbbells; or the chest press machine', unit:'reps'},
   pushUps: {name:'Push-ups', equip:'bodyweight; hands on a bench to make them easier, feet on a step to make them harder', unit:'reps'},
-  pullUps: {name:'Pull-ups', equip:'pull-up bar; loop a band over the bar and under a foot for assistance, or do slow negatives', unit:'reps', how:'Hang with straight arms, pull until the chin clears the bar, lower slowly. If full pull-ups are not there yet, jump to the top and lower over three seconds, or use a band for help.'},
+  pullUps: {name:'Pull-ups', equip:'pull-up bar; loop a band over the bar and under a foot for assistance, or do slow negatives; or the lat pulldown or assisted pull-up machine', unit:'reps', how:'Hang with straight arms, pull until the chin clears the bar, lower slowly. If full pull-ups are not there yet, jump to the top and lower over three seconds, or use a band for help.'},
   invertedRow: {name:'Inverted row', equip:'a bar at hip height, or a sturdy table edge', unit:'reps', how:'Hang under the bar with heels on the floor and body straight, pull the chest to the bar by squeezing the shoulder blades, lower slowly. Walk the feet closer to make it easier.'},
-  singleArmRow: {name:'Single-arm dumbbell row', equip:'one hand and knee on a bench', unit:'reps', per:'arm', how:'Flat back, dumbbell hanging below the shoulder, pull it to the hip leading with the elbow, lower under control.'},
-  shoulderPress: {name:'Dumbbell shoulder press', equip:'seated or standing', unit:'reps'},
+  singleArmRow: {name:'Single-arm dumbbell row', equip:'one hand and knee on a bench; or the seated row machine', unit:'reps', per:'arm', how:'Flat back, dumbbell hanging below the shoulder, pull it to the hip leading with the elbow, lower under control.'},
+  shoulderPress: {name:'Dumbbell shoulder press', equip:'seated or standing; or the shoulder press machine', unit:'reps'},
   gobletSquat: {name:'Goblet squat', equip:'one kettlebell or dumbbell held at the chest', unit:'reps', how:'Hold the weight against the chest with both hands, squat down between the knees keeping the chest up, stand back up.'},
   gluteBridge: {name:'Glute bridge', equip:'bodyweight, lying on your back with feet flat', unit:'reps'},
   farmerCarry: {name:'Farmer carry', equip:'a heavy dumbbell or kettlebell in each hand, 30–40 m per set', unit:'reps', how:'Pick up the weights, stand tall with the shoulders back, and walk at a normal pace without leaning; set them down and rest between walks.'},
@@ -419,6 +419,17 @@ const UPPER_PUSH_POOL = ['benchPress','pushUps','shoulderPress'];
 const UPPER_PULL_POOL = ['pullUps','singleArmRow','invertedRow'];
 const UPPER_CORE_POOL = ['plank','deadBug','hangingKneeRaise','birdDog'];
 const UPPER_CORE2_POOL = ['sidePlank','farmerCarry','suitcaseCarry'];
+// Optional extras: isolation work has no running benefit, but the upper session is short and
+// some runners want arms and shoulders for their own sake. Always marked optional.
+const OPTIONAL_EXTRAS = [
+  {name:'Dumbbell curls', equip:'dumbbells; or the curl machine', unit:'reps'},
+  {name:'Triceps dips or dumbbell overhead extension', equip:'a bench for dips, or one dumbbell held overhead; or the triceps machine', unit:'reps'},
+  {name:'Lateral raises', equip:'light dumbbells', unit:'reps'},
+];
+function buildUpperOptional(variant){
+  const a = OPTIONAL_EXTRAS[variant%3], b = OPTIONAL_EXTRAS[(variant+1)%3];
+  return [a,b].map(ex=>strengthSetLine(ex, 2, 12, 45, 'moderate, 2 reps left in the tank'));
+}
 function pickFromPool(pool, i){ return STRENGTH_EXERCISES[pool[((i%pool.length)+pool.length)%pool.length]]; }
 const _used = [];
 function strengthSetLine(ex, sets, amount, restSec, effort){
@@ -514,6 +525,16 @@ function buildUpperStrengthWorkout(variant){
   ];
 }
 const STRENGTH_TIME_MIN = {heavy:40, maintain:28, express:20, light:15, upper:22};
+// Load is set by effort, not by a number the app can't know: "N reps left in the tank"
+// means the set ends N reps before you would fail. These notes tell a runner how to pick a
+// weight the first time and when to add to it.
+const STRENGTH_LOAD_NOTE = {
+  heavy: 'How heavy: for the main lift, pick a weight where the last rep of each set is hard but you could still do the stated number more. First time, start light and add a little each session until that is true. When you finish every set with reps to spare, add about 5% (the next dumbbell up, or 5 lb / 2.5 kg a side on a bar) next time. If you cannot complete the reps, drop back.',
+  maintain: 'How heavy: keep the weights you were using in the build weeks — the sets are fewer, not lighter. Nothing new, nothing to failure.',
+  express: 'How heavy: same weights as your full lower session; this is the short version, done after the run.',
+  light: 'How heavy: bodyweight or very light. The aim is to stay sharp, not to build anything this close to the race.',
+  upper: 'How heavy: pick a weight where the last rep or two of each set is hard but clean. Add a little when all sets feel comfortable. Hold the planks until form starts to slip, not until collapse.',
+};
 
 // Decide which days of an already-typed week carry strength, and what focus. Scoring:
 // never heavy legs the day before a hard run (that day becomes upper/core if used at
@@ -597,16 +618,20 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
   opts = opts||{};
   days.forEach(d=>{
     if(d.type==='rest') Object.assign(d, buildWorkoutMeta(d)); // rest-day text depends on whether strength landed there
-    if(!d.strength){ d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthHowTo=undefined; return; }
+    if(!d.strength){ d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
     const tier = lowerStrengthTierForPhase(phase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace, opts.strengthCutoffDays);
     const variant = weekIndex*2 + (d.strengthOrdinal||0); // two sessions in a week draw different lifts
     _used.length = 0;
     if(d.strengthFocus==='upper' || tier==null){
       d.strengthFocus = 'upper';
       d.strengthExercises = buildUpperStrengthWorkout(variant); d.strengthTimeMin = STRENGTH_TIME_MIN.upper;
+      d.strengthLoadNote = STRENGTH_LOAD_NOTE.upper;
+      const usedSoFar = _used.length; d.strengthOptional = buildUpperOptional(variant); _used.length = usedSoFar; // extras need no how-to
     } else {
-        const express = !!d.strengthExpress && tier!=='light';
-      d.strengthExercises = buildLowerStrengthWorkout(express ? 'express' : tier, variant, opts.weekInBlock); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : STRENGTH_TIME_MIN[tier];
+      const express = !!d.strengthExpress && tier!=='light';
+      const useTier = express ? 'express' : tier;
+      d.strengthExercises = buildLowerStrengthWorkout(useTier, variant, opts.weekInBlock); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : STRENGTH_TIME_MIN[tier];
+      d.strengthLoadNote = STRENGTH_LOAD_NOTE[useTier]; d.strengthOptional = undefined;
     }
     // One how-to per unfamiliar exercise in this session, in the order they appear.
     const seen = new Set(); d.strengthHowTo = [];
