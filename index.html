@@ -1178,6 +1178,7 @@ function onboardStepError(step){
   if(step===1){
     if(!d.name || !d.name.trim()) return 'Enter your name';
     if(d.goalMode==='race'){
+      if(d.raceKey==='custom' && !(d.raceDistanceKm>0)) return 'Enter your race distance';
       if(!d.raceDate) return 'Pick a race date first';
     } else {
       const meta = PLAN_KIND_META[d.planKind];
@@ -1481,11 +1482,12 @@ function renderOnboardStep1(d){
 
   const raceFieldsHtml = `
     <div class="section-title">Race distance</div>
-    <div class="chip-select" style="margin-bottom:8px;">${presetChips}</div>
+    <div class="chip-select" style="margin-bottom:8px;">${presetChips}<button class="chip ${d.raceKey==='custom'?'active':''}" data-act="pick-race-custom">Other distance…</button></div>
+    ${d.raceKey==='custom' ? `
     <div class="field">
-      <label class="field-label">Custom distance (${d.units})</label>
-      <input class="input" type="number" inputmode="decimal" min="1" step="0.1" id="in-custom-dist" value="${d.raceKey==='custom'? round1(kmToUnit(d.raceDistanceKm,d.units)):''}" placeholder="e.g. 8">
-    </div>
+      <label class="field-label">Race distance (${d.units})</label>
+      <input class="input" type="number" inputmode="decimal" min="1" step="0.1" id="in-custom-dist" value="${d.raceDistanceKm>0 ? round1(kmToUnit(d.raceDistanceKm,d.units)) : ''}" placeholder="e.g. 8" autofocus>
+    </div>` : ''}
     <div class="field">
       <label class="field-label">Units</label>
       <div class="chip-select">${unitChips}</div>
@@ -4620,6 +4622,11 @@ function onClick(e){
     render(); return;
   }
   if(act==='pick-unit'){ state.onboardDraft.units = el.dataset.u; render(); return; }
+  if(act==='pick-race-custom'){
+    if(state.onboardDraft.raceKey!=='custom'){ state.onboardDraft.raceKey = 'custom'; state.onboardDraft.raceDistanceKm = 0; }
+    render(); const i = document.getElementById('in-custom-dist'); if(i) i.focus();
+    return;
+  }
   if(act==='pick-recent'){ state.onboardDraft.recentDistanceKey = el.dataset.key; render(); return; }
   if(act==='pick-goal-mode'){ state.onboardDraft.goalMode = el.dataset.mode; render(); return; }
   if(act==='pick-hills-mode'){ state.onboardDraft.hillsMode = el.dataset.mode; render(); return; }
