@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Back squat: bar across the upper back, hips sit back and down until the thighs are about level, chest stays up">
+  <!-- floor -->
+  <line x1="16" y1="216" x2="224" y2="216" stroke-width="3" opacity=".5"/>
+  <!-- start: standing tall, bar on the upper back (faded, to the left) -->
+  <g opacity=".3">
+    <circle cx="62" cy="40" r="11"/>
+    <path d="M62 52 L62 124 L60 170 L60 212"/>
+    <path d="M48 214 L74 214"/>
+    <path d="M62 62 L48 74 L58 58"/>
+    <circle cx="68" cy="60" r="10"/>
+  </g>
+  <!-- finish: bottom of the squat, thighs level, chest up -->
+  <circle cx="146" cy="62" r="11"/>
+  <!-- torso from shoulder to hip, leaning a little forward -->
+  <path d="M150 74 L172 138"/>
+  <!-- thigh level, shin down to the floor -->
+  <path d="M172 138 L126 144 L132 212"/>
+  <path d="M116 214 L150 214"/>
+  <!-- hand up to the bar, elbow pointing back -->
+  <path d="M152 86 L138 100 L150 80"/>
+  <!-- bar end with its plate, on the upper back behind the neck -->
+  <circle cx="160" cy="80" r="10"/>
+  <line x1="160" y1="68" x2="160" y2="92" stroke-width="3"/>
+  <!-- movement arrow -->
+  <path d="M206 84 C214 104 214 130 206 152" stroke-width="3" opacity=".7"/>
+  <path d="M199 144 L206 155 L214 146" stroke-width="3" opacity=".7"/>
+</svg>

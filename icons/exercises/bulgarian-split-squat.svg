@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Bulgarian split squat: rear foot on a bench behind you, dumbbells at your sides, lower straight down until the front thigh is about level, then drive up through the front heel">
+  <!-- floor -->
+  <line x1="16" y1="216" x2="224" y2="216" stroke-width="3" opacity=".5"/>
+  <!-- bench behind -->
+  <rect x="166" y="150" width="58" height="12" rx="3"/>
+  <path d="M174 162 L174 214 M216 162 L216 214"/>
+  <!-- start: standing tall on the front leg, rear foot on the bench (faded, drawn lighter) -->
+  <g opacity=".3">
+    <circle cx="96" cy="40" r="11"/>
+    <path d="M96 52 L100 116"/>
+    <path d="M100 116 L84 166 L82 212"/>
+    <path d="M100 116 L140 146 L186 148"/>
+    <path d="M96 58 L92 126"/>
+    <path d="M82 126 L102 126"/>
+  </g>
+  <!-- finish: bottom of the rep, torso tall, front thigh level -->
+  <circle cx="106" cy="66" r="11"/>
+  <path d="M106 78 L114 138"/>
+  <!-- front leg: thigh level, shin vertical -->
+  <path d="M114 138 L68 144 L70 212"/>
+  <path d="M56 214 L88 214"/>
+  <!-- rear leg: knee low, foot resting on the bench -->
+  <path d="M114 138 L148 192 L186 148"/>
+  <!-- arm hanging, dumbbell in hand -->
+  <path d="M106 84 L100 148"/>
+  <path d="M88 148 L112 148"/>
+  <circle cx="88" cy="148" r="4"/>
+  <circle cx="112" cy="148" r="4"/>
+  <!-- movement arrow -->
+  <path d="M30 92 L30 152" stroke-width="3" opacity=".7"/>
+  <path d="M22 144 L30 154 L38 144" stroke-width="3" opacity=".7"/>
+</svg>
