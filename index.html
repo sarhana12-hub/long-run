@@ -609,7 +609,7 @@ function renderWorkoutText(day, weekPaces, unit, fmt){
   let text = segs.join(', then ');
   if(day.strides) text += day.hillStrides ? ` + hill strides (${stridesDetail(day, unit)})` : ` + strides (${stridesDetail(day, unit)})`;
   if(day.terrain==='hilly') text += day.treadmillHills ? ' — set a 1–2% incline throughout to mimic the terrain' : ' — rolling hills, run by effort not pace';
-  else if(day.terrain==='suggested') text += day.treadmillHills ? ' — a 1% incline offsets the lack of wind resistance indoors, if you’d like' : ' — seek out rolling terrain if you can, it still builds strength and economy';
+  else if(day.terrain==='suggested') text += day.treadmillHills ? ' — a 1% incline offsets the lack of wind resistance indoors, if you’d like' : ' — rolling terrain if you have it';
   return text;
 }
 // One-line summary for the Plan tab's day cards - what the session IS and the one pace
@@ -673,7 +673,7 @@ function workoutPartsFor(day, weekPaces, unit, fmt){
   else { const note = optionalCooldownNote(day); if(note) parts.push(note.charAt(0).toUpperCase()+note.slice(1)); }
   if(day.strides) parts.push((day.hillStrides ? 'Finish with hill strides — ' : 'Finish with strides — ') + stridesDetail(day, unit));
   if(day.terrain==='hilly') parts.push(day.treadmillHills ? 'Course: set a 1–2% incline throughout to mimic the terrain' : 'Course: rolling hills — run by effort, not pace');
-  else if(day.terrain==='suggested') parts.push(day.treadmillHills ? 'Course: a 1% incline offsets the lack of wind resistance indoors, if you’d like' : 'Course: seek out rolling terrain if you can — still builds strength and economy');
+  else if(day.terrain==='suggested') parts.push(day.treadmillHills ? 'Course: a 1% incline offsets the lack of wind resistance indoors, if you’d like' : 'Rolling terrain if you have it');
   return parts;
 }
 function paceInputValue(effectiveSecPerKm, unit, fmt){
@@ -1616,7 +1616,7 @@ function renderOnboardStep3(d){
     <div class="field">
       <label class="field-label">Strength days per week</label>
       <div class="chip-select">${strengthCountChipsHtml(d.strengthPerWeek, 'pick-strength-count')}</div>
-      <div class="hint">Heavy lower-body lifting plus short plyometrics — the combination with the strongest evidence for running economy. Sessions land on easy or rest days, never the day before a hard run (that slot becomes upper body/core), ease off in the peak weeks and stop in the final ten days before the race.</div>
+      <div class="hint">Lower-body sessions (heavy lifts plus short plyometrics, the combination with the strongest evidence for running economy) go on easy or rest days with a clear day before any hard run. Upper body and core sessions are light on the legs, so they take rest days or the day before a quality session. Everything eases off in peak weeks and stops in the final ten days.</div>
       ${d.hillsMode==='hilly' && (d.strengthPerWeek||0)<2 ? `<div class="banner" style="margin-top:10px;">${ICONS.bolt}<span>Hilly courses put heavy eccentric load on your quads and glutes, especially on descents — most coaches recommend at least 2 strength sessions/week to build that tolerance. You can still pick fewer, but it's worth the extra session here.</span></div>` : ''}
     </div>
 
@@ -1736,7 +1736,13 @@ function phaseLabel(phase){ return {base:'Base', build:'Build', peak:'Peak', tap
 // very last week (the one race day actually falls in) displays as "Race Week" rather
 // than "Taper" even though it's still internally the taper phase.
 function weekDisplayLabel(week, totalWeeks, planKind){
-  if(!planKind && week.weekIndex===totalWeeks-1) return 'Race Week';
+  if(!planKind){
+    if(week.daysToRaceAtStart!=null){
+      if(week.daysToRaceAtStart===0) return totalWeeks>1 ? 'Race Day' : 'Race Week';
+      if(week.daysToRaceAtStart>0 && week.daysToRaceAtStart<=7) return 'Race Week';
+      if(week.daysToRaceAtStart<0) return 'After';
+    } else if(week.weekIndex===totalWeeks-1) return 'Race Week';
+  }
   return week.isCutback ? 'Cutback' : phaseLabel(week.phase);
 }
 function weekColorVar(week){ return week.isCutback ? 'var(--z-rest)' : phaseColorVar(week.phase); }

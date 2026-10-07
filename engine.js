@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 3; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 4; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -343,6 +343,15 @@ function buildWorkoutMeta(day, raceDistanceKm){
       return {descBase, paceKey, warmupKm, cooldownKm, qualityKm: round1(Math.min(workKm, blockKm))};
     }
     case 'fartlek':{
+      if(day.easyVariety){
+        // Base-phase variety: an easy run with a little rhythm in it. Short, relaxed pickups
+        // around 10K effort - not a session, so it never counts as a hard day.
+        const pickups = clamp(Math.round(day.km/2), 4, 6);
+        return {
+          descBase: `Easy run with ${pickups} relaxed 1-minute pickups spread through the middle (around 10K effort, smooth not strained), 2 min easy between — still an easy day`,
+          paceKey: 'easyPerKm', paceKey2: 'tempoPerKm', desc2: 'pickups, roughly',
+        };
+      }
       const surges = clamp(Math.round(day.km/1.5), 4, 8);
       return {
         descBase: `${surges} surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort), 2 min easy jog between; the rest of the run stays easy`,
@@ -384,21 +393,28 @@ const STRENGTH_EXERCISES = {
   dropJumps: {name:'Drop jumps', equip:'step off a 30–40 cm box, rebound immediately, land tall', unit:'reps'},
   bounding: {name:'Bounding', equip:'flat grass or track, exaggerated running strides', unit:'reps'},
   singleLegHops: {name:'Single-leg hops', equip:'bodyweight, stick each landing', unit:'reps', per:'leg'},
-  benchPress: {name:'Dumbbell bench press', equip:'bench + dumbbells, or push-ups', unit:'reps'},
+  benchPress: {name:'Dumbbell bench press', equip:'bench + dumbbells', unit:'reps'},
+  pushUps: {name:'Push-ups', equip:'bodyweight; feet on a step to make them harder, hands on a bench to make them easier', unit:'reps'},
+  invertedRow: {name:'Inverted row', equip:'bar or rings at hip height, or a sturdy table edge', unit:'reps'},
+  birdDog: {name:'Bird dog', equip:'bodyweight, on hands and knees, slow and level', unit:'reps', per:'side'},
+  hollowHold: {name:'Hollow-body hold', equip:'bodyweight, lower back pressed into the floor', unit:'hold'},
+  farmerCarry: {name:'Farmer carry', equip:'a heavy dumbbell or kettlebell in each hand, 30–40 m per set', unit:'reps'},
   singleArmRow: {name:'Single-arm dumbbell row', equip:'hand and knee on a bench', unit:'reps', per:'arm'},
   latPulldown: {name:'Lat pulldown or pull-ups', equip:'cable machine, or a bar', unit:'reps'},
   shoulderPress: {name:'Dumbbell shoulder press', equip:'seated or standing', unit:'reps'},
   gobletSquat: {name:'Goblet squat', equip:'one light dumbbell at your chest', unit:'reps'},
   gluteBridge: {name:'Glute bridge', equip:'bodyweight, squeeze at the top', unit:'reps'},
 };
-const PRIMARY_LOWER_POOL = ['backSquat','trapBarDeadlift','hipThrust'];
-const UNILATERAL_POOL = ['bulgarianSplitSquat','stepUps','walkingLunges'];
-const POSTERIOR_POOL = ['singleLegRDL','hamstringCurl'];
-const LOWER_CORE_POOL = ['pallofPress','sidePlank','copenhagen'];
+const PRIMARY_LOWER_POOL = ['backSquat','trapBarDeadlift','hipThrust','backSquat','trapBarDeadlift'];
+const UNILATERAL_POOL = ['bulgarianSplitSquat','stepUps','walkingLunges','stepUps','bulgarianSplitSquat'];
+const POSTERIOR_POOL = ['singleLegRDL','hamstringCurl','singleLegRDL'];
+const LOWER_CORE_POOL = ['pallofPress','sidePlank','copenhagen','deadBug'];
 const PLYO_POOL_INTRO = ['pogoHops','boxJumps'];
 const PLYO_POOL_ADV = ['dropJumps','bounding','singleLegHops'];
-const UPPER_PULL_POOL = ['singleArmRow','latPulldown'];
-const UPPER_CORE_POOL = ['plank','deadBug'];
+const UPPER_PUSH_POOL = ['benchPress','pushUps','shoulderPress'];
+const UPPER_PULL_POOL = ['singleArmRow','latPulldown','invertedRow'];
+const UPPER_CORE_POOL = ['plank','deadBug','birdDog','hollowHold'];
+const UPPER_CORE2_POOL = ['sidePlank','farmerCarry','pallofPress'];
 function pickFromPool(pool, i){ return STRENGTH_EXERCISES[pool[((i%pool.length)+pool.length)%pool.length]]; }
 function strengthSetLine(ex, sets, amount, restSec, effort){
   const numSuffix = ex.per==='leg' ? '/leg' : ex.per==='arm' ? '/arm' : '';
@@ -412,7 +428,7 @@ function strengthSetLine(ex, sets, amount, restSec, effort){
 // 'maintain' (peak: fewer sets, keep the load, keep a little plyo), 'light' (taper beyond
 // 10 days out: bodyweight + a few hops, nothing new), none inside the last 10 days.
 function lowerStrengthTierForPhase(phase, daysToRace){
-  if(daysToRace!=null && daysToRace<=10) return null;
+  if(daysToRace!=null && daysToRace>=0 && daysToRace<=10) return null;
   if(phase==='taper' || phase==='recovery') return 'light';
   if(phase==='peak') return 'maintain';
   return 'heavy';
@@ -467,15 +483,18 @@ function buildLowerStrengthWorkout(tier, weekIndex, weekInBlock){
   lines.push(strengthSetLine(core, 3, coreAmt, 30, core.unit==='hold' ? 'hold with good form' : 'controlled, resist rotation'));
   return lines;
 }
-function buildUpperStrengthWorkout(weekIndex){
-  const pull = pickFromPool(UPPER_PULL_POOL, weekIndex);
-  const core = pickFromPool(UPPER_CORE_POOL, weekIndex);
+function buildUpperStrengthWorkout(variant){
+  const w = Math.floor(variant/2); // rotate by week, so a lower and an upper session in the same week stay in step
+  const push = pickFromPool(UPPER_PUSH_POOL, w);
+  const pull = pickFromPool(UPPER_PULL_POOL, w+1);
+  const core = pickFromPool(UPPER_CORE_POOL, w);
+  const core2 = pickFromPool(UPPER_CORE2_POOL, w+1);
+  const pushReps = push===STRENGTH_EXERCISES.pushUps ? 12 : 8;
   return [
-    strengthSetLine(STRENGTH_EXERCISES.benchPress, 3, 8, 75, '1–2 reps left in the tank'),
-    strengthSetLine(pull, 3, 8, 75, 'same effort'),
-    strengthSetLine(STRENGTH_EXERCISES.shoulderPress, 2, 10, 60, 'moderate'),
+    strengthSetLine(push, 3, pushReps, 75, '1–2 reps left in the tank'),
+    strengthSetLine(pull, 3, 8, 75, 'same effort, squeeze the shoulder blades'),
     strengthSetLine(core, 3, core.unit==='hold'?40:10, 30, core.unit==='hold' ? 'hold with a neutral spine' : 'slow and controlled'),
-    strengthSetLine(STRENGTH_EXERCISES.sidePlank, 2, 30, 20, 'steady'),
+    strengthSetLine(core2, 2, core2.unit==='hold'?30:(core2===STRENGTH_EXERCISES.farmerCarry?1:10), 30, core2===STRENGTH_EXERCISES.farmerCarry ? 'one walk per set, tall posture' : 'steady'),
   ];
 }
 const STRENGTH_TIME_MIN = {heavy:40, maintain:28, express:20, light:15, upper:22};
@@ -486,60 +505,86 @@ const STRENGTH_TIME_MIN = {heavy:40, maintain:28, express:20, light:15, upper:22
 // a rest day or the recovery day after the long run is ideal; keep lifting days >= 2 apart.
 function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex, opts){
   opts = opts||{};
-  days.forEach(d=>{ d.strength=false; d.strengthFocus=null; d.strengthExercises=undefined; d.strengthTimeMin=undefined; });
+  days.forEach(d=>{ d.strength=false; d.strengthFocus=null; d.strengthExpress=false; d.strengthOrdinal=undefined; d.strengthExercises=undefined; d.strengthTimeMin=undefined; });
   let want = strengthPerWeek==null ? 2 : strengthPerWeek;
-  const minDaysToRace = opts.minDaysToRace;
-  if(minDaysToRace!=null && minDaysToRace<=10) want = 0; // final 10 days: no lifting
-  else if(phase==='taper') want = Math.min(want, 1);
+  if(phase==='taper') want = Math.min(want, 1);
   else if(phase==='peak') want = Math.min(want, 2);
   if(want<=0){ refreshStrengthWorkouts(days, phase, weekIndex, opts); return; }
   const n = days.length;
   const hard = i => isLegDemandingDay(days[i]) || days[i].type==='race';
-  const score = i => {
-    const d = days[i];
-    if(d.type==='race' || d.daysToRace<0) return -100;
-    const next = days[(i+1)%n];
-    let s = 0;
-    if(hard((i+1)%n) || next.type==='race') s -= 10; // day before a hard run
-    if(hard(i)) s -= (d.type==='long' ? 8 : 6);     // same day as a hard run: only when nothing better exists
-    if(d.type==='rest') s += 3;                      // a rest day costs the runner no extra time on a run day
-    if(d.type==='easy' || d.easyVariety) s += 2;
-    if(d.easyRole==='recovery') s += 1;
-    if(strengthDows && strengthDows.includes(d.dow)) s += 0.5; // tie-break toward the runner's usual days
-    return s;
+  const usable = i => { const d = days[i]; return d.type!=='race' && !(d.daysToRace!=null && d.daysToRace>=0 && d.daysToRace<=10) && !(d.daysToRace!=null && d.daysToRace<0); };
+  // Lower body (heavy legs) needs a clear day before the next hard run; it sits best on a
+  // rest day or the easy/recovery day after the long run. Upper body/core is cheap to
+  // recover from, so it can go on a rest day or the day before a quality session, and
+  // keeps every rest day a genuine day off for the legs.
+  const lowerScore = i => {
+    const d = days[i], next = days[(i+1)%n];
+    if(!usable(i) || hard((i+1)%n) || next.type==='race') return null;
+    let sc = 0;
+    if(hard(i)) sc -= 6; // only when nothing cleaner exists (becomes an express session)
+    if(d.type==='rest') sc += 3;
+    if(d.type==='easy' || d.easyVariety) sc += 2;
+    if(d.easyRole==='recovery') sc += 1;
+    if(strengthDows && strengthDows.includes(d.dow)) sc += 0.5;
+    return sc;
   };
-  const order = days.map((_,i)=>i).sort((a,b)=>score(b)-score(a) || a-b);
-  const chosen = [];
-  for(const i of order){
-    if(chosen.length>=want) break;
-    if(score(i)<=-100) continue;
-    if(chosen.some(c=>circularDayDist(days[c].dow, days[i].dow)<2)) continue;
-    chosen.push(i);
+  const upperScore = i => {
+    const d = days[i];
+    if(!usable(i) || d.type==='long') return null;
+    let sc = 0;
+    if(d.type==='rest') sc += 2;
+    if(d.type==='easy' || d.easyVariety) sc += 1;
+    if(hard(i)) sc -= 3;
+    return sc;
+  };
+  const chosen = []; // {i, focus}
+  const taken = i => chosen.some(c=>c.i===i);
+  const lowerOk = i => !chosen.some(c=>c.focus==='lower' && circularDayDist(days[c.i].dow, days[i].dow)<3);
+  const bestLower = () => { let b=null; for(let i=0;i<n;i++){ if(taken(i) || !lowerOk(i)) continue; const sc=lowerScore(i); if(sc==null) continue; if(!b || sc>b.sc) b={i, sc}; } return b; };
+  const bestUpper = () => { let b=null; for(let i=0;i<n;i++){ if(taken(i)) continue; const sc=upperScore(i); if(sc==null) continue; if(!b || sc>b.sc) b={i, sc}; } return b; };
+  // First session is always lower body - that's the one with the running-economy evidence.
+  const first = bestLower();
+  if(first) chosen.push({i:first.i, focus:'lower'});
+  while(chosen.length < want){
+    const lowerCount = chosen.filter(c=>c.focus==='lower').length;
+    const l = lowerCount<2 ? bestLower() : null;
+    const u = bestUpper();
+    if(!l && !u) break;
+    // A second lower session only when it has a clean slot; otherwise upper body/core.
+    if(l && l.sc>=0 && (!u || l.sc>=u.sc-1)) chosen.push({i:l.i, focus:'lower'});
+    else if(u) chosen.push({i:u.i, focus:'upper'});
+    else chosen.push({i:l.i, focus:'lower'});
   }
-  chosen.forEach(i=>{ days[i].strength = true; days[i].strengthExpress = hard(i); });
-  recomputeStrengthFocus(days);
+  chosen.forEach((c,k)=>{ const d=days[c.i]; d.strength=true; d.strengthFocus=c.focus; d.strengthExpress = c.focus==='lower' && hard(c.i); d.strengthOrdinal=k; });
   refreshStrengthWorkouts(days, phase, weekIndex, opts);
 }
+// After a manual swap/edit: a lower-body session that now sits the day before a hard run
+// (or on the long run) flips to upper/core; an upper session on a clean slot stays upper
+// (the runner chose where to put it).
 function recomputeStrengthFocus(days){
   const n = days.length;
   days.forEach((day,i)=>{
     if(!day.strength){ day.strengthFocus=null; return; }
     const next = days[(i+1)%n];
     const beforeHard = isLegDemandingDay(next) || next.type==='race';
-    day.strengthFocus = (beforeHard || day.type==='long') ? 'upper' : 'lower';
+    if(beforeHard || day.type==='long') day.strengthFocus = 'upper';
+    else if(!day.strengthFocus) day.strengthFocus = 'lower';
+    day.strengthExpress = day.strengthFocus==='lower' && isLegDemandingDay(day);
   });
 }
 function refreshStrengthWorkouts(days, phase, weekIndex, opts){
   opts = opts||{};
   days.forEach(d=>{
+    if(d.type==='rest') Object.assign(d, buildWorkoutMeta(d)); // rest-day text depends on whether strength landed there
     if(!d.strength){ d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; return; }
     const tier = lowerStrengthTierForPhase(phase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace);
+    const variant = weekIndex*2 + (d.strengthOrdinal||0); // two sessions in a week draw different lifts
     if(d.strengthFocus==='upper' || tier==null){
       d.strengthFocus = 'upper';
-      d.strengthExercises = buildUpperStrengthWorkout(weekIndex); d.strengthTimeMin = STRENGTH_TIME_MIN.upper;
+      d.strengthExercises = buildUpperStrengthWorkout(variant); d.strengthTimeMin = STRENGTH_TIME_MIN.upper;
     } else {
       const express = !!d.strengthExpress && tier!=='light';
-      d.strengthExercises = buildLowerStrengthWorkout(express ? 'express' : tier, weekIndex, opts.weekInBlock); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : STRENGTH_TIME_MIN[tier];
+      d.strengthExercises = buildLowerStrengthWorkout(express ? 'express' : tier, variant, opts.weekInBlock); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : STRENGTH_TIME_MIN[tier];
     }
   });
 }
@@ -776,13 +821,13 @@ function buildWeekDays(spec){
   const restIdxs = restEligible.filter((_,pos)=>restPositions.has(pos));
   const easyIdxs = candidateIdxs.filter(i=>!restIdxs.includes(i));
 
-  const recoveryIdx = easyIdxs.length>=3 ? easyIdxs.find(i=>days[i].dow===(spec.longDow+1)%7) : undefined;
+  const recoveryIdx = easyIdxs.length>=2 ? easyIdxs.find(i=>days[i].dow===(spec.longDow+1)%7) : undefined;
   let aerobicIdx = null;
   if(spec.medLong && easyIdxs.length>=2){
     const cands = easyIdxs.filter(i=>i!==recoveryIdx);
     aerobicIdx = cands.reduce((best,i)=> circularDayDist(days[i].dow,spec.longDow) > circularDayDist(days[best].dow,spec.longDow) ? i : best, cands[0]);
   }
-  const weight = i => easyIdxs.length<=2 ? 1 : (i===recoveryIdx ? 0.7 : i===aerobicIdx ? 1.45 : 1.0);
+  const weight = i => i===recoveryIdx ? 0.6 : i===aerobicIdx ? 1.45 : 1.0;
   const totalW = easyIdxs.reduce((s,i)=>s+weight(i),0);
   // Caps: a plain easy day stays well under the long run; the medium-long day may reach 80%.
   // Plain easy days stay clearly shorter than the long run; the medium-long day may approach
@@ -795,7 +840,8 @@ function buildWeekDays(spec){
   if(aerobicIdx!=null && spec.strides>0) stridesIdxs.push(aerobicIdx);
   stridesEligible.forEach(i=>{ if(stridesIdxs.length<(spec.strides||0) && !stridesIdxs.includes(i)) stridesIdxs.push(i); });
   const stridesKmFor = i => (i===aerobicIdx && spec.isHilly) ? HILL_STRIDES_EXTRA_KM : STRIDES_EXTRA_KM;
-  const capFor = i => spec.longKm>0 ? Math.min(spec.longKm*0.95, (i===aerobicIdx ? spec.longKm*medCapFrac : spec.longKm*easyCapFrac)*capScale) - (stridesIdxs.includes(i)?stridesKmFor(i):0) : Infinity;
+  const capRef = Math.max(spec.longKm, spec.capRefLongKm||0);
+  const capFor = i => capRef>0 ? Math.min(capRef*0.95, (i===aerobicIdx ? capRef*medCapFrac : capRef*easyCapFrac)*capScale) - (stridesIdxs.includes(i)?stridesKmFor(i):0) : Infinity;
   remaining = Math.max(0, remaining - stridesIdxs.reduce((s,i)=>s+stridesKmFor(i),0));
   // Distribute with caps; water-fill so capped mileage flows to the other easy days.
   const alloc = {};
@@ -813,7 +859,7 @@ function buildWeekDays(spec){
   const varietyIdx = (spec.varietyType && easyIdxs.filter(i=>i!==recoveryIdx && i!==aerobicIdx).length) ? easyIdxs.filter(i=>i!==recoveryIdx && i!==aerobicIdx)[0] : null;
   easyIdxs.forEach(i=>{
     const isVariety = i===varietyIdx;
-    const role = i===recoveryIdx ? 'recovery' : i===aerobicIdx ? 'aerobic' : 'easy';
+    const role = (i===recoveryIdx && (alloc[i]||0) <= 9.5) ? 'recovery' : i===aerobicIdx ? 'aerobic' : 'easy';
     days[i] = {...days[i], type: isVariety ? spec.varietyType : 'easy', km: round1((alloc[i]||0) + (stridesIdxs.includes(i)?stridesKmFor(i):0)),
       label: isVariety ? TYPE_LABELS[spec.varietyType] : (role==='recovery' ? 'Recovery Run' : role==='aerobic' ? 'Medium-Long Run' : 'Easy Run'),
       easyRole: role, strides: stridesIdxs.includes(i), hillStrides: i===aerobicIdx && stridesIdxs.includes(i) && !!spec.isHilly,
@@ -968,9 +1014,13 @@ function generatePlan(setup, dayOneOverride){
         const qDate = (()=>{ for(let d=0; d<7; d++){ const dt=addDays(weekStart,d); if(dt.getDay()===qd) return dt; } return null; })();
         const dq = qDate ? daysBetween(qDate, raceDate) : -1;
         if(dq>=3){
-          const type = cls==='5k'||cls==='10k' ? (dq>=6 ? 'intervals' : 'cruise') : 'racepace';
-          const s = sizeQuality(type, cls, 'peak', 0.3, 0.6*sessionScale, Math.max(weeklyKm, peakWeeklyKm*0.6), Math.max(longKm, achievedPeakLong*0.6), raceKm, paces);
-          quality.push({dow:qd, type, scale:0.6*sessionScale, ...s});
+          // Keep intensity, shed volume: a race-specific rehearsal three weeks out, a crisp
+          // threshold session two weeks out, and a short race-pace tune-up in race week.
+          const short = cls==='5k'||cls==='10k';
+          const type = dq>14 ? (short ? 'intervals' : 'racepace') : dq>7 ? 'cruise' : (short ? 'reps' : 'racepace');
+          const sc = (dq>14 ? 0.75 : dq>7 ? 0.65 : 0.5)*sessionScale;
+          const s = sizeQuality(type, cls, 'peak', 0.3, sc, Math.max(weeklyKm, peakWeeklyKm*0.6), Math.max(longKm, achievedPeakLong*0.6), raceKm, paces);
+          quality.push({dow:qd, type, scale:sc, ...s});
         }
       } else {
         const rot = rotationFor(phase, cls, isHilly, false);
@@ -996,7 +1046,7 @@ function generatePlan(setup, dayOneOverride){
     const strides = phase==='base' || phase==='build' ? 2 : phase==='peak' ? 1 : (midD>2 ? 1 : 0);
 
     const buildOnce = vol => buildWeekDays({weekStart, weeklyKm:vol, longKm, longDow, phase, isCutback, weekIndex:w, quality, runsPerWeek, strides,
-      raceKm, raceDate, paces, varietyType, medLong, longRacePaceKm, isHilly, unit});
+      raceKm, raceDate, paces, varietyType, medLong, longRacePaceKm, isHilly, unit, capRefLongKm: phase==='taper' ? achievedPeakLong*0.7 : 0});
     let built = buildOnce(weeklyKm);
     if(built.unplacedKm > weeklyKm*0.03 && quality.length){
       // The week can't hold its nominal volume on this many run days: shrink to what fits and

@@ -78,6 +78,19 @@ check('5k, 1 strength, skip base', {race:'5k', mpw:30, weeks:8, recentSec:21*60,
 check('10k, 24 mpw, long Friday (reported: thin cruise session)', {race:'10k', mpw:24, weeks:10, recentSec:23*60, longDow:5}, (p)=>{
   const bad=[]; p.weeks.forEach(w=>{ if(w.phase==='taper'||w.isCutback) return; w.days.forEach(d=>{ if(d.type==='cruise'||d.type==='tempo'){ const min=g.minutesForKm(d.qualityKm, w.paces.tempoPerKm); if(min<19) bad.push(`w${w.weekIndex+1} ${d.type} ${min.toFixed(0)} min`); } }); }); return bad; });
 check('10k, 50 mpw (trims toward what a 10k needs)', {race:'10k', mpw:50, weeks:12, recentSec:19*60, longest:12}, (p,s)=>{ const settled=Math.max(...p.weeks.filter(w=>w.weekIndex>=3 && w.phase!=='taper').map(w=>w.plannedKm||0)); return settled <= s.currentWeeklyKm*0.92 ? [] : [`expected a ~10% trim after the first weeks, settled at ${mi(settled)} vs current ${mi(s.currentWeeklyKm)}`]; });
+check('Marathon, 40 mpw, 5 runs (reported: strength variety, recovery day)', {race:'marathon', mpw:40, weeks:18, recentSec:22*60, longest:12, runs:5}, (p)=>{
+  const bad=[];
+  p.weeks.forEach(w=>{
+    const st=w.days.filter(d=>d.strength);
+    for(let a=0;a<st.length;a++) for(let b=a+1;b<st.length;b++){ if(st[a].strengthExercises.join('|')===st[b].strengthExercises.join('|')) bad.push(`w${w.weekIndex+1} two identical strength sessions`); }
+    const long=w.days.find(d=>d.type==='long'); const after=w.days.find(d=>d.dow===(long?long.dow+1:99)%7);
+    if(long && after && after.type==='easy' && w.days.filter(d=>d.type==='easy').length>=2){ const others=w.days.filter(d=>d.type==='easy' && d!==after && d.label!=='Shakeout Jog'); if(others.some(o=>o.km<after.km)) bad.push(`w${w.weekIndex+1} day after long (${after.km}) longer than another easy day`); }
+    w.days.forEach(d=>{ if(d.easyVariety && d.type==='fartlek' && !/pickups/.test(d.descBase)) bad.push(`w${w.weekIndex+1} base fartlek is a hard session`); });
+    if(w.phase==='taper'){ const easy=w.days.filter(d=>d.type==='easy' && d.label!=='Shakeout Jog'); easy.forEach(e=>{ if(e.km<3 && w.daysToRaceAtStart>7) bad.push(`w${w.weekIndex+1} taper easy day only ${e.km} km`); }); }
+  });
+  const lateStrength = p.weeks.flatMap(w=>w.days).filter(d=>d.strength && d.daysToRace>10 && d.daysToRace<=17).length;
+  if(!lateStrength) bad.push('no strength session 11-17 days out (week-level cutoff bug)');
+  return bad; });
 check('Marathon, 30 weeks out', {race:'marathon', mpw:30, weeks:30, recentSec:25*60, longest:9});
 
 // general plans
