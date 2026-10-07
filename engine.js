@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 6; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 7; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -505,9 +505,10 @@ function buildUpperStrengthWorkout(variant){
   const core = pickFromPool(UPPER_CORE_POOL, variant);
   const core2 = pickFromPool(UPPER_CORE2_POOL, variant+2);
   const pushReps = push===STRENGTH_EXERCISES.pushUps ? 12 : 8;
+  // Pull first: upper-back strength holds posture late in a race; the press only balances it.
   return [
-    strengthSetLine(push, 3, pushReps, 75, '1–2 reps left in the tank'),
-    strengthSetLine(pull, 3, 8, 75, 'same effort, squeeze the shoulder blades'),
+    strengthSetLine(pull, 3, 8, 75, '1–2 reps left in the tank, squeeze the shoulder blades'),
+    strengthSetLine(push, 3, pushReps, 75, 'same effort'),
     strengthSetLine(core, 3, core.unit==='hold'?40:10, 30, core.unit==='hold' ? 'hold with a neutral spine' : 'slow and controlled'),
     core2===STRENGTH_EXERCISES.farmerCarry ? strengthSetLine(core2, 2, 1, 30, 'one walk per set, tall posture') : coreLine(core2, 2, 30, 'steady'),
   ];
