@@ -60,7 +60,8 @@ rule would be.
 | Peak long run: Daniels' share of peak volume; ceilings of 20 mi (half) and 20–22 mi (marathon) | `peakLongTargetKm` | Daniels; Pfitzinger | Sourced | — |
 | Long run grows ~1 mile per week | `longStep` | Higdon | Sourced | — |
 | Cutback week long run at 78% | `generatePlan` | — | Judgement | Pfitzinger recovery weeks: long run reduced ~20–25% |
-| Race-pace finish in alternate peak long runs (40% marathon, 30% half) | `generatePlan` | Pfitzinger (MP long runs) | Sourced; percentages Within source | — |
+| Race-pace finish in every other eligible long run from Daniels Phase III through the peak (40% marathon, 30% half); never on a cutback or a week with a race-pace session | `generatePlan` | Pfitzinger (marathon-pace long runs); Daniels (M pace inside long runs in Phases III–IV) | Sourced; percentages Within source | — |
+| Long-run shortfall warning only when the long run also misses race readiness (race distance; 75% of it for the marathon) | `generatePlan`, `raceLongRunWarning` | — | Judgement (a 22 km long run is not a problem for a 10-mile race) | Keep flagged |
 | Start long run from the runner's longest recent run | `generatePlan` | — | Judgement (sensible, no citation) | Keep flagged |
 | With few run days the long run is lifted to ~6% above the week's average run (outside the taper window) | `generatePlan` | — | Judgement: the long run must be the longest run of the week for its label to be true | Keep flagged |
 | Train-through race week: the long run keeps Daniels' share of the shortened week | `generatePlan` | Daniels | Sourced | — |
@@ -78,9 +79,14 @@ rule would be.
 | Quality day shorter than the long run | `sizeQuality` | — | Judgement (owner complaint: tempo as long as the long run) | Keep as an owner decision |
 | Warm-up 2 km, cool-down 1.5 km | `QUALITY_WARMUP_KM` | Daniels (10–20 min warm-up) | Within source | — |
 | Second quality day from four runs (More) / five runs (Balanced); one at Less | `generatePlan` | Daniels' and Pfitzinger's 4-day plans (2 Q + L) | Sourced | — |
+| A week that carries a medium-long run holds one quality session | `generatePlan` | Pfitzinger (one LT/VO2 day + MLR + long run) | Sourced | — |
+| A session floor never pushes T/I/R work above its share cap once that cap is 20 min or more | `sizeQuality` | Daniels (10% T, 20-min minimum) | Within source | — |
+| Rep durations are shown from the runner's own pace ("about 2:55 each") | page `fillPacePlaceholders` | — | Presentation | — |
+| No strides on a fartlek or progression day | `buildWeekDays` | — | Judgement (two speed stimuli on one easy day) | Keep flagged |
 | Emphasis scales sessions 0.85 / 1 / 1.1; secondary session at 65% | `generatePlan`, `sizeQuality` | — | Judgement | None found; keep flagged |
 | Base phase: easy only, strides, one gentle pickup run every other week | `generatePlan` | Daniels Phase I | Sourced | — |
 | Strides on 2 easy days | `generatePlan` | Daniels | Sourced | — |
+| Recovery-run label only when the day after the long run is ≤ 45 min and the shortest easy run of the week; with three or more easy days that slot is capped at 45 min while the week still fits | `buildWeekDays` | Pfitzinger (recovery runs 4–6 mi) | Within source | — |
 | Hard days ≥ 48 h apart | `qualityDowsFor` | Daniels, Pfitzinger | Sourced | — |
 
 ## Phases and taper
@@ -94,7 +100,9 @@ rule would be.
 | Taper long-run factors | `taperLongFactor` | Pfitzinger marathon taper (long runs 21 → 13 mi) | Within source | — |
 | Taper is measured in days: easy days of a training week that fall inside the window are reduced by that day's factor; taper weeks scale from the peak week the plan actually placed | `generatePlan` | Bosquet 2007 | Sourced (day-based); the per-day application is Judgement | — |
 | Keep intensity in the taper; one sharpener per week | `generatePlan` | Bosquet, Mujika & Padilla | Sourced | — |
-| Race week: rest the day before, shakeout two days out | `generatePlan` | Common practice (Pfitzinger, Daniels) | Sourced | — |
+| Race week: rest the day before; two days out is always a shakeout — the nearest easy run moves into the slot, or one is added when the week is short of its run days | `generatePlan` | Pfitzinger (short run with strides two days out), Daniels (E day) | Sourced | — |
+| Race and taper weeks allow 20-minute easy runs (the 30-minute floor is for training weeks) | `buildWeekDays` | Daniels (shakeouts), Pfitzinger (4-mi recovery runs in the taper) | Within source | — |
+| Taper weeks are shaped day by day around the week's mid-point factor, shrinking only; taper volume scales from the largest week actually built | `generatePlan` | Bosquet (taper measured in days) | Within source; the base choice is Judgement | — |
 | Light taper = half length and half the cut; train-through protects two days | `generatePlan` | — | Judgement, at the owner's request | Keep as an owner decision |
 
 ## Strength
@@ -105,6 +113,9 @@ rule would be.
 | Reduce strength in peak; stop in the final ~10 days | `lowerStrengthTierForPhase` | Rønnestad & Mujika (maintenance dose); Blagrove | Sourced | — |
 | No heavy legs the day before a hard run | `placeStrengthDays` | Doma & Deakin 2013 | Sourced | — |
 | Lower body on run days only; upper/core on rest days or before quality | `placeStrengthDays` | — | Owner decision | — |
+| A medium-long-run day scores below a plain easy day for heavy legs | `placeStrengthDays` | — | Judgement (Pfitzinger treats the MLR as a key aerobic day) | Keep flagged |
+| Carries are prescribed as 30–40 m walks | `strengthSetLine` | Common practice | Presentation | — |
+| An empty equipment list means bodyweight only; only a missing list means the default gym | `equipmentSet`, page | — | Owner decision | — |
 | Four-week effort wave (RIR 3 → 2 → 1–2 → back off) | `buildLowerStrengthWorkout` | Standard mesocycle practice (Rønnestad uses 4-week blocks) | Within source | — |
 | Trunk/anti-rotation and carries in the upper session | `buildUpperStrengthWorkout` | Sato & Mokha 2009; Hung 2019 | Sourced | — |
 | Express session ~20 min on a workout day | `buildLowerStrengthWorkout` | — | Owner decision | — |
@@ -115,7 +126,8 @@ rule would be.
 | Rule | Where | Source | Status | Replace with |
 |---|---|---|---|---|
 | Speed block: 3:1 waves, two quality days | `generateSpeedPlan` | Pfitzinger (recovery weeks), Daniels (Q days) | Sourced | — |
-| Distance plan (weekly target): Daniels' step rule in 4-week blocks, cutback at 85% | `generateDistancePlan` | Daniels; Pfitzinger | Sourced | — |
+| Distance plan (weekly target): Daniels' step rule in 4-week blocks, cutback at 85%; the onboarding check and the plan's shortfall note use the same rule (weeks needed = 4 × blocks + 1) | `generateDistancePlan`, `distanceWeeksNeeded` | Daniels; Pfitzinger | Sourced | — |
+| Distance cutbacks that would starve 30-minute runs (or drop the long run under one) are held | `generateDistancePlan` | Daniels (beginner plans have no recovery weeks) | Within source | — |
 | Distance plan (longest-run target): long run up ~1 mile a week, cutback long run at 78% | `generateDistancePlan` | Higdon | Sourced | — |
 | General plans: run days by the 30-minute easy run; speed and maintenance weeks drop the session (strides instead) when it would leave easy runs under 30 min | `generalWeekCommon`, `generateSpeedPlan`, `generateMaintenancePlan` | Daniels | Sourced | — |
 | Maintenance: flat volume, one threshold session | `generateMaintenancePlan` | Daniels (T work as maintenance) | Sourced | — |

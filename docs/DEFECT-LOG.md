@@ -178,6 +178,48 @@ Residual (documented, not hidden): across 2,400 random plans one train-through r
 
 64. **A missed session had no obvious way back.** *Fix:* a past run day with nothing logged shows "Missed this one?" in its sheet with a one-tap move to the next rest day that keeps a clear day either side of hard sessions and stays off the last two days before the race; easy runs are told to let it go. Day cards mark past unlogged runs "Not logged".
 
+## Round 10 — reading nine full plans as a runner, after the owner opened one workout (2026-10-07)
+
+Found by rendering every week and day of nine representative profiles (`node tests/readthrough.js > docs/readthrough.txt`) and reading them end to end, plus the Monte Carlo `pace-context` rule written for item 65. Everything below was logged before any of it was fixed.
+
+65. **A pace printed after the wrong clause.** "gradually quicken so the final third sits at tempo effort @ 10:08/mi" — the easy pace, appended to the end of a sentence whose last words were "tempo effort". The owner saw it on the first workout they opened. Same shape on the long run with a race-pace finish ("then finish strong at race pace @ 7:07/km", the easy pace) and on fartlek days. *Cause:* older descriptions get their pace appended at the end; sentences that name two efforts need the pace placed mid-sentence. *Fix:* every sentence that names more than one effort carries a {pace} placeholder where its own pace belongs; the summary line for progression runs names both paces explicitly. *Guard:* Monte Carlo `pace-context` — for every pace string in rendered text, the words just before it must match the pace's zone (no easy pace after "tempo/threshold/race pace/…", no hard pace after "easy/recovery/jog/…").
+
+66. **Rep duration guessed for everyone at 4:00/km.** "4 × 600m at 7:48/mi (about 2 min each)" — 600 m at that pace is 2:55; "4 × 800m at 8:30/mi (about 3 min each)" is 4:14. *Cause:* `Math.round(repM/250)` in the description, ignoring the runner's pace. *Fix:* the rep time is computed from the runner's own interval pace when the text is rendered and shown as m:ss ("about 2:55 each"). *Guard:* Monte Carlo `rep-time` compares the printed rep time with rep distance × printed pace.
+
+67. **Carries read "3×1 Suitcase carry each hand" / "2×1 Farmer carry".** "×1" meant one walk, which nobody would guess. *Fix:* carries print as "3×30–40 m Suitcase carry each hand". *Guard:* Monte Carlo `strength-text` rejects "×1 " in any exercise line.
+
+68. **"Very easy, short recovery jog" of 9 km / 5.8 mi; the same slot labelled Recovery one week and Easy the next.** *Cause:* the day after the long run was called a recovery run whenever it was under 9.5 km, regardless of the easy pace or the other easy days. *Fix:* recovery label only when the run is at most 45 minutes and is the shortest easy run of the week; otherwise it is an Easy Run. With three or more easy days the recovery slot is capped at 45 minutes and the mileage flows to the other easy days (Pfitzinger's recovery runs are 4–6 mi). *Guard:* Monte Carlo `recovery-label`.
+
+69. **"Bodyweight only" was ignored.** The onboarding button sets an empty equipment list and the hint says every session falls back to bodyweight — but the page, the settings sheet and the engine all treated an empty list as "use the full gym", so a runner with no equipment got back squats, leg press and kettlebell swings. *Cause:* `list.length ? list : DEFAULT_EQUIPMENT` in four places. *Fix:* an empty list means bodyweight only everywhere (only a missing list means default); the settings sheet gets the same Bodyweight-only button. *Guard:* plan-invariants scenario with `equipment: []` asserts no barbell, machine, kettlebell, dumbbell or pull-up names appear.
+
+70. **The same "doesn't fit" note repeated for every week it applied to** (five copies on an 18-week half plan). *Cause:* the de-duplication guard looked for a prefix the note did not have. *Fix:* one note, "From week N on, …". *Guard:* Monte Carlo `dup-notes`.
+
+71. **Beginner-structure note shown for a plan that had hill repeats three weeks later**, and only because the base weeks (which never carry a session anyway) were too small for one. *Fix:* the note is written only when a week that would otherwise hold a session cannot.
+
+72. **"Peaks at 39 mi/week" on a plan that never exceeds 27**, and general plans reported no peak at all. *Cause:* the nominal ramp target was reported, not what the run-day limits allowed. *Fix:* the peak is the largest week actually built; general plans report theirs too.
+
+73. **"There isn't time to build the long run … treat this race as a strong effort rather than an all-out time goal" on a 10-mile plan whose long run reaches 22 km** — well past the race distance. *Fix:* the warning (and its onboarding preview) fires only when the long run also falls short of race readiness (the race distance; three-quarters of it for the marathon).
+
+74. **Race week fell apart.** A 4-run-day runner racing on Saturday got long run Sunday, rest, rest, reps Wednesday, rest, rest, race — two training runs. A 5-run-day marathoner got rest, rest, rest before the race. The two-days-out shakeout vanished whenever that day happened to be rest already. *Cause:* the 30-minute minimum dropped short race-week runs, and the shakeout only replaced a run that was already there. *Fix:* race week allows 20-minute runs; two days out is always a shakeout — the nearest easy run moves into that slot, or one is added when the week is short of its run days (Pfitzinger: a short run with strides two days before; Daniels: an E day). *Guard:* Monte Carlo `shakeout` (full/light taper: the day two before the race is a run).
+
+75. **Race week "planned" total did not match its days** (18.1 mi planned, 13.1 raced). *Fix:* a week containing the race plans exactly what its days hold.
+
+76. **Marathon plans had no marathon-pace long runs at all.** The 16- and 20-week marathon profiles never ran a mile at goal pace until two short race-pace sessions in the taper. *Cause:* the race-pace long run was limited to the peak phase, which the phase allocation often makes zero or one week long, and the alternate-week test skipped the first week. *Fix:* half and marathon long runs carry a race-pace finish every other eligible week from Daniels Phase III through the peak (Pfitzinger's marathon-pace long runs; Daniels runs M pace inside long runs in Phases III–IV), never on a cutback or a week that already has a race-pace session.
+
+77. **Two quality sessions plus a medium-long run plus the long run on five run days** — four demanding days out of five, every build week of the marathon plans (hill repeats Monday, fartlek Wednesday, 11-mile MLR Thursday, 14-mile long Saturday, recovery Sunday). Pfitzinger's weeks with a medium-long run hold one quality session. *Fix:* a week that carries a medium-long run holds one quality session; the other slot is an easy run.
+
+78. **The day after a 19-mile long run was an 11-mile easy run, the day before intervals** (six run days at 67 mi/week). *Cause:* with two quality days and a medium-long run there were only two easy slots to carry the rest. Item 77 returns a third; the recovery-slot cap in item 68 keeps the post-long-run day short when the week has three or more easy days.
+
+79. **"Build distance to 35 mi/week" in 10 weeks ended at 28 and said nothing.** The onboarding check accepted the plan (it used 10% a week) while the generator follows Daniels' step rule (add run-days miles, hold four weeks). *Fix:* both use the step rule; the onboarding note says how many weeks the jump needs, and the finished plan says where it will actually get to.
+
+80. **Strides stacked onto fartlek and progression days** ("… 4 relaxed pickups … — still an easy day" then "Finish with strides"). *Fix:* no strides on a variety day; the distance set aside for them stays in the run.
+
+81. **Strength focus drifts with placement:** two lower sessions in base, lower + upper once quality starts, a 1-session runner's only session turns upper in peak week, a 3-session runner gets two upper and one lower. *Cause:* a lower session must sit on a run day with a clear day before the next hard run; busy weeks have few such days, and the fallback is upper/core. The express lower session on a quality day (which the owner saw on a progression day) is the other fallback and is an owner decision in RULES.md. *Status:* open — needs an owner call between "upper/core when no clean easy day exists" (current) and "express lower on the quality day". Not changed.
+
+82. Checked and accepted: long-run pace 2 s/mi faster than easy pace for a fast marathoner (within the documented rule: min(easy, M × 1.12)); a train-through race week labelled "Peak"; two cruise-interval sessions in one general speed week.
+
+The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy

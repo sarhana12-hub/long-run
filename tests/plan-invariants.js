@@ -17,7 +17,7 @@ function setupFor(o){
     recent2DistanceKm:o.recent2Km??null, recent2TimeSec:o.recent2Sec??null,
     longestRecentRunKm: o.longest!=null ? o.longest*MI : null,
     goalTimeSec:o.goalSec??null, longDow:o.longDow??0, weekStartDow:o.weekStartDow??0, ...sched,
-    runsPerWeek:o.runs ?? g.runsPerWeekFor(o.mpw*MI), strengthPerWeek:o.strength??2,
+    runsPerWeek:o.runs ?? g.runsPerWeekFor(o.mpw*MI), strengthPerWeek:o.strength??2, equipment:o.equipment,
     maxLongRunKm:o.maxLong? o.maxLong*MI : null, maxWeeklyKm:o.maxWeekly ? o.maxWeekly*MI : null,
     longRunEmphasis:o.longE??'balanced', speedEmphasis:o.speedE??'balanced',
     hillsMode:o.hilly?'hilly':'flat', skipBase:!!o.skipBase,
@@ -73,6 +73,10 @@ check('Marathon, cap 40 mpw & 18 mi long', {race:'marathon', mpw:35, weeks:18, r
 check('10k, 45 mpw, 3 runs/wk', {race:'10k', mpw:45, weeks:12, recentSec:20*60, runs:3});
 check('10k, no recent race', {race:'10k', mpw:20, weeks:10, recentKm:null, recentSec:null});
 check('Marathon, race Monday', {race:'marathon', mpw:40, weeks:16, recentSec:22*60, raceDow:1, longDow:6});
+// 69 bodyweight only: no gym exercise may appear
+check('10k, 20 mpw, bodyweight only', {race:'10k', mpw:20, weeks:10, recentSec:25*60, equipment:[]}, (p)=>{ const bad=[]; p.weeks.forEach(w=>w.days.forEach(d=>(d.strengthExercises||[]).forEach(x=>{ if(/Back squat|Leg press|Kettlebell|Barbell|Dumbbell|Pull-ups|Hamstring curl|Calf press|Smith|Trap bar|Goblet squat|Farmer carry|Suitcase carry|Lat pulldown|Seated row|Chest press|Weighted step-ups|Bulgarian split squat/i.test(x)) bad.push(`w${w.weekIndex+1} ${x.split(' (')[0]}`); }))); return bad.length ? [bad.slice(0,3).join('; ')] : []; });
+// 79 distance plan says so when the weeks cannot reach the target
+{ const s = {units:'mi', planKind:'distance', weeks:10, currentWeeklyKm:20*MI, recentDistanceKm:5, recentTimeSec:27*60, longDow:0, weekStartDow:0, runsPerWeek:4, strengthPerWeek:1, distanceGoalMetric:'weekly', distanceGoalCurrentKm:20*MI, distanceGoalTargetKm:35*MI, ...g.deriveScheduleFromLongDow(0,1)}; const p = g.generateGeneralPlan(s); const ok = (p.warnings||[]).some(x=>/reaches about/.test(x)) && p.peakWeeklyKm>0; console.log(`\n=== distance 20->35 in 10 weeks === peak ${mi(p.peakWeeklyKm)} mpw`); (p.warnings||[]).forEach(x=>console.log('  note: '+x)); if(!ok){ failures++; console.log('  FAIL: expected a shortfall note and a reported peak'); } else console.log('  ok'); }
 check('Half, 3 strength/wk, long Saturday', {race:'half', mpw:30, weeks:12, recentSec:23*60, strength:3, longDow:6});
 check('5k, 1 strength, skip base', {race:'5k', mpw:30, weeks:8, recentSec:21*60, strength:1, skipBase:true});
 check('10k, 24 mpw, long Friday (reported: thin cruise session)', {race:'10k', mpw:24, weeks:10, recentSec:23*60, longDow:5}, (p)=>{

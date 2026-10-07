@@ -71,6 +71,8 @@ function sanityCheck(plan, setup){
   const cutoff = mode==='none' ? 1 : mode==='light' ? 5 : 10;
   const paceOf = sec => g.paceStr(sec, unit);
   const push = (rule, detail) => v.push({rule, detail});
+  // 70 one note per cause
+  if((plan.warnings||[]).filter(x=>/doesn't fit/.test(x)).length>1) push('dup-notes', (plan.warnings||[]).filter(x=>/doesn't fit/.test(x)).join(' | ').slice(0,160));
   plan.weeks.forEach(w=>{
     const p = w.paces; const wk = `w${w.weekIndex+1}`;
     if(!(p.easyPerKm > p.tempoPerKm && p.tempoPerKm > p.intervalPerKm && p.intervalPerKm > p.repPerKm)) push('pace-order', wk);
@@ -86,13 +88,33 @@ function sanityCheck(plan, setup){
     const inWindow = d => d.daysToRace!=null && d.daysToRace<=Math.max(2, plan.taperDays||0); // days inside the taper window are reduced on purpose
     const rec = easies.find(d=>d.easyRole==='recovery' && !inWindow(d));
     if(rec && !w.days.some(x=>x.type==='race') && easies.some(e=>e!==rec && !inWindow(e) && e.km < rec.km-1.0)) push('recovery-not-shortest', `${wk} recovery ${rec.km} vs ${easies.map(e=>e.km).join('/')}`);
+    // 74 two days out is a run when tapering (shakeout), never a rest day
+    if(plan.taperMode && plan.taperMode!=='none'){ const d2 = w.days.find(x=>x.daysToRace===2); if(d2 && !(d2.km>0)) push('shakeout', `${wk} two days out is ${d2.label}`); }
     w.days.forEach((d,i)=>{
       const next = w.days[(i+1)%7];
       const parts = ui.workoutPartsFor(d, p, unit, 'pace'); const text = parts.join(' | '); const sum = ui.daySummaryText(d, p, unit, 'pace');
       if(/\{pace\}|\{easy\}|undefined|NaN|@ —|null/.test(text+' '+sum)) push('bad-text', `${wk} ${d.label}: ${text} || ${sum}`);
+      // Every pace figure must sit next to the words of its own zone: the easy pace may not
+      // follow "tempo", "threshold", "hard", "race pace", "interval" or "5K effort", and a
+      // tempo/interval pace may not follow "easy", "jog", "recovery" or "conversational".
+      // (The first defect the owner ever found, and the one that came back on progression runs.)
+      {
+        const zoneOf = s => { const e = paceOf(p.easyPerKm), t = p.tempoPerKm!=null && paceOf(p.tempoPerKm), i = p.intervalPerKm!=null && paceOf(p.intervalPerKm), r = p.repPerKm!=null && paceOf(p.repPerKm), m = p.marathonPerKm!=null && paceOf(p.marathonPerKm), rc = p.racePerKm!=null && paceOf(p.racePerKm), l = p.longPerKm!=null && paceOf(p.longPerKm); const easyZ = (s===e || s===l), hardZ = (s===t || s===i || s===r || s===m || s===rc); if(easyZ && hardZ) return 'ambiguous'; return s===e ? 'easy' : s===l ? 'easy' : s===t ? 'tempo' : s===i ? 'interval' : s===r ? 'rep' : s===m ? 'marathon' : s===rc ? 'race' : 'other'; };
+        [...parts, sum].forEach(line=>{
+          const re = /(\d{1,2}:\d{2}\/(?:mi|km))/g; let m;
+          while((m = re.exec(line))){
+            const zone = zoneOf(m[1]); const before = line.slice(Math.max(0, m.index-45), m.index).toLowerCase();
+            const hardWords = /tempo|threshold|comfortably hard|race pace|marathon pace|interval|5k effort|\bi pace|fast and relaxed|strong/;
+            const easyWords = /easy|jog|recovery|conversational|relaxed start|walk/;
+            const tail = before.replace(/.*[,;(—]/, ''); // the clause the pace is attached to
+            if(zone==='easy' && hardWords.test(tail) && !easyWords.test(tail)) push('pace-context', `${wk} ${d.label}: easy pace after "${tail.trim().slice(-30)}" — ${line}`);
+            if((zone==='tempo' || zone==='interval' || zone==='rep') && easyWords.test(tail) && !hardWords.test(tail)) push('pace-context', `${wk} ${d.label}: ${zone} pace after "${tail.trim().slice(-30)}" — ${line}`);
+          }
+        });
+      }
       if(d.type!=='rest' && d.km>0 && (!text.trim() || !sum.trim())) push('empty-text', `${wk} ${d.label}`);
       const raceWeek = w.days.some(x=>x.type==='race');
-      if(d.km>0 && (d.type==='easy'||d.type==='long') && d.label!=='Shakeout Jog' && w.phase!=='taper' && !raceWeek && g.minutesForKm(d.km, p.easyPerKm) < ((w.beginnerStructure || w.phase==='recovery') ? 21 : 24) && !(d.daysToRace!=null && d.daysToRace<=Math.max(2, plan.taperDays||0))) push('tiny-run', `${wk} ${d.label} ${d.km} km (${g.minutesForKm(d.km,p.easyPerKm).toFixed(0)} min)`);
+      if(d.km>0 && (d.type==='easy'||d.type==='long') && d.label!=='Shakeout Jog' && w.phase!=='taper' && !raceWeek && g.minutesForKm(d.km, p.easyPerKm) < (w.phase==='recovery' ? 19 : w.beginnerStructure ? 21 : 24) && !(d.daysToRace!=null && d.daysToRace<=Math.max(2, plan.taperDays||0))) push('tiny-run', `${wk} ${d.label} ${d.km} km (${g.minutesForKm(d.km,p.easyPerKm).toFixed(0)} min)`);
       if(d.type==='easy' && (!d.paceKey || p[d.paceKey]==null || !text.includes(paceOf(p.easyPerKm)))) push('easy-pace-missing', `${wk} ${d.label}: ${text}`);
       if(HARD_TYPES.includes(d.type)){
         const key = d.paceKey; const ps = key && p[key]!=null ? paceOf(p[key]) : null;
@@ -116,6 +138,12 @@ function sanityCheck(plan, setup){
         if(d.racePaceKm>0.5 && !text.includes(paceOf(p.racePerKm))) push('long-rp-pace-missing', `${wk}: ${text}`);
         if(!text.includes(paceOf(p.longPerKm)) && !text.includes(paceOf(p.easyPerKm))) push('long-pace-missing', `${wk}: ${text}`);
       }
+      // 66 printed rep time matches rep distance × printed pace (±15 s)
+      if(d.type==='intervals'){ const rm = text.match(/(\d+) × (\d+)m at ([\d:]+)\/(km|mi) \(about (\d+):(\d\d) each\)/); if(!rm) push('rep-time', `${wk} ${text}`); else { const perUnit = Number(rm[3].split(':')[0])*60+Number(rm[3].split(':')[1]); const perKm = rm[4]==='mi' ? perUnit/MI : perUnit; const want = perKm*Number(rm[2])/1000; const got = Number(rm[5])*60+Number(rm[6]); if(Math.abs(want-got)>15) push('rep-time', `${wk} ${text} (expected ${Math.round(want)}s)`); } }
+      // 67 strength lines are readable
+      (d.strengthExercises||[]).forEach(x=>{ if(/×1 /.test(x) || /undefined|NaN/.test(x)) push('strength-text', `${wk} ${x}`); });
+      // 68 recovery label only on a short run that is the shortest easy run of the week
+      if(d.type==='easy' && d.easyRole==='recovery' && d.label!=='Shakeout Jog'){ const mins = g.minutesForKm(d.km, p.easyPerKm); const others = w.days.filter(x=>x!==d && x.type==='easy' && !x.easyVariety && x.easyRole!=='aerobic' && x.label!=='Shakeout Jog' && !(x.daysToRace!=null && x.daysToRace<=2) && x.km>0).map(x=>x.km); if(mins>46 || (others.length && d.km > Math.min(...others)+0.05)) push('recovery-label', `${wk} ${d.label} ${d.km} km (${mins.toFixed(0)} min) vs easy ${others.join('/')}`); }
       if(d.label==='Shakeout Jog' && !(d.daysToRace===2 || (mode==='none' && d.daysToRace===1))) push('shakeout-misplaced', `${wk} d=${d.daysToRace}`);
       if(d.strides && d.easyRole==='recovery' && d.label!=='Shakeout Jog') push('strides-on-recovery', wk);
       if(d.easyVariety && d.type==='fartlek' && !/pickups/.test(d.descBase||'')) push('base-fartlek-hard', wk);
@@ -194,6 +222,7 @@ for(let i=0;i<Math.round(COUNT/5);i++){
   const meta = {i:'g'+i, race:kind, mpw, runs, strength, longDow:setup.longDow, weekStartDow:setup.weekStartDow, raceDow:'-', taperMode:'-', units:setup.units, goalMode:'-'};
   let plan; try{ plan = g.generateGeneralPlan(setup); } catch(e){ record(meta, [{rule:'THROWS', detail:String(e.stack||e).split('\n').slice(0,2).join(' ')}]); continue; }
   record(meta, g.validatePlan(plan, setup).map(d=>({rule:'invariant', detail:d})).concat(sanityCheck(plan, setup)));
+  if(ONLY===meta.i){ console.log(JSON.stringify(meta)); console.log(JSON.stringify(setup)); plan.weeks.forEach(w=>{ console.log(`-- week ${w.weekIndex+1} ${w.phase}${w.isCutback?' cb':''} planned ${w.plannedKm} target ${w.targetKm} runs ${w.runsPerWeek}`); w.days.forEach(d=>console.log(`  ${['Su','Mo','Tu','We','Th','Fr','Sa'][d.dow]} ${d.label.padEnd(16)} ${d.km.toFixed(1).padStart(5)} km  ${ui.daySummaryText(d, w.paces, setup.units, 'pace')}`)); }); (plan.warnings||[]).forEach(x=>console.log('NOTE '+x)); }
 }
 
 const rules = Object.keys(byRule).sort((a,b)=>byRule[b].count-byRule[a].count);

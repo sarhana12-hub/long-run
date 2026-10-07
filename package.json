@@ -8,6 +8,7 @@
     "test:verbose": "node tests/plan-invariants.js --verbose",
     "serve": "npx --yes serve -l 8794 .",
     "test:scenarios": "node tests/plan-invariants.js",
-    "test:mc": "node tests/monte-carlo.js 600"
+    "test:mc": "node tests/monte-carlo.js 600",
+    "readthrough": "node tests/readthrough.js > docs/readthrough.txt"
   }
 }
