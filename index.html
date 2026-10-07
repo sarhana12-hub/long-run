@@ -4058,15 +4058,35 @@ function scanBlockHtml(scan){
     : status==='reading' ? `<div class="hint">Reading the screenshot… ${scan.progress!=null ? Math.round(scan.progress*100)+'%' : ''}</div>`
     : status==='done' ? `<div class="hint" style="color:var(--accent-strong);">${esc(scan.summary)}</div>${scan.notes && scan.notes.length ? `<div class="hint">${scan.notes.map(esc).join(' ')}</div>` : ''}${scan.splits && scan.splits.length ? `<button class="btn btn-sm" data-act="remove-splits" style="margin-top:6px;">Remove splits</button>` : ''}<details style="margin-top:4px;"><summary class="hint" style="cursor:pointer;">What was read</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(scan.raw||'')}</pre></details>`
     : status==='error' ? `<div class="hint" style="color:var(--z-tempo);">${esc(scan.error||'Could not read that screenshot.')}</div>`
-    : `<div class="hint">Apple Fitness: open the run, tap Splits and screenshot that page. One picture is enough. The summary screen of any app (Apple, Strava, Garmin, Nike) works too. The numbers are read on your phone and filled in below; every field can be changed before you save.</div>`;
+    : `<div class="hint">Apple Fitness: open the run, tap Splits and screenshot that page. One picture is enough. The summary screen of any app (Apple, Strava, Garmin, Nike) works too. Copy the screenshot and tap Paste, or choose it from your photos. The numbers are read on your phone and filled in below; every field can be changed before you save.</div>`;
   return `<div class="card" style="padding:12px 14px; margin-bottom:14px; background:var(--surface-2);">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
       <div style="font-weight:700; font-size:13.5px;">Scan a workout screenshot</div>
-      <label class="btn btn-sm btn-primary" style="cursor:pointer;">${status==='reading'||status==='loading' ? 'Working…' : 'Choose image'}<input type="file" id="lr-scan-file" accept="image/*" style="display:none;" ${status==='reading'||status==='loading' ? 'disabled' : ''}></label>
+      <div style="display:flex; gap:6px; flex:none;"><button class="btn btn-sm" data-act="scan-paste" ${status==='reading'||status==='loading' ? 'disabled' : ''}>Paste</button><label class="btn btn-sm btn-primary" style="cursor:pointer;">${status==='reading'||status==='loading' ? 'Working…' : 'Choose image'}<input type="file" id="lr-scan-file" accept="image/*" style="display:none;" ${status==='reading'||status==='loading' ? 'disabled' : ''}></label></div>
     </div>
     ${body}
   </div>`;
 }
+// Paste a copied screenshot: the Paste button reads the clipboard (a tap is required on
+// iPhone); a paste keystroke on the log sheet works too.
+async function pasteScreenshot(){
+  const m = state.modal; if(!m || m.type!=='log-run') return;
+  const fail = msg => { state.modal.scan = {...(state.modal.scan||{}), status:'error', error: msg}; render(); };
+  if(!navigator.clipboard || !navigator.clipboard.read){ fail('Pasting is not available in this browser — choose the image from your photos instead.'); return; }
+  let items;
+  try{ items = await navigator.clipboard.read(); }catch(e){ fail('Could not read the clipboard. Copy the screenshot first, then tap Paste and allow access.'); return; }
+  for(const item of items){
+    const type = (item.types||[]).find(t=>t.startsWith('image/'));
+    if(type){ const blob = await item.getType(type); scanWorkoutImage(blob); return; }
+  }
+  fail('Nothing to paste — copy a screenshot first (long-press it, then Copy).');
+}
+document.addEventListener('paste', e=>{
+  if(!(state.modal && state.modal.type==='log-run')) return;
+  const items = [...((e.clipboardData && e.clipboardData.items) || [])];
+  const it = items.find(x=>x.type && x.type.startsWith('image/'));
+  if(it){ e.preventDefault(); scanWorkoutImage(it.getAsFile()); }
+});
 let _tesseractLoading = null;
 function loadTesseract(){
   if(window.Tesseract) return Promise.resolve(window.Tesseract);
@@ -4654,6 +4674,7 @@ function onClick(e){
   if(act==='pick-taper-mode'){ state.onboardDraft.taperMode = el.dataset.mode; render(); return; }
   if(act==='pick-build-pace'){ state.onboardDraft.buildPace = el.dataset.mode; render(); return; }
   if(act==='draft-equipment-all'){ state.onboardDraft.equipment = EQUIPMENT.map(e=>e.id); render(); return; }
+  if(act==='scan-paste'){ pasteScreenshot(); return; }
   if(act==='draft-equipment-none'){ state.onboardDraft.equipment = []; render(); return; }
   if(act==='toggle-draft-equipment'){
     const id = el.dataset.id; const list = new Set(state.onboardDraft.equipment || DEFAULT_EQUIPMENT);
