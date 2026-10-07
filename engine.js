@@ -799,12 +799,17 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex
   };
   const chosen = [];
   const taken = i => chosen.some(c=>c.i===i);
-  const lowerOk = i => !chosen.some(c=>c.focus==='lower' && circularDayDist(days[c.i].dow, days[i].dow)<3);
+  const lowerOk = i => !chosen.some(c=>c.focus==='lower' && circularDayDist(days[c.i].dow, days[i].dow)<2);
   const bestLower = () => { let b=null; for(let i=0;i<n;i++){ if(taken(i) || !lowerOk(i)) continue; const sc=lowerScore(i); if(sc==null) continue; if(!b || sc>b.sc) b={i, sc}; } return b; };
   const bestUpper = () => { let b=null; for(let i=0;i<n;i++){ if(taken(i)) continue; const sc=upperScore(i); if(sc==null) continue; if(!b || sc>b.sc) b={i, sc}; } return b; };
-  // First session is always lower body - that's the one with the running-economy evidence.
-  const first = bestLower();
-  if(first) chosen.push({i:first.i, focus:'lower'});
+  // Leg sessions first - that's the work with the running-economy evidence. Two of them are
+  // chosen as a pair (best combined score, at least 48 h apart) so two clean easy days beat
+  // one clean day plus a hard day.
+  const cands = []; for(let i=0;i<n;i++){ const sc=lowerScore(i); if(sc!=null) cands.push({i, sc}); }
+  let bestPair = null;
+  if(want>=2){ cands.forEach(x=>cands.forEach(y=>{ if(x.i>=y.i || circularDayDist(days[x.i].dow, days[y.i].dow)<2) return; const t=x.sc+y.sc; if(!bestPair || t>bestPair.t) bestPair={x, y, t}; })); }
+  if(bestPair){ chosen.push({i:bestPair.x.i, focus:'lower'}); chosen.push({i:bestPair.y.i, focus:'lower'}); }
+  else { const first = bestLower(); if(first) chosen.push({i:first.i, focus:'lower'}); }
   while(chosen.length < want){
     const lowerCount = chosen.filter(c=>c.focus==='lower').length;
     const l = lowerCount<2 ? bestLower() : null;

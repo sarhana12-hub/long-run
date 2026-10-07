@@ -115,6 +115,7 @@ rule would be.
 | Lower body on run days only, never the day before a key session (quality run, race, or a long run with a race-pace finish); the day before a plain easy long run is allowed but ranks below a day with rest after it; upper/core on rest days | `placeStrengthDays`, `isKeySessionDay` | Doma & Deakin 2013 (day-after impairment); owner decision 2026-10-07 | Sourced + Owner decision | — |
 | A wanted leg session is never traded for upper/core: when no easy day qualifies it goes on the hard day itself, after the run, as a full session | `placeStrengthDays` | Blagrove (hard days hard, easy days easy); owner decision 2026-10-07 | Owner decision | — |
 | A medium-long-run day scores below a plain easy day for heavy legs | `placeStrengthDays` | — | Judgement (Pfitzinger treats the MLR as a key aerobic day) | Keep flagged |
+| Leg sessions at least 48 h apart; the two leg days are chosen as the best pair, so two clean easy days beat one clean day plus a hard day | `placeStrengthDays` | Standard recovery between heavy sessions of the same muscles (ACSM) | Sourced | — |
 | Carries are prescribed as 30–40 m walks | `strengthSetLine` | Common practice | Presentation | — |
 | An empty equipment list means bodyweight only; only a missing list means the default gym | `equipmentSet`, page | — | Owner decision | — |
 | Four-week effort wave (RIR 3 → 2 → 1–2 → back off) | `buildLowerStrengthWorkout` | Standard mesocycle practice (Rønnestad uses 4-week blocks) | Within source | — |
