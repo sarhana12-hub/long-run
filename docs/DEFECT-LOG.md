@@ -218,6 +218,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 82. Checked and accepted: long-run pace 2 s/mi faster than easy pace for a fast marathoner (within the documented rule: min(easy, M × 1.12)); a train-through race week labelled "Peak"; two cruise-interval sessions in one general speed week.
 
+83. **A 9,000-plan sweep (five seeds of 1,500 race plans plus 300 general plans) found what the 300-plan sweeps had not**, all at the edges: a shakeout added as an extra run when the week's only easy run sat more than six days out (the move now takes any easy run further out); a runner at 10 mi/week with three run days given 25-minute runs for the whole plan (a race plan never starts, and never trims, below three 30-minute runs — Daniels' beginner minimum — and says so); a speed plan at 10 mi/week cutting a 4-run week to 19-minute runs (run days now follow each week's volume and the floor week is not cut); a recovery run that stopped being the shortest run once the taper trimmed the days around it (the label is re-checked after trimming). Validator and sweep rules were also loosened where they were measuring the wrong thing: percent-of-week rules on race-adjacent weeks, a long run inside the taper window being shorter than a session, and a build-phase fartlek counted as an easy day the volume could have stretched.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

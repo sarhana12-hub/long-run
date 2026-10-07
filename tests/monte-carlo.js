@@ -126,7 +126,7 @@ function sanityCheck(plan, setup){
         if(min>(d.type==='racepace'?100:95)) push('quality-too-long', `${wk} ${d.label} ${min.toFixed(0)} min`);
         if(min<Math.min(20, 8+(w.plannedKm||40)*0.3) && !d.secondary) push('quality-too-short', `${wk} ${d.label} ${min.toFixed(0)} min: ${text}`);
         if(!(d.warmupKm>=1)) push('no-warmup', `${wk} ${d.label}`);
-        if(long && long.km>0 && d.km>=long.km && w.phase!=='taper' && (w.plannedKm||99)>=28) push('quality-longer-than-long', `${wk} ${d.label} ${d.km} vs long ${long.km}`);
+        if(long && long.km>0 && d.km>=long.km && w.phase!=='taper' && !(long.daysToRace!=null && long.daysToRace>=0 && long.daysToRace<=(plan.taperDays||0)) && (w.plannedKm||99)>=28) push('quality-longer-than-long', `${wk} ${d.label} ${d.km} vs long ${long.km}`);
         const m = text.match(/(\d+) × (\d+)m/);
         if(m){ const reps=+m[1]; if(d.type==='intervals' && (reps<4||reps>7)) push('reps-count', `${wk} ${text}`); if(d.type==='cruise' && (reps<3||reps>6)) push('reps-count', `${wk} ${text}`); if(d.type==='reps' && (reps<6||reps>12)) push('reps-count', `${wk} ${text}`); }
         if(d.type==='hills'){ const hm = text.match(/(\d+) hill reps/); if(!hm || +hm[1]<6 || +hm[1]>10) push('hill-reps', `${wk} ${text}`); }
@@ -183,11 +183,11 @@ function sanityCheck(plan, setup){
     const runDays = w.days.filter(d=>d.km>0 && d.type!=='race').length;
     const expectRuns = plan.runsPerWeek || setup.runsPerWeek;
     // Fewer run days than asked is only a defect when the week's volume could have filled them (~4.5 km each).
-    const fixedKm = w.days.filter(d=>d.type==='long' || HARD_TYPES.includes(d.type)).reduce((a,d)=>a+d.km,0); const fixedDays = w.days.filter(d=>d.type==='long' || HARD_TYPES.includes(d.type)).length;
+    const fixedKm = w.days.filter(d=>d.type==='long' || HARD_TYPES.includes(d.type) || (g.QUALITY_TYPES.includes(d.type) && !d.easyVariety)).reduce((a,d)=>a+d.km,0); const fixedDays = w.days.filter(d=>d.type==='long' || HARD_TYPES.includes(d.type) || (g.QUALITY_TYPES.includes(d.type) && !d.easyVariety)).length;
     const minEasy = g.kmForMinutes(30, w.paces.easyPerKm); // Daniels: 30-minute easy runs, the engine's own standard
     const stridesKm = w.days.filter(d=>d.strides).length*0.4;
     const supportable = w.plannedKm ? Math.min(expectRuns, Math.max(2, fixedDays + Math.floor(Math.max(0, w.plannedKm-fixedKm-stridesKm)/minEasy))) : expectRuns;
-    if(isRace && w.phase!=='taper' && (w.daysToRaceAtStart==null || w.daysToRaceAtStart>7) && (runDays>expectRuns || runDays<supportable)) push('run-days', `${wk} ${runDays} vs ${expectRuns} (supportable ${supportable})`);
+    if(isRace && w.phase!=='taper' && (w.daysToRaceAtStart==null || w.daysToRaceAtStart>7) && !w.days.some(x=>x.daysToRace!=null && x.daysToRace<=2) && (runDays>expectRuns || runDays<supportable)) push('run-days', `${wk} ${runDays} vs ${expectRuns} (supportable ${supportable})`);
   });
   if(isRace){
     const all = plan.weeks.flatMap(w=>w.days);

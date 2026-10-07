@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 15; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 16; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -1260,8 +1260,9 @@ function generatePlan(setup, dayOneOverride){
 
   // --- volume ramp (training weeks) ---
   const userCap = setup.maxWeeklyKm>0 ? setup.maxWeeklyKm : Infinity;
-  const startVol = Math.min(currentKm, userCap);
-  let targetPeak = Math.min(targetPeakWeeklyKm(raceKm, currentKm, longEmphasis, nTrain), userCap);
+  const startVol = Math.max(Math.min(currentKm, userCap), 3*minEasyKm);
+  if(startVol > Math.min(currentKm, userCap)+0.05) warnings.push(`${fmtDist(currentKm,unit,0)}/week cannot give three 30-minute runs at your pace, so the plan starts from ${fmtDist(startVol,unit,0)}/week — three 30-minute easy runs, the smallest week Daniels gives a beginner.`);
+  let targetPeak = Math.max(Math.min(targetPeakWeeklyKm(raceKm, currentKm, longEmphasis, nTrain), userCap), 3*minEasyKm); // never trims below the three-run floor
   const trimming = targetPeak < startVol-0.5; // short race, runner well above what it needs (owner decision)
   // Daniels: raise weekly mileage by no more than the number of sessions you run per week
   // (in miles), then hold that level for three to four weeks before the next step.
@@ -1520,6 +1521,8 @@ function generatePlan(setup, dayOneOverride){
       days.forEach(d=>{ if(d.type==='easy' && d.km>0 && d.daysToRace!=null && d.daysToRace>0){ const f = clamp(taperVolumeFactor(raceKm, d.daysToRace)/base, 0.6, 1); const nk = round1(Math.max(d.km*f, Math.min(d.km, kmForMinutes(20, paces.easyPerKm)))); delta += nk-d.km; d.km = nk; } });
       weeklyKm = round1(weeklyKm + delta);
     }
+    { const rec = days.find(d=>d.type==='easy' && d.easyRole==='recovery' && d.km>0);
+      if(rec){ const others = days.filter(d=>d!==rec && d.type==='easy' && !d.easyVariety && d.easyRole!=='aerobic' && d.km>0 && !(d.daysToRace!=null && d.daysToRace<=2)).map(d=>d.km); if(others.length && rec.km > Math.min(...others)+0.05){ rec.easyRole='easy'; rec.label='Easy Run'; } } }
     if(firstUnplaced>Math.max(1, weeklyKm*0.05) && w<nTrain && !warnings.some(x=>/doesn't fit/.test(x))){
       warnings.push(`From week ${w+1} on, ${fmtDist(w<nTrain ? levels[w] : weeklyKm,unit,0)}/week on ${runsW} running days doesn't fit: Daniels keeps easy runs to 30–60 minutes, so the week comes in under target. Adding a running day is the fix.`);
     }
@@ -1546,7 +1549,7 @@ function generatePlan(setup, dayOneOverride){
       if(i2>=0 && days[i2].type==='rest'){
         const shake = base => ({...base, type:'easy', km:round1(clamp(kmForMinutes(20, paces.easyPerKm), 2, 5)), label:'Shakeout Jog', easyRole:'recovery', strides:true, hillStrides:false, terrain:null, easyVariety:false, progressionEasy:false, warmupKm:0, cooldownKm:0, racePaceKm:0});
         const runDays = days.filter(d=>d.km>0).length;
-        const cand = days.map((d,i)=>({d,i})).filter(x=>x.d.type==='easy' && !x.d.easyVariety && x.d.daysToRace!=null && x.d.daysToRace>=3 && x.d.daysToRace<=6).sort((a,b)=>a.d.daysToRace-b.d.daysToRace)[0];
+        const cand = days.map((d,i)=>({d,i})).filter(x=>x.d.type==='easy' && !x.d.easyVariety && x.d.daysToRace!=null && x.d.daysToRace>=3).sort((a,b)=>a.d.daysToRace-b.d.daysToRace)[0];
         days[i2] = shake(days[i2]);
         if(cand && runDays >= requestedRuns) days[cand.i] = {...days[cand.i], type:'rest', km:0, label:'Rest', strides:false, hillStrides:false, easyRole:null, terrain:null, warmupKm:0, cooldownKm:0, easyVariety:false, progressionEasy:false, racePaceKm:0};
       }
@@ -1615,8 +1618,10 @@ function generateSpeedPlan(setup, dayOneOverride){
   const list = [];
   for(let w=0; w<weeks; w++){
     const weekStart = addDays(c.weekStart0, w*7);
-    const cycle = Math.floor(w/4), inCycle = w%4, isCutback = inCycle===3 && w<weeks-1;
-    const weeklyKm = round1(c.currentKm*(1+Math.min(cycle*0.04,0.12))*(isCutback?0.85:1+0.04*inCycle));
+    const cycle = Math.floor(w/4), inCycle = w%4; let isCutback = inCycle===3 && w<weeks-1;
+    const weeklyKm = round1(Math.max(3*c.minEasyKm, c.currentKm*(1+Math.min(cycle*0.04,0.12))*(isCutback?0.85:1+0.04*inCycle)));
+    const runs = c.runsForKm(weeklyKm);
+    if(isCutback && weeklyKm <= 3*c.minEasyKm+0.05) isCutback = false; // the floor week cannot be cut
     const vdot = startVdot + (endVdot-startVdot)*(weeks<=1?1:w/(weeks-1));
     const paces = zonesForVdot(c.athlete, vdot); paces.racePerKm = null;
     const longKm = round1(clamp(weeklyKm*(c.runsPerWeek<=4 ? 0.32 : 0.27), 6, kmForMinutes(120, paces.longPerKm)));
@@ -1626,10 +1631,10 @@ function generateSpeedPlan(setup, dayOneOverride){
     const quality = [{dow:qDows[0], type, ...s}];
     if(nQ>=2 && !isCutback){ const t2 = ['hills','fartlek','cruise','progression'][w%4]; const s2 = sizeQuality(t2, '10k', 'build', 0.5, 0.65, weeklyKm, longKm, 10, paces); quality.push({dow:qDows[1], type:t2, secondary:true, ...s2}); }
     let longKmAdj = Math.max(longKm, round1(Math.min(Math.max(...quality.map(q=>q.km))+0.6, kmForMinutes(150, paces.longPerKm))));
-    const qTotal = quality.reduce((a,q)=>a+q.km,0), easyDays = Math.max(1, c.runsPerWeek-1-quality.length);
+    const qTotal = quality.reduce((a,q)=>a+q.km,0), easyDays = Math.max(1, runs-1-quality.length);
     let beginnerStructure = false;
     if((weeklyKm - longKmAdj - qTotal)/easyDays < c.minEasyKm*0.9){ quality.length = 0; longKmAdj = longKm; beginnerStructure = true; }
-    const built = buildWeekDays({weekStart, weeklyKm, longKm:longKmAdj, longDow:c.longDow, phase:'build', isCutback, weekIndex:w, quality, runsPerWeek:c.runsPerWeek, strides:beginnerStructure?2:1, raceKm:10, paces, medLong:false, unit:c.unit});
+    const built = buildWeekDays({weekStart, weeklyKm, longKm:longKmAdj, longDow:c.longDow, phase:'build', isCutback, weekIndex:w, quality, runsPerWeek:runs, strides:beginnerStructure?2:1, raceKm:10, paces, medLong:false, unit:c.unit});
     finishWeekDays(built.days, 10);
     placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?2:setup.strengthPerWeek, isCutback?'cutback':'build', w, {weekInBlock:inCycle, equipment: setup.equipment});
     list.push({weekIndex:w, phase:isCutback?'cutback':'build', isCutback, beginnerStructure, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:vdot});
@@ -1788,9 +1793,10 @@ function validatePlan(plan, setup){
         if(tMin > 41) v.push(`${wk} ${d.type}: ${tMin.toFixed(0)} min at threshold (>40)`);
         if(isRace && raceKm>=10 && qk >= raceKm) v.push(`${wk} ${d.type}: threshold distance ${qk.toFixed(1)} >= race distance`);
       }
-      if(d.type==='intervals'){ const capI = Math.max(Math.min(0.08*tot, 10)*(raceWeekLike?1.5:1), kmForMinutes(floorMinutesFor('intervals', w.plannedKm||tot), p.intervalPerKm)*taperF*1.3, 2.4); if(qk > capI+(tot<20?0.6:0.3)) v.push(`${wk} intervals: ${qk.toFixed(1)} km > 8% of week / 10 km (and above the 12-min floor)`); }
+      if(d.type==='intervals'){ const capI = Math.max(Math.min(0.08*tot, 10)*(raceWeekLike?1.5:1), kmForMinutes(floorMinutesFor('intervals', w.plannedKm||tot), p.intervalPerKm)*taperF*1.3, 2.4); if(!containsRace && qk > capI+(tot<20?0.6:0.3)) v.push(`${wk} intervals: ${qk.toFixed(1)} km > 8% of week / 10 km (and above the 12-min floor)`); }
       if(d.type==='reps'){ if(qk > Math.max(0.05*tot*(raceWeekLike?1.5:1), 2.1)+0.25) v.push(`${wk} reps: ${qk.toFixed(1)} km > 5% of week`); }
-      if(long && long.km>0 && d.km >= long.km && w.phase!=='taper' && (w.plannedKm||tot) >= 28) v.push(`${wk} ${d.type} day ${d.km} km >= long run ${long.km} km`);
+      const longInTaper = long && long.daysToRace!=null && long.daysToRace>=0 && long.daysToRace<=(plan.taperDays||0);
+      if(long && long.km>0 && d.km >= long.km && w.phase!=='taper' && !longInTaper && (w.plannedKm||tot) >= 28) v.push(`${wk} ${d.type} day ${d.km} km >= long run ${long.km} km`);
       if(WARMUP_ELIGIBLE_TYPES.includes(d.type) && !(d.warmupKm>=1)) v.push(`${wk} ${d.type}: no warm-up`);
       if(!raceWeekLike && !w.isCutback && !d.secondary){
         const volRef = w.plannedKm || tot;
@@ -1801,9 +1807,10 @@ function validatePlan(plan, setup){
     });
     if(long && long.km>0){
       const share = long.km/tot;
+      const inTaperWindow = w.days.some(d=>d.daysToRace!=null && d.daysToRace>=0 && d.daysToRace<=(plan.taperDays||0)); // easy days inside the window are trimmed, so the share rule does not apply
       const cap = isRace ? Math.max(longFracCap(raceKm, tot, w.runsPerWeek||4)+0.06, (w.runsPerWeek||4)<=3 ? 0.38 : 0) : ((w.runsPerWeek||4)<=2 ? 0.56 : 0.42);
       const fewDaysPlan = (plan.warnings||[]).some(x=>/running days/.test(x));
-      if(w.phase!=='taper' && !containsRace && share > cap && !fewDaysPlan && long.km>=9) v.push(`${wk} long run ${long.km} km = ${(share*100).toFixed(0)}% of week (cap ${(cap*100).toFixed(0)}%)`);
+      if(w.phase!=='taper' && !containsRace && !inTaperWindow && share > cap && !fewDaysPlan && long.km>=9) v.push(`${wk} long run ${long.km} km = ${(share*100).toFixed(0)}% of week (cap ${(cap*100).toFixed(0)}%)`);
       const lMin = minutesForKm(long.km, p.longPerKm);
       if(lMin > (plan.longTimeCapMin || (isRace ? longTimeCapMin(raceKm) : 150))+5) v.push(`${wk} long run ${lMin.toFixed(0)} min exceeds time cap`);
     }
