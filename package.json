@@ -1,0 +1,11 @@
+{
+  "name": "longrun",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Peak — running + strength training plan generator (PWA)",
+  "scripts": {
+    "test": "node tests/plan-invariants.js",
+    "test:verbose": "node tests/plan-invariants.js --verbose",
+    "serve": "npx --yes serve -l 8794 ."
+  }
+}
