@@ -132,7 +132,7 @@ Run both with `npm test`.
     runner has, names only that, and falls back to bodyweight before ever dropping a slot.
     Equipment is ticked in onboarding and changeable in Settings; changing it rebuilds
     strength from the current week without touching runs or logs. *Guard:*
-     (every listed exercise resolvable with the plan's equipment), with
+    `strength-equipment` (every listed exercise resolvable with the plan's equipment), with
     random equipment sets in the Monte Carlo sweep including "nothing at all".
 
 ## Rules now checked on every random plan
