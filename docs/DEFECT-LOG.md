@@ -172,6 +172,10 @@ Residual (documented, not hidden): across 2,400 random plans one train-through r
 
 62. **Exercises had a one-line how-to and nothing else.** *Fix:* library.js carries, for every exercise name a session can print (81 names), a summary, set-up, the movement, form points, the common mistake, a drawing of the start and finish built from joint angles by one renderer (a second angle where it helps), and a reference page at the ACE Fitness exercise library, each URL fetched and checked. Shown inside the exercise row in the day sheet and browsable from Settings. *Guard:* tests/library.js (coverage, link shape, drawings render).
 
+## Round 9 — screenshot logging (2026-10-07)
+
+63. **Logging a run meant typing it or going through Strava one run at a time**, and a home-screen web app cannot read Apple Health. *Fix:* "Scan a workout screenshot" in Log a run. The picture is read on the phone (Tesseract.js, fetched on first use), scan.js parses date, distance, time, average pace, splits and segments from Apple Fitness, Strava, Garmin and Nike layouts, and the form is prefilled for the runner to check. Segments that match the planned rep distance fill the rep time; the manual rep-time field stays for everyone else. Dark-mode screenshots are inverted before reading. *Guard:* tests/scan.js (parser against sample text from each layout).
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy

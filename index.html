@@ -408,6 +408,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 
 <script src="engine.js"></script>
 <script src="library.js"></script>
+<script src="scan.js"></script>
 <script>
 (function(){
 "use strict";
@@ -3991,9 +3992,70 @@ function repFieldHtml(dateStr, repValue, idPrefix){
   if(!repM) return '';
   return `<div class="field"><label class="field-label">Average time per ${repM} m rep (m:ss)</label><input class="input" type="text" inputmode="numeric" id="${idPrefix}-rep" value="${esc(repValue||'')}" placeholder="e.g. 3:45"><div class="hint">Your reps feed the fitness projection; the whole-run time alone can't, because it includes the recovery jogs.</div></div>`;
 }
+// "Scan a workout screenshot": the picture is read on the phone (Tesseract.js, fetched on
+// first use), parsed by scan.js, and the form is prefilled for the runner to check.
+function scanBlockHtml(scan){
+  const status = scan && scan.status;
+  const body = status==='loading' ? `<div class="hint">Loading the text reader (first time only)…</div>`
+    : status==='reading' ? `<div class="hint">Reading the screenshot… ${scan.progress!=null ? Math.round(scan.progress*100)+'%' : ''}</div>`
+    : status==='done' ? `<div class="hint" style="color:var(--accent-strong);">${esc(scan.summary)}</div>${scan.notes && scan.notes.length ? `<div class="hint">${scan.notes.map(esc).join(' ')}</div>` : ''}<details style="margin-top:4px;"><summary class="hint" style="cursor:pointer;">What was read</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(scan.raw||'')}</pre></details>`
+    : status==='error' ? `<div class="hint" style="color:var(--z-tempo);">${esc(scan.error||'Could not read that screenshot.')}</div>`
+    : `<div class="hint">Take a screenshot of the workout summary in Apple Fitness, Strava, Garmin or Nike Run Club, then pick it here. The numbers are read on your phone and filled in below for you to check.</div>`;
+  return `<div class="card" style="padding:12px 14px; margin-bottom:14px; background:var(--surface-2);">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
+      <div style="font-weight:700; font-size:13.5px;">Scan a workout screenshot</div>
+      <label class="btn btn-sm btn-primary" style="cursor:pointer;">${status==='reading'||status==='loading' ? 'Working…' : 'Choose image'}<input type="file" id="lr-scan-file" accept="image/*" style="display:none;" ${status==='reading'||status==='loading' ? 'disabled' : ''}></label>
+    </div>
+    ${body}
+  </div>`;
+}
+let _tesseractLoading = null;
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  if(_tesseractLoading) return _tesseractLoading;
+  _tesseractLoading = new Promise((resolve, reject)=>{
+    const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'; s.onload = ()=>resolve(window.Tesseract); s.onerror = ()=>{ _tesseractLoading = null; reject(new Error('load')); }; document.head.appendChild(s);
+  });
+  return _tesseractLoading;
+}
+async function scanWorkoutImage(file){
+  const m = state.modal; if(!m || m.type!=='log-run') return;
+  const setScan = (patch)=>{ if(state.modal && state.modal.type==='log-run'){ state.modal.scan = {...(state.modal.scan||{}), ...patch}; render(); } };
+  setScan({status:'loading', progress:null});
+  let T;
+  try{ T = await loadTesseract(); }catch(e){ setScan({status:'error', error:'Could not load the text reader. Check your connection and try again.'}); return; }
+  try{
+    setScan({status:'reading', progress:0});
+    const canvas = await prepareImage(file);
+    const worker = await T.createWorker('eng', 1, {logger: msg=>{ if(msg.status==='recognizing text' && state.modal && state.modal.scan){ state.modal.scan.progress = msg.progress; const el = document.querySelector('#lr-scan-progress'); } }});
+    const res = await worker.recognize(canvas);
+    await worker.terminate();
+    const text = res && res.data ? res.data.text : '';
+    const parsed = parseWorkoutText(text, {today: todayDate()});
+    const unit = state.setup.units;
+    const d = state.modal.data;
+    const notes = parsed.notes.slice();
+    if(parsed.date) d.date = parsed.date;
+    if(parsed.distanceKm) d.dist = String(Math.round(kmToUnit(parsed.distanceKm, unit)*100)/100);
+    if(parsed.durationSec) d.time = secToClock(parsed.durationSec);
+    // interval-type day: reps from Apple segments or Garmin laps when they match the rep distance
+    const found = plannedWorkoutForDate(d.date); const repM = found ? repMetersForDay(found.day) : null;
+    if(repM && parsed.segments.length){ const rs = repSecFromSegments(parsed.segments, repM); if(rs){ d.rep = secToClock(rs); notes.push(`Average rep time read from the segments: ${secToClock(rs)} per ${repM} m.`); } else notes.push('Segments were found but none match the planned rep distance; enter the rep time by hand.'); }
+    else if(repM) notes.push('No segments in this screenshot; enter the average rep time by hand.');
+    if(parsed.splits.length) notes.push(`${parsed.splits.length} splits read (fastest ${paceOrSpeedStr(Math.min(...parsed.splits.map(x=>x.paceSecPerKm)), unit, state.paceFormat)}).`);
+    const got = [parsed.date ? niceDate(parseDate(parsed.date)) : null, parsed.distanceKm ? fmtDist(parsed.distanceKm, unit, 2) : null, parsed.durationSec ? secToClock(parsed.durationSec) : null].filter(Boolean);
+    const summary = got.length ? `Read: ${got.join(' · ')}. Check the fields, then save.` : 'Nothing usable was read. Try a clearer screenshot of the summary screen.';
+    if(parsed.kind && /indoor|treadmill/.test(parsed.kind) && found && found.day && !found.day.treadmill) notes.push('Looks like a treadmill run.');
+    state.modal.scan = {status: got.length ? 'done' : 'error', summary, notes, raw:text, error: got.length ? null : summary, splits: parsed.splits};
+    render();
+  }catch(e){
+    setScan({status:'error', error:'Could not read that screenshot.'});
+  }
+}
 function modalLogManualHtml(d){
   const unit = state.setup.units;
   return `
+    ${scanBlockHtml(state.modal.scan)}
     <div class="field"><label class="field-label">Date</label><input class="input" type="date" id="lr-date" value="${d.date}"></div>
     <div class="chip-select" style="margin-bottom:14px;">
       <button class="chip ${d.kind!=='race'?'active':''}" data-act="log-kind" data-kind="run">Training run</button>
@@ -4594,6 +4656,7 @@ function onClick(e){
     const distV = Number(d.dist);
     if(!d.date || !distV || !durSec){ showToast('Enter date, distance and time'); return; }
     const entry = {date:d.date, distanceKm:unitToKm(distV,unit), durationSec:durSec, notes:d.notes, createdAt:new Date().toISOString()};
+    if(state.modal.scan && state.modal.scan.splits && state.modal.scan.splits.length) entry.splits = state.modal.scan.splits.map(x=>x.paceSecPerKm);
     if(d.kind==='race') entry.kind = 'race';
     else { const found = plannedWorkoutForDate(d.date); const repM = found ? repMetersForDay(found.day) : null; const repSec = parseDurationToSec(d.rep); if(repM && repSec>0){ entry.repSec = repSec; entry.repMeters = repM; } }
     commitLogEntry(entry);
@@ -4932,6 +4995,9 @@ function onChange(e){
   if(state.modal && state.modal.type==='pacing-sheet' && e.target.id==='ps-course'){
     state.modal.courseKey = e.target.value || null;
     render(); return;
+  }
+  if(state.modal && state.modal.type==='log-run' && e.target.id==='lr-scan-file'){
+    const f = e.target.files && e.target.files[0]; if(f) scanWorkoutImage(f); return;
   }
   if(state.modal && state.modal.type==='log-run' && e.target.id==='lr-date'){
     state.modal.data.date = e.target.value;
