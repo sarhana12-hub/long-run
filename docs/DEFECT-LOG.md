@@ -176,6 +176,8 @@ Residual (documented, not hidden): across 2,400 random plans one train-through r
 
 63. **Logging a run meant typing it or going through Strava one run at a time**, and a home-screen web app cannot read Apple Health. *Fix:* "Scan a workout screenshot" in Log a run. The picture is read on the phone (Tesseract.js, fetched on first use), scan.js parses date, distance, time, average pace, splits and segments from Apple Fitness, Strava, Garmin and Nike layouts, and the form is prefilled for the runner to check. Segments that match the planned rep distance fill the rep time; the manual rep-time field stays for everyone else. Dark-mode screenshots are inverted before reading. *Guard:* tests/scan.js (parser against sample text from each layout).
 
+64. **A missed session had no obvious way back.** *Fix:* a past run day with nothing logged shows "Missed this one?" in its sheet with a one-tap move to the next rest day that keeps a clear day either side of hard sessions and stays off the last two days before the race; easy runs are told to let it go. Day cards mark past unlogged runs "Not logged".
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy

@@ -1984,6 +1984,35 @@ function computeCoachNote(plan, week, unit){
   return null;
 }
 
+// Swap the contents of two days, keeping each day's own date, weekday, id and days-to-race.
+// Used by the in-week swap and by "move a missed session to the next rest day".
+function swapDayContents(wa, ia, wb, ib){
+  const plan = state.plan; const A = plan.weeks[wa], B = plan.weeks[wb];
+  const da = A.days[ia], db_ = B.days[ib];
+  const keepA = {date:da.date, dow:da.dow, id:da.id, daysToRace:da.daysToRace}, keepB = {date:db_.date, dow:db_.dow, id:db_.id, daysToRace:db_.daysToRace};
+  A.days[ia] = {...db_, ...keepA};
+  B.days[ib] = {...da, ...keepB};
+  [A, B].forEach(w=>{ w.targetKm = round1(w.days.reduce((s,d)=>s+d.km,0)); recomputeStrengthFocus(w.days); refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); });
+  Store.setPlan(plan);
+}
+// Where a missed session could go: the first rest day from today onward within the next
+// seven days that keeps a clear day between hard sessions (Daniels, Pfitzinger: 48 h) and
+// stays clear of the final two days before the race. null when nothing fits.
+function missedMoveTarget(weekIndex, dayIndex){
+  const plan = state.plan; const src = plan.weeks[weekIndex].days[dayIndex];
+  const all = []; plan.weeks.forEach((w,wi)=>w.days.forEach((d,di)=>all.push({w:wi, d:di, day:d})));
+  const srcIdx = all.findIndex(x=>x.w===weekIndex && x.d===dayIndex);
+  const today = todayDate(); const hard = isLegDemandingDay(src);
+  for(let k=srcIdx+1; k<all.length && k<=srcIdx+7; k++){
+    const c = all[k]; const date = parseDate(c.day.date);
+    if(date<today) continue;
+    if(c.day.type!=='rest' || c.day.km>0) continue;
+    if(c.day.daysToRace!=null && c.day.daysToRace>=0 && c.day.daysToRace<=2) continue;
+    if(hard){ const prev = all[k-1], next = all[k+1]; if((prev && prev.day.km>0 && isLegDemandingDay(prev.day)) || (next && next.day.km>0 && isLegDemandingDay(next.day))) continue; }
+    return {weekIndex:c.w, dayIndex:c.d, day:c.day};
+  }
+  return null;
+}
 function todayWeekIndex(plan){
   const today = todayDate();
   return plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
@@ -2115,6 +2144,7 @@ function renderPlanTab(week, plan){
           ${day.strength?`<span class="strength-badge">+ Strength${day.strengthFocus==='upper'?' (upper/core)':''}</span>`:''}
           ${day.terrain==='hilly'?`<span class="strength-badge" style="color:var(--z-hill); background:var(--z-hill-bg);">⛰ Hilly</span>`:''}
           ${day.treadmill?`<span class="strength-badge" style="color:var(--z-easy); background:var(--z-easy-bg);">Treadmill</span>`:''}
+          ${(day.km>0 && day.type!=='race' && !match && parseDate(day.date) < todayDate()) ? `<span class="strength-badge" style="color:var(--muted); background:var(--surface-2);">Not logged</span>` : ''}
         </div>
         <div class="day-desc">${esc(daySummaryText(day, weekPaces, unit, cardFmt))}</div>
       </div>
@@ -4217,6 +4247,15 @@ function renderDayDetail(){
   const isStrengthDone = state.strengthDone.includes(day.date);
   const editBtn = `<button class="btn" data-act="open-day-edit" style="position:absolute; top:14px; right:62px; padding:9px 16px; font-size:13.5px;">Edit</button>`;
   const canTreadmill = day.km>0 && day.type!=='race';
+  const missed = day.km>0 && day.type!=='race' && parseDate(day.date) < todayDate() && matchedLogs.length===0;
+  const moveTarget = missed ? missedMoveTarget(weekIndex, dayIndex) : null;
+  const missedHtml = !missed ? '' : `<div class="card" style="padding:12px 14px; margin-bottom:14px; background:var(--surface-2);">
+      <div style="font-weight:700; font-size:13.5px; margin-bottom:4px;">Missed this one?</div>
+      <div class="hint" style="margin:0 0 ${moveTarget?'10px':'0'};">${isLegDemandingDay(day)
+        ? (moveTarget ? `Move it to ${DOW_LABELS[moveTarget.day.dow]} ${niceDate(parseDate(moveTarget.day.date))}, the next rest day that keeps a clear day either side of your hard sessions. This day becomes a rest day.` : 'No rest day in the next week keeps a clear day between hard sessions, so let it go and carry on with the plan. Squeezing it in next to another hard day is how injuries start.')
+        : (moveTarget ? `An easy run is not worth chasing; the plan carries on. If you want it back, ${DOW_LABELS[moveTarget.day.dow]} ${niceDate(parseDate(moveTarget.day.date))} is the next rest day.` : 'An easy run is not worth chasing; let it go and the plan carries on.')}</div>
+      ${moveTarget ? `<button class="btn btn-block" data-act="move-missed" data-wi="${weekIndex}" data-di="${dayIndex}" data-twi="${moveTarget.weekIndex}" data-tdi="${moveTarget.dayIndex}">Move to ${DOW_LABELS[moveTarget.day.dow]} ${niceDate(parseDate(moveTarget.day.date))}</button>` : ''}
+    </div>`;
   const tmNote = treadmillNote(day);
   if(tmNote) descriptionParts.push(tmNote);
   void meta;
@@ -4232,6 +4271,7 @@ function renderDayDetail(){
       ? `<ul style="font-size:14.5px; color:var(--ink-soft); margin:0 0 16px; padding-left:20px; line-height:1.5;">${descriptionParts.map(p=>`<li style="margin-bottom:4px;">${esc(p)}</li>`).join('')}</ul>`
       : descriptionParts.length===1 ? `<div style="font-size:14.5px; color:var(--ink-soft); margin-bottom:16px;">${esc(descriptionParts[0])}</div>` : ''}
     ${strengthFocusNote ? `<div class="hint" style="margin:-10px 0 16px;">${esc(strengthFocusNote)}</div>` : ''}
+    ${missedHtml}
     ${day.strength && day.strengthExercises && day.strengthExercises.length ? `
     <div class="field-label" style="margin-bottom:8px;">Strength${day.strengthTimeMin ? ` — about ${day.strengthTimeMin} min${day.strengthExpress ? ', kept short because it shares a workout day — do it after the run' : ''}` : ''}</div>
     <div class="card" style="padding:2px 14px; margin-bottom:12px;">${strengthRowsHtml(day.strengthExercises, day.date, day.strengthHowTo, false)}</div>
@@ -4797,16 +4837,19 @@ function onClick(e){
   }
   if(act==='do-swap-days'){
     const {weekIndex, dayIndexA:a, dayIndexB:b} = state.modal.data;
-    const week = state.plan.weeks[weekIndex];
-    const da = week.days[a], db_ = week.days[b];
-    const keepA = {date:da.date, dow:da.dow, id:da.id}, keepB = {date:db_.date, dow:db_.dow, id:db_.id};
-    week.days[a] = {...db_, ...keepA};
-    week.days[b] = {...da, ...keepB};
-    recomputeStrengthFocus(week.days);
-    refreshStrengthWorkouts(week.days, week.phase, week.weekIndex, strengthOptsFor(week));
-    Store.setPlan(state.plan);
+    swapDayContents(weekIndex, a, weekIndex, b);
     state.modal = null;
     showToast('Swapped');
+    return;
+  }
+  if(act==='move-missed'){
+    const wi = Number(el.dataset.wi), di = Number(el.dataset.di), twi = Number(el.dataset.twi), tdi = Number(el.dataset.tdi);
+    const label = state.plan.weeks[wi].days[di].label;
+    swapDayContents(wi, di, twi, tdi);
+    state.currentWeekIndex = twi;
+    state.modal = {type:'day-detail', weekIndex:twi, dayIndex:tdi};
+    render();
+    showToast(`${label} moved`);
     return;
   }
   if(act==='cancel-move'){ state.moveFrom=null; render(); return; }
