@@ -553,6 +553,13 @@ function baselineVdotForWeek(plan, week){
 let _fitnessMemo = {key:null, value:null};
 // Days before the tracking start ("I've been training, skip the old runs") are taken as done:
 // they never show as missed or not logged.
+function strengthBadgeHtml(day){
+  if(!day.strength) return '';
+  const label = `Strength${day.strengthFocus==='upper' ? ' (upper/core)' : ''}`;
+  return state.strengthDone.includes(day.date)
+    ? `<span class="strength-badge" style="color:var(--accent-strong); background:var(--accent-soft);">${ICONS.check} ${label}</span>`
+    : `<span class="strength-badge">+ ${label}</span>`;
+}
 function beforeTrackingStart(day){ const t = state.setup && state.setup.trackingStartDate; return !!t && parseDate(day.date) < parseDate(t); }
 function fitnessFor(plan, logs){
   const key = plan===state.plan && logs===state.logs
@@ -2118,7 +2125,7 @@ function renderTodayCard(plan){
   const tm = treadmillNote(day); if(tm) parts.push(tm);
   return `<div class="card today-card">
     <div class="tc-head"><span class="tc-label">Today</span><span class="tc-date">${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}${logged?' · logged':''}</span></div>
-    <div class="tc-title">${dayPill(day)}${day.km>0?`<span class="mono">${fmtDist(day.km,unit)}</span>`:''}${day.strength?`<span class="strength-badge">+ Strength${day.strengthFocus==='upper'?' (upper/core)':''}</span>`:''}${day.treadmill?'<span class="strength-badge" style="color:var(--z-easy); background:var(--z-easy-bg);">Treadmill</span>':''}</div>
+    <div class="tc-title">${dayPill(day)}${day.km>0?`<span class="mono">${fmtDist(day.km,unit)}</span>`:''}${strengthBadgeHtml(day)}${day.treadmill?'<span class="strength-badge" style="color:var(--z-easy); background:var(--z-easy-bg);">Treadmill</span>':''}</div>
     <ul>${parts.slice(0,4).map(p=>`<li>${esc(p)}</li>`).join('')}</ul>
     <div class="row">
       <button class="btn" data-act="open-day" data-i="${di}">Details</button>
@@ -2169,7 +2176,7 @@ function renderPlanTab(week, plan){
       <div class="day-main">
         <div class="day-top">
           ${dayPill(day)}
-          ${day.strength?`<span class="strength-badge">+ Strength${day.strengthFocus==='upper'?' (upper/core)':''}</span>`:''}
+          ${strengthBadgeHtml(day)}
           ${day.terrain==='hilly'?`<span class="strength-badge" style="color:var(--z-hill); background:var(--z-hill-bg);">⛰ Hilly</span>`:''}
           ${day.treadmill?`<span class="strength-badge" style="color:var(--z-easy); background:var(--z-easy-bg);">Treadmill</span>`:''}
           ${(day.km>0 && day.type!=='race' && !match && parseDate(day.date) < todayDate() && !beforeTrackingStart(day)) ? `<span class="strength-badge" style="color:var(--muted); background:var(--surface-2);">Not logged</span>` : ''}
@@ -4312,7 +4319,7 @@ function renderDayDetail(){
     <div style="display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
       ${dayPill(day, true)}
       ${day.km>0?`<span class="mono" style="font-size:15px; font-weight:700;">${fmtDist(day.km,unit)}</span>`:''}
-      ${day.strength?`<span class="strength-badge">+ Strength${day.strengthFocus==='upper'?' (upper/core)':''}</span>`:''}
+      ${strengthBadgeHtml(day)}
       ${canTreadmill ? `<button class="chip ${day.treadmill?'active':''}" data-act="toggle-treadmill" data-wi="${weekIndex}" data-di="${dayIndex}" style="margin-left:auto; display:inline-flex; align-items:center; gap:6px; padding:6px 12px;"><span style="width:14px; height:14px; display:inline-flex;">${ICONS.treadmill}</span>Treadmill</button>` : ''}
     </div>
     ${descriptionParts.length>1
