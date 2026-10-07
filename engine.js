@@ -446,7 +446,7 @@ const STRENGTH_EXERCISES = {
     {needs:['hipThrustMachine'], name:'Hip thrust', equip:'hip thrust / glute drive machine'},
     {needs:['smith','bench'], name:'Hip thrust', equip:'Smith machine bar across the hips, shoulders on a bench'},
     {needs:['dumbbells','bench'], name:'Dumbbell hip thrust', equip:'a heavy dumbbell across the hips, shoulders on a bench'},
-    {needs:[], name:'Single-leg glute bridge', equip:'bodyweight', how:'Lie on your back, one foot flat, the other leg straight; drive the hips up through the planted heel and lower slowly.'},
+    {needs:[], name:'Single-leg hip thrust', equip:'shoulders on a chair or sofa edge, bodyweight', per:'leg', how:'Upper back on the seat edge, one foot flat on the floor, the other leg lifted; drive the hips up through the planted heel until the body is a straight line, lower slowly.'},
   ]},
   bulgarianSplitSquat: {unit:'reps', per:'leg', how:'Stand a long stride in front of a bench with the top of the rear foot resting on it; lower straight down until the front thigh is about level, then push up through the front heel.', variants:[
     {needs:['bench','dumbbells'], name:'Bulgarian split squat', equip:'rear foot on a bench, dumbbells in hand'},
@@ -461,7 +461,7 @@ const STRENGTH_EXERCISES = {
     {needs:['box'], name:'Step-ups', equip:'knee-high box, bodyweight'},
     {needs:['bench'], name:'Step-ups', equip:'onto a stable bench, bodyweight'},
     {needs:['dumbbells'], name:'Reverse lunges', equip:'dumbbells in hand', how:'Step one foot back and lower until both knees are near right angles, then drive through the front foot to stand.'},
-    {needs:[], name:'Reverse lunges', equip:'bodyweight', how:'Step one foot back and lower until both knees are near right angles, then drive through the front foot to stand.'},
+    {needs:[], name:'Step-ups', equip:'onto the second or third stair, bodyweight'},
   ]},
   singleLegRDL: {unit:'reps', per:'leg', how:'Stand on one leg, hinge forward at the hip with a flat back while the free leg extends behind you, lower the weight toward the floor, then return to standing. Hold a wall if balance is the limiter.', variants:[
     {needs:['dumbbells'], name:'Single-leg Romanian deadlift', equip:'one dumbbell'},
