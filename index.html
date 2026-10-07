@@ -982,6 +982,7 @@ function defaultDraft(){
     maxLongRunMi: '', maxWeeklyMi: '',
     longRunEmphasis: 'balanced', speedEmphasis: 'balanced', strengthPerWeek: 2,
     hillsMode: 'flat', // 'flat' | 'hilly' - race plans only, see generatePlan()
+    taperMode: 'full', // 'full' | 'light' | 'none' - race plans only
     skipBase: false, // race plans only - skip straight to build phase, see generatePlan()
     // General (non-race) plan fields
     planKind: 'speed', weeks: PLAN_KIND_META.speed.weeksDefault,
@@ -1023,6 +1024,7 @@ function draftFromSetup(setup){
     longRunEmphasis: setup.longRunEmphasis || 'balanced', speedEmphasis: setup.speedEmphasis || 'balanced',
     strengthPerWeek: setup.strengthPerWeek==null ? 2 : setup.strengthPerWeek,
     hillsMode: setup.hillsMode || 'flat',
+    taperMode: setup.taperMode || 'full',
     skipBase: !!setup.skipBase,
   };
 }
@@ -1112,7 +1114,7 @@ function submitOnboarding(){
       maxLongRunKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxLongRunMi) ? unitToKm(Number(d.maxLongRunMi), d.units) : null,
       maxWeeklyKm: (d.raceDistanceKm>=LONG_DISTANCE_CAP_THRESHOLD_KM && d.maxWeeklyMi) ? unitToKm(Number(d.maxWeeklyMi), d.units) : null,
       longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis,
-      hillsMode: d.hillsMode, skipBase: d.skipBase,
+      hillsMode: d.hillsMode, skipBase: d.skipBase, taperMode: d.taperMode || 'full',
     };
     plan = generatePlan(setup, dayOneOverride);
   }
@@ -1618,6 +1620,16 @@ function renderOnboardStep3(d){
       <div class="chip-select">${strengthCountChipsHtml(d.strengthPerWeek, 'pick-strength-count')}</div>
       <div class="hint">Lower-body sessions (heavy lifts plus short plyometrics, the combination with the strongest evidence for running economy) go on easy or rest days with a clear day before any hard run. Upper body and core sessions are light on the legs, so they take rest days or the day before a quality session. Everything eases off in peak weeks and stops in the final ten days.</div>
       ${d.hillsMode==='hilly' && (d.strengthPerWeek||0)<2 ? `<div class="banner" style="margin-top:10px;">${ICONS.bolt}<span>Hilly courses put heavy eccentric load on your quads and glutes, especially on descents — most coaches recommend at least 2 strength sessions/week to build that tolerance. You can still pick fewer, but it's worth the extra session here.</span></div>` : ''}
+    </div>
+
+    <div class="field">
+      <label class="field-label">Race approach</label>
+      <div class="chip-select">
+        <button class="chip ${(d.taperMode||'full')==='full'?'active':''}" data-act="pick-taper-mode" data-mode="full">Full taper</button>
+        <button class="chip ${d.taperMode==='light'?'active':''}" data-act="pick-taper-mode" data-mode="light">Light taper</button>
+        <button class="chip ${d.taperMode==='none'?'active':''}" data-act="pick-taper-mode" data-mode="none">Train through</button>
+      </div>
+      <div class="hint">${d.taperMode==='none' ? 'No taper: training and strength carry on as normal, with only race day and the day before kept easy. Good when this race is a stepping stone rather than the goal.' : d.taperMode==='light' ? 'A shorter, gentler taper — about half the usual length and volume cut, strength eases off five days out.' : 'The full, evidence-based taper for this distance — volume drops, intensity stays, strength stops ten days out. Best when this race is the goal.'}</div>
     </div>
 
     <div class="section-title">Weekly rhythm</div>
@@ -3053,6 +3065,7 @@ function renderSettingsTab(){
         : `<div class="settings-row"><div><div class="lbl">${esc(planLabel(s))}</div><div class="sub">${niceDateFull(parseDate(s.raceDate))}</div></div></div>`}
       ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Course profile</div><div class="sub">${s.hillsMode==='hilly'?'Hilly':'Flat / rolling'}</div></div></div>` : ''}
       ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Base phase</div><div class="sub">${s.skipBase?'Skipped — straight to speed work':'Build up gradually'}</div></div></div>` : ''}
+      ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Race approach</div><div class="sub">${s.taperMode==='none'?'Train through — no taper':s.taperMode==='light'?'Light taper':'Full taper'}</div></div></div>` : ''}
       <div class="settings-row"><div><div class="lbl">Weekly mileage used to build plan</div><div class="sub">${fmtDist(s.currentWeeklyKm,unit,1)}/week${state.plan.peakWeeklyKm ? ` → peaks at ${fmtDist(state.plan.peakWeeklyKm,unit,0)}/week${state.plan.peakLongKm ? `, long run up to ${fmtDist(state.plan.peakLongKm,unit,0)}` : ''}` : ''}</div></div></div>
       ${state.plan.prediction ? `<div class="settings-row"><div><div class="lbl">Projected finish from your recent result</div><div class="sub">${secToClock(state.plan.prediction.lowSec)}–${secToClock(state.plan.prediction.highSec)} · ${esc(state.plan.prediction.basis)}</div></div></div>` : ''}
       ${state.plan.warnings && state.plan.warnings.length ? `<div class="settings-row"><div><div class="lbl">Coach's notes</div><div class="sub">${state.plan.warnings.map(w=>esc(w)).join('<br><br>')}</div></div></div>` : ''}
@@ -4041,6 +4054,7 @@ function onClick(e){
   if(act==='pick-goal-mode'){ state.onboardDraft.goalMode = el.dataset.mode; render(); return; }
   if(act==='pick-hills-mode'){ state.onboardDraft.hillsMode = el.dataset.mode; render(); return; }
   if(act==='pick-skip-base'){ state.onboardDraft.skipBase = el.dataset.mode==='1'; render(); return; }
+  if(act==='pick-taper-mode'){ state.onboardDraft.taperMode = el.dataset.mode; render(); return; }
   if(act==='pick-recent2'){ state.onboardDraft.recent2DistanceKey = el.dataset.key||''; if(!el.dataset.key) state.onboardDraft.recent2Time=''; render(); return; }
   if(act==='pick-plan-kind'){
     const kind = el.dataset.kind;
