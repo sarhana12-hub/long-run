@@ -1415,7 +1415,7 @@ function emphasisChipsHtml(value, act){
 }
 // What each count buys: the running-economy evidence (Blagrove, Rønnestad) is for heavy
 // lower-body work twice a week, so legs come first and upper body/core is the third session.
-const STRENGTH_COUNT_LABELS = {0:'None', 1:'1 — legs', 2:'2 — legs ×2', 3:'3 — legs ×2 + upper/core'};
+const STRENGTH_COUNT_LABELS = {0:'None', 1:'1 · legs', 2:'2 · legs ×2', 3:'3 · legs ×2 + upper'};
 function strengthCountLabel(n){ return STRENGTH_COUNT_LABELS[n==null?2:n] || String(n); }
 function strengthCountChipsHtml(value, act){
   return [0,1,2,3].map(n=>`<button class="chip ${value===n?'active':''}" data-act="${act}" data-n="${n}">${STRENGTH_COUNT_LABELS[n]}</button>`).join('');
@@ -1801,7 +1801,7 @@ function renderOnboardStep3(d){
     <div class="field">
       <label class="field-label">Strength days per week</label>
       <div class="chip-select">${strengthCountChipsHtml(d.strengthPerWeek, 'pick-strength-count')}</div>
-      <div class="hint">Leg sessions (heavy lifts plus short plyometrics, the combination with the strongest evidence for running economy) come first: one or two a week, at least two days apart. Each goes on an easy run day if the week has one with a clear day after it, otherwise on a rest day, and only as a last resort on a hard day after the run — never the day before a hard session. The third session is upper body and core, on a rest day where possible. Peak weeks drop to two sessions, the taper to one, and nothing is scheduled in the final ten days. The next page asks what gym equipment you have.</div>
+      <div class="hint">Legs first — on an easy or rest day, never the day before a hard run. A third session is upper body and core.</div>
       ${d.hillsMode==='hilly' && (d.strengthPerWeek||0)<2 ? `<div class="banner" style="margin-top:10px;">${ICONS.bolt}<span>Hilly courses put heavy eccentric load on your quads and glutes, especially on descents — most coaches recommend at least 2 strength sessions/week to build that tolerance. You can still pick fewer, but it's worth the extra session here.</span></div>` : ''}
     </div>
 
