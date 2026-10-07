@@ -1,5 +1,5 @@
 const CACHE = 'peak-v3';
-const SHELL = ['./', './index.html', './engine.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
+const SHELL = ['./', './index.html', './engine.js', './library.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 
 // GitHub Pages serves everything with Cache-Control: max-age=600, which we
 // can't override (static host, no server config). `cache: 'no-store'` makes

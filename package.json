@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "description": "Peak — running + strength training plan generator (PWA)",
   "scripts": {
-    "test": "node tests/plan-invariants.js && node tests/projection.js && node tests/monte-carlo.js 300 && node tests/monte-carlo.js 300 1 && node tests/monte-carlo.js 300 777",
+    "test": "node tests/plan-invariants.js && node tests/projection.js && node tests/library.js && node tests/monte-carlo.js 300 && node tests/monte-carlo.js 300 1 && node tests/monte-carlo.js 300 777",
     "test:verbose": "node tests/plan-invariants.js --verbose",
     "serve": "npx --yes serve -l 8794 .",
     "test:scenarios": "node tests/plan-invariants.js",

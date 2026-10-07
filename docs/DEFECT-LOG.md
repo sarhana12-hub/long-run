@@ -168,6 +168,10 @@ Residual (documented, not hidden): across 2,400 random plans one train-through r
 60. **The projection was a scheduled promise.** "On pace for X" rose on a fixed VDOT ramp from day one, never fell for missed sessions, and workouts fed it through a noisy blend that counted interval recovery jogs as the effort. *Fix:* evidence-led fitness model (engine projectFitness): races reset it, logged tempo/interval sessions nudge it within caps (intervals only with a rep time), the scheduled gain is credited per completed session, two weeks of light training eases it. Three numbers with ranges replace the single figure. *Guard:* tests/projection.js.
 61. **Nowhere to log a race or an interval session properly.** *Fix:* "This was a race" on both manual and Strava logging; an average-rep-time field on interval-type days, pre-filled from Strava laps when they match the rep distance.
 
+## Round 8 — exercise library (2026-10-07)
+
+62. **Exercises had a one-line how-to and nothing else.** *Fix:* library.js carries, for every exercise name a session can print (81 names), a summary, set-up, the movement, form points, the common mistake, a drawing of the start and finish built from joint angles by one renderer (a second angle where it helps), and a reference page at the ACE Fitness exercise library, each URL fetched and checked. Shown inside the exercise row in the day sheet and browsable from Settings. *Guard:* tests/library.js (coverage, link shape, drawings render).
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy

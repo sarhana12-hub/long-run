@@ -1,22 +1,25 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Exercise drawings</title>
 <style>
-body{margin:0; background:#101511; color:#EAEFE9; font-family:Manrope,-apple-system,sans-serif; padding:20px;}
-.grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; max-width:760px; margin:0 auto;}
-.card{background:#1A211C; border:1px solid #2B342D; border-radius:16px; padding:14px;}
-.card img{width:100%; height:auto; display:block; color:#EAEFE9;}
-.card .t{font-weight:700; font-size:14px; margin-top:8px;}
-.card .s{font-size:12px; color:#8B9790; margin-top:2px; line-height:1.4;}
-h1{font-size:18px; max-width:760px; margin:0 auto 14px;}
+body{margin:0; background:#101511; color:#EAEFE9; font-family:Manrope,-apple-system,sans-serif; padding:16px;}
+.grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:12px;}
+.card{background:#1A211C; border:1px solid #2B342D; border-radius:14px; padding:10px;}
+.card svg{width:100%; height:auto; display:block;}
+.card .t{font-weight:700; font-size:12.5px; margin-top:6px;}
+.card .s{font-size:11px; color:#8B9790; margin-top:2px; line-height:1.35;}
+h1{font-size:16px; margin:0 0 12px;}
 </style></head><body>
-<h1>Exercise line drawings — three samples</h1>
-<div class="grid">
-  <div class="card"><div class="art" data-src="back-squat.svg"></div><div class="t">Back squat</div><div class="s">Faded figure: start. Solid figure: bottom of the rep. Arrow: the movement.</div></div>
-  <div class="card"><div class="art" data-src="bulgarian-split-squat.svg"></div><div class="t">Bulgarian split squat</div><div class="s">Rear foot on the bench, dumbbell at the side, front thigh level at the bottom.</div></div>
-  <div class="card"><div class="art" data-src="kettlebell-swing.svg"></div><div class="t">Kettlebell swing</div><div class="s">Faded figure: the hinge with the bell behind the legs. Solid: hips snapped forward, bell at chest height.</div></div>
-</div>
+<h1>Exercise library drawings</h1>
+<div class="grid" id="grid"></div>
+<script src="../../engine.js"></script>
+<script src="../../library.js"></script>
 <script>
-// Inline the SVGs so currentColor picks up the page colour, exactly as the app would do.
-document.querySelectorAll('.art').forEach(el=>fetch(el.dataset.src).then(r=>r.text()).then(t=>{ el.innerHTML=t; el.querySelector('svg').style.width='100%'; el.querySelector('svg').style.height='auto'; }));
+const grid = document.getElementById('grid');
+Object.keys(EXERCISE_LIBRARY).forEach(name=>{
+  const e = EXERCISE_LIBRARY[name];
+  const add = (art, label) => { const d = document.createElement('div'); d.className='card'; d.innerHTML = exerciseSvg(art, name) + `<div class="t">${name}${label?' · '+label:''}</div><div class="s">${e.summary}</div>`; grid.appendChild(d); };
+  add(e.art, e.art.view==='front' ? 'front' : 'side');
+  if(e.art2) add(e.art2, e.art2.view==='front' ? 'front' : 'side');
+});
 </script>
 </body></html>

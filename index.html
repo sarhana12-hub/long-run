@@ -260,6 +260,22 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .proj-row.now .proj-v{font-size:26px; color:var(--accent-strong);}
 .proj-row .proj-r{grid-column:1 / -1; font-size:12.5px; color:var(--ink-soft);}
 .proj-row.now .proj-r{color:var(--ink); font-weight:600;}
+/* exercise library */
+.sx-art{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0;}
+.sx-art.one{grid-template-columns:minmax(0, 200px);}
+.sx-art figure{margin:0; background:var(--surface-2); border-radius:12px; padding:6px;}
+.sx-art svg{width:100%; height:auto; display:block;}
+.sx-art figcaption{font-size:10.5px; color:var(--muted); text-align:center; margin-top:2px;}
+.sx-info{font-size:12.5px; color:var(--ink-soft); line-height:1.45;}
+.sx-info b{color:var(--ink);}
+.sx-info ul{margin:2px 0 6px; padding-left:16px;}
+.sx-info li{margin-bottom:2px;}
+.sx-link{display:inline-flex; align-items:center; gap:6px; margin-top:4px; font-size:12.5px; font-weight:700; color:var(--accent-strong); text-decoration:none;}
+.lib-row{padding:10px 0; border-bottom:1px solid var(--line-soft);}
+.lib-row:last-child{border-bottom:none;}
+.lib-row summary{list-style:none; display:flex; justify-content:space-between; align-items:center; gap:10px; cursor:pointer; -webkit-tap-highlight-color:transparent; font-weight:700; font-size:14px;}
+.lib-row summary::-webkit-details-marker{display:none;}
+.lib-row summary .sum{font-weight:400; font-size:12px; color:var(--muted); display:block; margin-top:2px;}
 /* settings collapsibles */
 .settings-details summary{list-style:none; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 0; cursor:pointer; -webkit-tap-highlight-color:transparent;}
 .settings-details summary::-webkit-details-marker{display:none;}
@@ -391,6 +407,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 <div id="app"></div>
 
 <script src="engine.js"></script>
+<script src="library.js"></script>
 <script>
 (function(){
 "use strict";
@@ -1985,6 +2002,22 @@ function parseStrengthLine(line){
   const r = m[5].match(/^(.*?)\.?(?: Rest (.+?) between sets\.)?$/);
   return {sets:m[1], amount:m[2], name:m[3], equip:m[4], cue:(r?r[1]:m[5]), rest:(r&&r[2])||null};
 }
+// The library block for one exercise: drawings (start faded, finish solid), what it is,
+// how to set up, the movement, the cues, the common mistake, and the reference page.
+function exerciseLibraryHtml(name){
+  const e = exerciseInfo(name);
+  if(!e) return '';
+  const arts = [{art:e.art, cap:e.art.view==='front' ? 'Front view' : 'Side view'}].concat(e.art2 ? [{art:e.art2, cap:e.art2.view==='front' ? 'Front view' : 'Side view'}] : []);
+  return `<div class="sx-art ${arts.length===1?'one':''}">${arts.map(a=>`<figure>${exerciseSvg(a.art, e.name)}<figcaption>${a.cap} · faded = start, solid = finish</figcaption></figure>`).join('')}</div>
+    <div class="sx-info">
+      <div style="margin-bottom:6px;">${esc(e.summary)}</div>
+      <b>Set up</b><ul>${e.setup.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+      <b>The movement</b><ul>${e.move.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+      <b>Form points</b><ul>${e.cues.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+      <b>Common mistake:</b> ${esc(e.mistake)}
+      ${e.link ? `<div><a class="sx-link" href="${e.link.url}" target="_blank" rel="noopener">${ICONS.view||''}Step photos and instructions at ${esc(e.link.source)} ↗</a>${e.link.note ? `<div class="hint" style="margin-top:2px;">${esc(e.link.note)}</div>` : ''}</div>` : `<div class="hint" style="margin-top:4px;">No verified reference page for this one yet.</div>`}
+    </div>`;
+}
 function strengthRowsHtml(lines, date, howTo, optional){
   const ticks = (state.strengthItems && state.strengthItems[date]) || [];
   return lines.map((line,i)=>{
@@ -1996,7 +2029,8 @@ function strengthRowsHtml(lines, date, howTo, optional){
       ${optional?'':`<input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${i}" ${done?'checked':''} aria-label="Done: ${esc(p.name)}">`}
       <details>
         <summary><span><span class="sx-name">${esc(p.name)}</span><div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
-        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how?`<br><b>How:</b> ${esc(how.how)}`:''}</div>
+        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}</div>
+        ${exerciseLibraryHtml(p.name)}
       </details>
     </div>`;
   }).join('');
@@ -3380,6 +3414,12 @@ function renderSettingsTab(){
       <div style="padding-bottom:14px;">${equipmentChipsHtml(s.equipment && s.equipment.length ? s.equipment : DEFAULT_EQUIPMENT, 'toggle-equipment')}</div>
     </details>
 
+    <div class="section-title">Exercise library</div>
+    <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
+      <div class="hint">Every strength exercise the plan can prescribe: what it is, how to set up, the movement, the form points, a drawing of the start and finish, and a reference page at ACE Fitness.</div>
+      <button class="btn btn-block" data-act="open-library">${ICONS.dumbbell} Browse the library</button>
+    </div>
+
     <div class="section-title">Strava</div>
     <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
       ${state.stravaAuth ? `
@@ -3432,6 +3472,7 @@ function renderModal(){
   if(m.type==='pacing-sheet') return renderPacingSheet(m.strategy||'even', m.courseKey||null);
   if(m.type==='peek-the-peak') return renderPeekThePeak();
   if(m.type==='help') return renderHelpModal(m.tab);
+  if(m.type==='library') return renderLibraryModal(m.q||'');
   return '';
 }
 
@@ -3469,6 +3510,15 @@ const TAB_HELP = {
     `,
   },
 };
+function renderLibraryModal(q){
+  const names = Object.keys(EXERCISE_LIBRARY).filter(n=>!q || n.toLowerCase().includes(q.toLowerCase()));
+  const rows = names.map(n=>`<details class="lib-row"><summary><span>${esc(n)}<span class="sum">${esc(EXERCISE_LIBRARY[n].summary)}</span></span><span class="chev" style="color:var(--muted);">${ICONS.chevron}</span></summary>${exerciseLibraryHtml(n)}</details>`).join('');
+  return modalShell('Exercise library', `
+    <input class="input" type="search" id="lib-q" placeholder="Search exercises" value="${esc(q)}" style="margin-bottom:10px;">
+    <div class="hint" style="margin-bottom:10px;">${names.length} exercise${names.length===1?'':'s'}. Tap one to open it.</div>
+    <div class="card" style="padding:0 14px;">${rows || '<div class="empty">Nothing matches.</div>'}</div>
+  `);
+}
 function renderHelpModal(tab){
   const help = TAB_HELP[tab] || TAB_HELP.plan;
   return modalShell(help.title, `<div class="modal-body-text">${help.body}</div>`);
@@ -4592,6 +4642,7 @@ function onClick(e){
     state.modal={type:'achievements'};
     render(); return;
   }
+  if(act==='open-library'){ state.modal={type:'library', q:''}; render(); return; }
   if(act==='open-help'){
     state.modal={type:'help', tab: state.tab};
     render(); return;
@@ -4794,6 +4845,9 @@ function onInput(e){
         if(el2) el2.textContent = recentPaceHint(state.onboardDraft);
       }, PACE_HINT_DEBOUNCE_MS);
     }
+  }
+  if(state.modal && state.modal.type==='library' && e.target.id==='lib-q'){
+    state.modal.q = e.target.value; const sheet = document.querySelector('.sheet'); const y = sheet ? sheet.scrollTop : 0; render(); const i = document.getElementById('lib-q'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = y; return;
   }
   if(state.modal && state.modal.type==='log-run'){
     const d = state.modal.data;
