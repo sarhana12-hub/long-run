@@ -4028,9 +4028,9 @@ function scanBlockHtml(scan){
   const status = scan && scan.status;
   const body = status==='loading' ? `<div class="hint">Loading the text reader (first time only)…</div>`
     : status==='reading' ? `<div class="hint">Reading the screenshot… ${scan.progress!=null ? Math.round(scan.progress*100)+'%' : ''}</div>`
-    : status==='done' ? `<div class="hint" style="color:var(--accent-strong);">${esc(scan.summary)}</div>${scan.notes && scan.notes.length ? `<div class="hint">${scan.notes.map(esc).join(' ')}</div>` : ''}<details style="margin-top:4px;"><summary class="hint" style="cursor:pointer;">What was read</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(scan.raw||'')}</pre></details>`
+    : status==='done' ? `<div class="hint" style="color:var(--accent-strong);">${esc(scan.summary)}</div>${scan.notes && scan.notes.length ? `<div class="hint">${scan.notes.map(esc).join(' ')}</div>` : ''}${scan.splits && scan.splits.length ? `<button class="btn btn-sm" data-act="remove-splits" style="margin-top:6px;">Remove splits</button>` : ''}<details style="margin-top:4px;"><summary class="hint" style="cursor:pointer;">What was read</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(scan.raw||'')}</pre></details>`
     : status==='error' ? `<div class="hint" style="color:var(--z-tempo);">${esc(scan.error||'Could not read that screenshot.')}</div>`
-    : `<div class="hint">Take a screenshot of the workout summary in Apple Fitness, Strava, Garmin or Nike Run Club, then pick it here. The numbers are read on your phone and filled in below for you to check.</div>`;
+    : `<div class="hint">Apple Fitness: open the run, tap Splits and screenshot that page. One picture is enough. The summary screen of any app (Apple, Strava, Garmin, Nike) works too. The numbers are read on your phone and filled in below; every field can be changed before you save.</div>`;
   return `<div class="card" style="padding:12px 14px; margin-bottom:14px; background:var(--surface-2);">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
       <div style="font-weight:700; font-size:13.5px;">Scan a workout screenshot</div>
@@ -4072,9 +4072,9 @@ async function scanWorkoutImage(file){
     const found = plannedWorkoutForDate(d.date); const repM = found ? repMetersForDay(found.day) : null;
     if(repM && parsed.segments.length){ const rs = repSecFromSegments(parsed.segments, repM); if(rs){ d.rep = secToClock(rs); notes.push(`Average rep time read from the segments: ${secToClock(rs)} per ${repM} m.`); } else notes.push('Segments were found but none match the planned rep distance; enter the rep time by hand.'); }
     else if(repM) notes.push('No segments in this screenshot; enter the average rep time by hand.');
-    if(parsed.splits.length) notes.push(`${parsed.splits.length} split${parsed.splits.length===1?"":"s"} read (fastest ${paceOrSpeedStr(Math.min(...parsed.splits.map(x=>x.paceSecPerKm)), unit, state.paceFormat)}).`);
+    if(parsed.splits.length) notes.push(`${parsed.splits.length} split${parsed.splits.length===1?"":"s"} read: ${parsed.splits.map(x=>paceOrSpeedStr(x.paceSecPerKm, unit, state.paceFormat)).join(', ')}. If these look wrong, "Remove splits" below keeps the run without them.`);
     const got = [parsed.date ? niceDate(parseDate(parsed.date)) : null, parsed.distanceKm ? fmtDist(parsed.distanceKm, unit, 2) : null, parsed.durationSec ? secToClock(parsed.durationSec) : null].filter(Boolean);
-    const summary = got.length ? `Read: ${got.join(' · ')}. Check the fields, then save.` : 'Nothing usable was read. Try a clearer screenshot of the summary screen.';
+    const summary = got.length ? `Read: ${got.join(' · ')}. Check the fields (all of them can be edited), then save.` : 'Nothing usable was read. Try a clearer screenshot of the Splits page or the summary screen.';
     if(parsed.kind && /indoor|treadmill/.test(parsed.kind) && found && found.day && !found.day.treadmill) notes.push('Looks like a treadmill run.');
     state.modal.scan = {status: got.length ? 'done' : 'error', summary, notes, raw:text, error: got.length ? null : summary, splits: parsed.splits};
     render();
@@ -4680,6 +4680,7 @@ function onClick(e){
     render(); return;
   }
   if(act==='log-kind'){ state.modal.data.kind = el.dataset.kind; render(); return; }
+  if(act==='remove-splits'){ if(state.modal && state.modal.scan){ state.modal.scan.splits = []; state.modal.scan.notes = (state.modal.scan.notes||[]).filter(n=>!/split/i.test(n)).concat(['Splits removed; the run is kept as distance and time.']); } render(); return; }
   if(act==='log-mode-manual'){ state.modal.mode='manual'; render(); return; }
   if(act==='log-mode-strava'){ state.modal.mode='strava'; render(); return; }
   if(act==='connect-strava'){ window.location.href = stravaConnectUrl(); return; }
