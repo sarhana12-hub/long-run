@@ -228,6 +228,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 87. **"Not logged" badges (and the missed-session prompt) on days before the tracking start**, which the runner had asked to skip and which the projection now credits as done. *Fix:* days before the tracking start never show as not logged or missed.
 
+88. **Both leg sessions stacked onto hard days while three rest days sat empty** (the owner's own week: intervals + legs Monday, cruise intervals + legs Wednesday, rest Tuesday/Thursday/Friday). *Cause:* rest days were barred from leg work, so with the only easy run sitting before a hard day the fallback was the hard days. *Owner rule:* an empty day beats stacking strength onto a run day. *Fix:* leg sessions rank easy run day > rest day > hard day after the run, still never the day before a key session; the owner's week becomes legs after Monday's intervals and legs on Thursday. *Guard:* the rest-day ban is removed from the validator and the sweep.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

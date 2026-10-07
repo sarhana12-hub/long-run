@@ -155,7 +155,6 @@ function sanityCheck(plan, setup){
         if(d.type==='race' || next.type==='race') push('strength-race-adjacent', wk);
         if(d.daysToRace!=null && d.daysToRace>=0 && d.daysToRace<=cutoff) push('strength-cutoff', `${wk} d=${d.daysToRace} mode=${mode}`);
         if(d.strengthFocus==='lower'){
-          if(d.type==='rest') push('lower-on-rest', wk);
           if(d.type==='long') push('lower-on-long', wk);
           if(g.isKeySessionDay(next)) push('lower-before-hard', `${wk} ${d.label} -> ${next.label}`);
           if(g.isLegDemandingDay(d) && !d.strengthAfterRun) push('lower-on-hard-not-after-run', wk);

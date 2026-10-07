@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 17; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 18; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -769,16 +769,17 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex
   const hard = i => isLegDemandingDay(days[i]) || days[i].type==='race';
   const cutoff = opts.strengthCutoffDays!=null ? opts.strengthCutoffDays : 10;
   const usable = i => { const d = days[i]; return d.type!=='race' && !(d.daysToRace!=null && d.daysToRace>=0 && d.daysToRace<=Math.max(1,cutoff)) && !(d.daysToRace!=null && d.daysToRace<0); };
-  // Lower body pairs with a RUN day (an easy run, ideally the recovery run after the long
-  // run) - a rest day is for resting the legs, so it never gets heavy leg work. Needs a
-  // clear day before the next hard run (Doma & Deakin: running is still impaired the day
-  // after heavy legs). When no easy day qualifies, the session goes on the hard day itself,
-  // after the run, as a full session - the owner's call: leg days are never dropped.
+  // Lower body goes on an easy run day first (ideally the recovery run after the long run),
+  // then on a rest day, and only then on a hard day after the run - the owner's order: leg
+  // days are never dropped, and an empty day beats stacking strength onto a run day. Never
+  // the day before a key session (Doma & Deakin: running is still impaired the day after
+  // heavy legs); the day before a plain long run is allowed but ranks lower.
   const lowerScore = i => {
     const d = days[i], next = days[(i+1)%n];
-    if(!usable(i) || d.type==='rest' || d.type==='long' || isKeySessionDay(next)) return null;
+    if(!usable(i) || d.type==='long' || isKeySessionDay(next)) return null;
     let sc = 0;
     if(hard(i)) sc -= 6;
+    if(d.type==='rest') sc -= 1.5; // an empty day: below a clean easy run, well above a hard day
     if(next.type==='long') sc -= 1; // allowed before a plain long run (owner decision), but a day with rest after it is better
     if(d.type==='easy' || d.easyVariety) sc += 2;
     if(d.easyRole==='recovery') sc += 1;
@@ -1832,7 +1833,6 @@ function validatePlan(plan, setup){
       if(d.strengthFocus!=='upper' && isKeySessionDay(next)) v.push(`${wk} lower-body strength on ${d.label} before ${next.label}`);
       const cutoff = (plan.taperMode||'full')==='none' ? 1 : (plan.taperMode==='light' ? 5 : 10);
       if(d.daysToRace!=null && d.daysToRace<=cutoff && d.daysToRace>=0) v.push(`${wk} strength inside the final ${cutoff} days`);
-      if(d.strengthFocus!=='upper' && d.type==='rest') v.push(`${wk} lower-body strength on a rest day`);
       if(d.type==='race') v.push(`${wk} strength on race day`);
     });
     // intensity distribution: quality km (incl. long-run race-pace) <= ~30% of volume

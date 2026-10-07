@@ -402,18 +402,18 @@ NOTE: From week 9 on, 35 mi/week on 5 running days doesn't fit: Daniels keeps ea
        · Rolling terrain if you have it
   Mo Easy Run          4.0 mi  Conversational (10:28/mi)
        · Conversational, easy effort (10:28/mi)
-  Tu Tempo             4.5 mi  2.3 mi at threshold (8:28/mi) · warm-up & cool-down included  [+lower/after run 40min: 2×20 Pogo hops; 3×5 Back squat; 3×6/leg Bulgarian split squat; 3×8 Hamstring curl; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×30–40m Suitcase carry each hand]
+  Tu Tempo             4.5 mi  2.3 mi at threshold (8:28/mi) · warm-up & cool-down included
        · Warm up 1.2 mi easy (10:28/mi)
        · 2.3 mi continuous, comfortably hard at threshold pace (8:28/mi)
        · Cool down 0.9 mi easy (10:28/mi)
-  We Easy Run          4.2 mi  Conversational (10:28/mi) · + strides
+  We Easy Run          4.2 mi  Conversational (10:28/mi) · + strides  [+lower 40min: 2×20 Pogo hops; 3×5 Back squat; 3×6/leg Bulgarian split squat; 3×8 Hamstring curl; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×30–40m Suitcase carry each hand]
        · Conversational, easy effort (10:28/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
-  Th Easy Run          4.2 mi  Conversational (10:28/mi) · + strides  [+lower 40min: 2×5 Squat jumps; 3×5 Leg press; 3×6/leg Bulgarian split squat; 3×12 Kettlebell swing; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×15 Mini-band side steps each way]
+  Th Easy Run          4.2 mi  Conversational (10:28/mi) · + strides
        · Conversational, easy effort (10:28/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
-  Fr Rest                      Full rest, or easy cross-training
-       · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
+  Fr Rest                      No running — strength session today  [+lower 40min: 2×5 Squat jumps; 3×5 Leg press; 3×6/leg Bulgarian split squat; 3×12 Kettlebell swing; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×15 Mini-band side steps each way]
+       · No running — strength session today, plus mobility
   Sa Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
 
@@ -485,18 +485,18 @@ NOTE: From week 9 on, 35 mi/week on 5 running days doesn't fit: Daniels keeps ea
        · Rolling terrain if you have it
   Mo Recovery Run      3.3 mi  Very easy recovery jog (10:19/mi)
        · Very easy, short recovery jog at easy pace (10:19/mi) — slower than feels necessary
-  Tu Tempo             5.0 mi  2.8 mi at threshold (8:21/mi) · warm-up & cool-down included  [+lower/after run 40min: 2×20 Pogo hops; 3×5 Leg press; 3×6/leg Walking lunges; 3×8 Hamstring curl; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×10 Dead bug each side]
+  Tu Tempo             5.0 mi  2.8 mi at threshold (8:21/mi) · warm-up & cool-down included
        · Warm up 1.2 mi easy (10:19/mi)
        · 2.8 mi continuous, comfortably hard at threshold pace (8:21/mi)
        · Cool down 0.9 mi easy (10:19/mi)
-  We Easy Run          5.8 mi  Conversational (10:19/mi) · + strides
+  We Easy Run          5.8 mi  Conversational (10:19/mi) · + strides  [+lower 40min: 2×20 Pogo hops; 3×5 Leg press; 3×6/leg Walking lunges; 3×8 Hamstring curl; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×10 Dead bug each side]
        · Conversational, easy effort (10:19/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
-  Th Easy Run          5.8 mi  Conversational (10:19/mi) · + strides  [+lower 40min: 2×5 Squat jumps; 3×5 Romanian deadlift; 3×6/leg Weighted step-ups; 3×12 Kettlebell swing; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×15 Mini-band side steps each way]
+  Th Easy Run          5.8 mi  Conversational (10:19/mi) · + strides
        · Conversational, easy effort (10:19/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
-  Fr Rest                      Full rest, or easy cross-training
-       · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
+  Fr Rest                      No running — strength session today  [+lower 40min: 2×5 Squat jumps; 3×5 Romanian deadlift; 3×6/leg Weighted step-ups; 3×12 Kettlebell swing; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×15 Mini-band side steps each way]
+       · No running — strength session today, plus mobility
   Sa Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
 
@@ -1221,7 +1221,7 @@ peak 12 mi/wk, long up to 4 mi; weeks 9
   Su Long Run          4.2 mi  Relaxed aerobic (12:05/mi)
        · Steady, relaxed aerobic effort at long-run pace (12:05/mi) — conversational start, settle into rhythm
        · Rolling terrain if you have it
-  Mo Rest                      No running — strength session today  [+upper 22min: 3×8 Inverted row under a table; 3×12 Pike push-ups; 3×10 Lying leg raises; 2×30s Plank]
+  Mo Rest                      No running — strength session today  [+lower 28min: 2×20 Pogo hops; 3×8/leg Single-leg squat to a chair; 2×10/leg Reverse lunges; 2×10/leg Standing single-leg calf raise; 2×30s Side plank each side]
        · No running — strength session today, plus mobility
   Tu Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
@@ -2250,17 +2250,17 @@ peak 29 mi/wk, long up to 8 mi; weeks 8
        · Rolling terrain if you have it
   Mo Easy Run          3.6 mi  Conversational (10:40/mi)
        · Conversational, easy effort (10:40/mi)
-  Tu Hill Repeats      4.4 mi  6 hill reps · warm-up & cool-down included  [+lower/after run 40min: 2×20 Pogo hops; 3×5 Romanian deadlift; 3×6/leg Weighted step-ups; 3×8 Hamstring curl; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×30s Side plank each side]
+  Tu Hill Repeats      4.4 mi  6 hill reps · warm-up & cool-down included
        · Warm up 1.2 mi easy (10:40/mi)
        · 6 hill reps — 60–90s strong uphill effort (about 5K effort: 8:01/mi on the flat, slower uphill, so go by breathing; tall posture, quick steps), jog back down to recover
        · Cool down 0.9 mi easy (10:40/mi)
-  We Easy Run          3.9 mi  Conversational (10:40/mi) · + strides
+  We Easy Run          3.9 mi  Conversational (10:40/mi) · + strides  [+lower 40min: 2×20 Pogo hops; 3×5 Romanian deadlift; 3×6/leg Weighted step-ups; 3×8 Hamstring curl; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×30s Side plank each side]
        · Conversational, easy effort (10:40/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
-  Th Easy Run          3.6 mi  Conversational (10:40/mi)  [+lower 40min: 2×5 Squat jumps; 3×5 Back squat; 3×6/leg Walking lunges; 3×12 Kettlebell swing; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×10 Dead bug each side]
+  Th Easy Run          3.6 mi  Conversational (10:40/mi)
        · Conversational, easy effort (10:40/mi)
-  Fr Rest                      Full rest, or easy cross-training
-       · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
+  Fr Rest                      No running — strength session today  [+lower 40min: 2×5 Squat jumps; 3×5 Back squat; 3×6/leg Walking lunges; 3×12 Kettlebell swing; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×10 Dead bug each side]
+       · No running — strength session today, plus mobility
   Sa Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
 
