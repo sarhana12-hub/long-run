@@ -1610,7 +1610,7 @@ function generateDistancePlan(setup, dayOneOverride){
     const built = buildWeekDays({weekStart, weeklyKm, longKm, longDow:c.longDow, phase:'base', isCutback, weekIndex:w, quality:[], runsPerWeek:runs, strides:1, raceKm:10, paces, medLong:runs>=5, unit:c.unit});
     finishWeekDays(built.days, 10);
     placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?1:setup.strengthPerWeek, isCutback?'cutback':'base', w, {weekInBlock:w%4, equipment: setup.equipment});
-    list.push({weekIndex:w, phase:isCutback?'cutback':'base', isCutback, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
+    list.push({weekIndex:w, runsPerWeek: runs, beginnerStructure: weeklyKm/runs < c.minEasyKm, phase:isCutback?'cutback':'base', isCutback, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
   }
   return finishGeneralPlan(setup, list, c.athlete.vdot, c.athlete.vdot, {runsRequested: c.requestedRuns});
 }
@@ -1772,8 +1772,8 @@ function validatePlan(plan, setup){
   for(let i=1;i<vols.length;i++){
     if(weeks[i].phase==='taper' || weeks[i].phase==='recovery' || weeks[i-1].isCutback) continue;
     if((plan.warnings||[]).some(x=>/running days/.test(x))) continue;
-    // Daniels: a step is at most (sessions per week) miles; general plans keep a 12% ceiling
-    const allowed = isRace ? stepKm+0.5 : nominal[i-1]*0.125+2.5;
+    // Daniels: a step is at most (sessions per week) miles
+    const allowed = stepKm+0.5;
     if(nominal[i] - nominal[i-1] > allowed) v.push(`w${i+1} volume up ${(nominal[i]-nominal[i-1]).toFixed(1)} km over previous week (Daniels step is ${stepKm.toFixed(1)} km)`);
   }
   if(isRace && setup){
