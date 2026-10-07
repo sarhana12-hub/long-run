@@ -619,12 +619,15 @@ const UPPER_PULL_POOL = ['pullUps','singleArmRow','invertedRow'];
 const UPPER_CORE_POOL = ['plank','deadBug','hangingKneeRaise','birdDog'];
 const UPPER_CORE2_POOL = ['sidePlank','farmerCarry','suitcaseCarry'];
 // Walk the pool from position i, skipping exercises with no available variant.
-function pickFromPool(pool, i, avail){
+// taken: names already picked for this session, so a bodyweight-only plan doesn't list the
+// same fallback movement twice.
+function pickFromPool(pool, i, avail, taken){
   const n = pool.length;
-  const usedNames = new Set(_used.map(x=>x.name));
-  let first = null;
-  for(let k=0;k<n;k++){ const def = STRENGTH_EXERCISES[pool[(((i+k)%n)+n)%n]]; const r = resolveExercise(def, avail); if(!r) continue; if(!first) first = r; if(!usedNames.has(r.name)) return r; }
-  return first || resolveExercise(STRENGTH_EXERCISES.gobletSquat, avail) || resolveExercise(STRENGTH_EXERCISES.plank, avail);
+  let first = null, chosen = null;
+  for(let k=0;k<n;k++){ const def = STRENGTH_EXERCISES[pool[(((i+k)%n)+n)%n]]; const r = resolveExercise(def, avail); if(!r) continue; if(!first) first = r; if(!taken || !taken.has(r.name)){ chosen = r; break; } }
+  chosen = chosen || first || resolveExercise(STRENGTH_EXERCISES.gobletSquat, avail) || resolveExercise(STRENGTH_EXERCISES.plank, avail);
+  if(taken && chosen) taken.add(chosen.name);
+  return chosen;
 }
 const _used = [];
 function strengthSetLine(ex, sets, amount, restSec, effort){
@@ -661,10 +664,11 @@ function isCarry(ex){ return /carry/i.test(ex.name); }
 function buildLowerStrengthWorkout(tier, weekIndex, weekInBlock, avail){
   avail = avail || equipmentSet();
   const wb = weekInBlock==null ? weekIndex%4 : weekInBlock;
-  const primary = pickFromPool(PRIMARY_LOWER_POOL, weekIndex, avail);
-  const uni = pickFromPool(UNILATERAL_POOL, weekIndex, avail);
-  const post = pickFromPool(POSTERIOR_POOL, weekIndex, avail);
-  const core = pickFromPool(LOWER_CORE_POOL, weekIndex, avail);
+  const taken = new Set();
+  const primary = pickFromPool(PRIMARY_LOWER_POOL, weekIndex, avail, taken);
+  const uni = pickFromPool(UNILATERAL_POOL, weekIndex, avail, taken);
+  const post = pickFromPool(POSTERIOR_POOL, weekIndex, avail, taken);
+  const core = pickFromPool(LOWER_CORE_POOL, weekIndex, avail, taken);
   const calf = resolveExercise(STRENGTH_EXERCISES.calfRaiseStraight, avail);
   const calf2 = resolveExercise(STRENGTH_EXERCISES.calfRaiseBent, avail);
   const pogo = resolveExercise(STRENGTH_EXERCISES.pogoHops, avail);
@@ -696,7 +700,7 @@ function buildLowerStrengthWorkout(tier, weekIndex, weekInBlock, avail){
   // heavy
   const sets = wb===3 ? 3 : wb===0 ? 3 : 4;
   const rir = wb===3 ? '3 reps left in the tank (easier week)' : wb===0 ? '3 reps left in the tank' : wb===1 ? '2 reps left in the tank' : '1–2 reps left in the tank';
-  const plyo = wb>=1 ? pickFromPool(PLYO_POOL_INTRO, weekIndex, avail) : null;
+  const plyo = wb>=1 ? pickFromPool(PLYO_POOL_INTRO, weekIndex, avail, taken) : null;
   const lines = [];
   if(plyo) lines.push(strengthSetLine(plyo, wb===3 ? 2 : 3, plyo.name==='Pogo hops' ? 20 : 5, 60, 'maximal intent, full recovery — quality over quantity; do these first while fresh'));
   lines.push(primary.bodyweight ? strengthSetLine(primary, sets, 8, 60, `slow, three seconds down — ${rir}`) : strengthSetLine(primary, sets, 5, 150, `heavy — ${rir}`));
@@ -711,10 +715,11 @@ function buildLowerStrengthWorkout(tier, weekIndex, weekInBlock, avail){
 }
 function buildUpperStrengthWorkout(variant, avail){
   avail = avail || equipmentSet();
-  const push = pickFromPool(UPPER_PUSH_POOL, variant, avail);
-  const pull = pickFromPool(UPPER_PULL_POOL, variant+1, avail);
-  const core = pickFromPool(UPPER_CORE_POOL, variant, avail);
-  const core2 = pickFromPool(UPPER_CORE2_POOL, variant+2, avail);
+  const taken = new Set();
+  const pull = pickFromPool(UPPER_PULL_POOL, variant+1, avail, taken);
+  const push = pickFromPool(UPPER_PUSH_POOL, variant, avail, taken);
+  const core = pickFromPool(UPPER_CORE_POOL, variant, avail, taken);
+  const core2 = pickFromPool(UPPER_CORE2_POOL, variant+2, avail, taken);
   const pushReps = push.name==='Push-ups' || push.name==='Pike push-ups' ? 12 : 8;
   // Pull first: upper-back strength holds posture late in a race; the press only balances it.
   return [
