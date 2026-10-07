@@ -83,7 +83,8 @@ html,body{margin:0; padding:0;}
 /* html carries the page color too, so iOS rubber-band overscroll in a home-screen app shows
    the app's own background rather than white/black; text-size-adjust stops Safari inflating
    text after rotation. */
-html{background:var(--bg); -webkit-text-size-adjust:100%; overscroll-behavior-y:none;}
+html{background:var(--bg); -webkit-text-size-adjust:100%; overscroll-behavior:none; position:fixed; inset:0; width:100%; height:100%; overflow:hidden;}
+body{height:100%; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; -webkit-overflow-scrolling:touch;}
 html.modal-open, html.modal-open body{overflow:hidden;}
 body{background:var(--bg); color:var(--ink); font-family:var(--font-body); -webkit-font-smoothing:antialiased;}
 /* App chrome shouldn't behave like a web page: no grey tap flash, no 300ms double-tap zoom
@@ -103,7 +104,7 @@ button{font-family:inherit; cursor:pointer;}
 input,select,textarea{font-family:inherit; font-size:16px;}
 ::selection{background:var(--accent-soft);}
 
-#app{max-width:520px; margin:0 auto; min-height:100dvh; padding-bottom:calc(150px + env(safe-area-inset-bottom)); position:relative;}
+#app{max-width:520px; margin:0 auto; min-height:100%; padding-bottom:calc(150px + env(safe-area-inset-bottom)); position:relative;}
 
 /* Permanent status-bar scrim: a fixed strip, sibling of #app so re-renders never wipe
    it, painted the page background at exactly the safe-area-inset-top height. Padding on
@@ -1319,12 +1320,14 @@ function submitOnboarding(){
   const wasSwitch = state.onboardMode==='switch';
   state.onboardMode = 'new';
   state.view='app'; state.tab='plan';
-  window.scrollTo(0,0);
+  pageScrollTo(0);
   if(wasSwitch) showToast('Plan updated — your logged runs are still here');
   else render();
 }
 
 /* ============================= render: root ============================= */
+function pageScrollTo(y){ document.body.scrollTop = y; }
+function pageScrollY(){ return document.body.scrollTop; }
 function render(){
   const app = document.getElementById('app');
   let html;
@@ -1425,8 +1428,25 @@ const ONBOARD_STEPS_GENERAL = [
   {title:'Your fitness', hint:'Current mileage and a recent time so paces are calibrated to you.'},
   {title:'Weekly rhythm', hint:'When you run and rest — the rest is baked into the plan you picked.'},
 ];
+// The gym page is a fourth step whenever the plan includes strength sessions.
+const ONBOARD_STEP_GYM = {title:'Your gym', hint:'Tick what you have. Strength sessions are built from this and nothing else, and you can change it any time in Settings.'};
+function onboardStepsFor(d){
+  const base = d.goalMode==='general' ? ONBOARD_STEPS_GENERAL : ONBOARD_STEPS;
+  return (d.strengthPerWeek==null ? 2 : d.strengthPerWeek) > 0 ? base.concat([ONBOARD_STEP_GYM]) : base;
+}
 function onboardStepMeta(step, d){
-  return (d.goalMode==='general' ? ONBOARD_STEPS_GENERAL : ONBOARD_STEPS)[step-1];
+  return onboardStepsFor(d)[step-1];
+}
+function renderOnboardStepGym(d){
+  const count = (d.equipment||[]).length;
+  return `
+    <div class="row" style="margin:0 0 14px;">
+      <button class="btn btn-sm" data-act="draft-equipment-all">Tick everything</button>
+      <button class="btn btn-sm" data-act="draft-equipment-none">Bodyweight only</button>
+    </div>
+    <div class="hint" style="margin:0 0 10px;">${count ? `${count} of ${EQUIPMENT.length} ticked: ${esc(equipmentSummary(d.equipment))}.` : 'Nothing ticked: every session falls back to bodyweight movements.'}</div>
+    ${equipmentChipsHtml(d.equipment, 'toggle-draft-equipment')}
+  `;
 }
 
 const PLAN_KIND_DESC = {
@@ -1742,11 +1762,6 @@ function renderOnboardStep3(d){
         <div class="dow-grid">${dowGrid('longDow', d.longDow, false)}</div>
         <div class="hint">Everything else — speed work, strength — is placed automatically around this.</div>
       </div>
-      <details class="field">
-        <summary style="font-size:13px; font-weight:700; color:var(--ink-soft); cursor:pointer; -webkit-tap-highlight-color:transparent;">Gym equipment: ${equipmentSummary(d.equipment)} · tap to edit</summary>
-        <div class="hint" style="margin:6px 0 0;">Strength sessions use only what's ticked here, and you can change it any time in Settings.</div>
-        ${equipmentChipsHtml(d.equipment, 'toggle-draft-equipment')}
-      </details>
       <div class="field">
         <label class="field-label">Week starts on</label>
         <div class="chip-select">${weekStartChipsHtml(d.weekStartDow, 'pick-week-start')}</div>
@@ -1769,7 +1784,7 @@ function renderOnboardStep3(d){
     <div class="field">
       <label class="field-label">Strength days per week</label>
       <div class="chip-select">${strengthCountChipsHtml(d.strengthPerWeek, 'pick-strength-count')}</div>
-      <div class="hint">Lower-body sessions (heavy lifts plus short plyometrics, the combination with the strongest evidence for running economy) go on easy run days — never on a rest day, which is for your legs — with a clear day before any hard run. Upper body and core sessions are light on the legs, so they take rest days or the day before a quality session. Everything eases off in peak weeks and stops in the final ten days.</div>
+      <div class="hint">Lower-body sessions (heavy lifts plus short plyometrics, the combination with the strongest evidence for running economy) go on easy run days — never on a rest day, which is for your legs — with a clear day before any hard run. Upper body and core sessions are light on the legs, so they take rest days or the day before a quality session. Everything eases off in peak weeks and stops in the final ten days. The next page asks what gym equipment you have.</div>
       ${d.hillsMode==='hilly' && (d.strengthPerWeek||0)<2 ? `<div class="banner" style="margin-top:10px;">${ICONS.bolt}<span>Hilly courses put heavy eccentric load on your quads and glutes, especially on descents — most coaches recommend at least 2 strength sessions/week to build that tolerance. You can still pick fewer, but it's worth the extra session here.</span></div>` : ''}
     </div>
 
@@ -1792,11 +1807,6 @@ function renderOnboardStep3(d){
       <div class="hint">${d.buildPace==='faster' ? 'Faster: mileage rises about 10% a week with a cutback every fourth week, the common guideline. It reaches a higher peak in the same number of weeks, with more injury risk: runners who raise volume quickly get hurt more often (Nielsen et al. 2014).' : "Steady: Daniels' rule — add at most one mile per weekly run, then hold that level for a few weeks before the next step. Slower, and the safer default."}</div>
     </div>
 
-    <details class="field" style="margin-top:4px;">
-      <summary style="font-size:13px; font-weight:700; color:var(--ink-soft); cursor:pointer; -webkit-tap-highlight-color:transparent;">Gym equipment: ${equipmentSummary(d.equipment)} · tap to edit</summary>
-      <div class="hint" style="margin:6px 0 0;">Strength sessions use only what's ticked here, and you can change it any time in Settings.</div>
-      ${equipmentChipsHtml(d.equipment, 'toggle-draft-equipment')}
-    </details>
 
     <div class="section-title">Weekly rhythm</div>
     <div class="field">
@@ -1836,13 +1846,14 @@ function renderOnboarding(){
   const d = state.onboardDraft;
   const step = state.onboardStep || 1;
   const meta = onboardStepMeta(step, d);
-  const stepHtml = step===1 ? renderOnboardStep1(d) : step===2 ? renderOnboardStep2(d) : renderOnboardStep3(d);
-  const dotsHtml = ONBOARD_STEPS.map((s,i)=>`<span class="step-dot ${i+1<=step?'active':''}"></span>`).join('');
+  const steps = onboardStepsFor(d);
+  const stepHtml = step===1 ? renderOnboardStep1(d) : step===2 ? renderOnboardStep2(d) : step===3 ? renderOnboardStep3(d) : renderOnboardStepGym(d);
+  const dotsHtml = steps.map((s,i)=>`<span class="step-dot ${i+1<=step?'active':''}"></span>`).join('');
   const isSwitch = state.onboardMode==='switch';
   const backOrCancelHtml = step>1
     ? '<button class="btn btn-block" style="padding:14px;" data-act="onboard-back">Back</button>'
     : (isSwitch ? '<button class="btn btn-block" style="padding:14px;" data-act="cancel-switch-plan">Cancel</button>' : '');
-  const navHtml = step<3 ? `
+  const navHtml = step<steps.length ? `
     <div class="row onboard-nav">
       ${backOrCancelHtml}
       <button class="btn btn-primary btn-block" style="padding:14px;" data-act="onboard-next">Next</button>
@@ -1864,7 +1875,7 @@ function renderOnboarding(){
     <div class="hint" style="margin-bottom:14px;">${meta.hint}</div>
     ${isSwitch ? `<div class="hint" style="margin:-8px 0 14px; color:var(--accent-strong); font-weight:600;">Changing your plan — your logged runs stay exactly as they are.</div>` : ''}
     <div class="step-indicator">
-      <span class="step-label">Step ${step} of ${ONBOARD_STEPS.length}</span>
+      <span class="step-label">Step ${step} of ${steps.length}</span>
       <div class="step-dots">${dotsHtml}</div>
     </div>
 
@@ -4515,7 +4526,7 @@ function doImportBackup(data){
   state.view = 'app'; state.tab = 'plan';
   state.modal = null;
   showToast('Backup imported');
-  window.scrollTo(0,0);
+  pageScrollTo(0);
 }
 
 /* ============================= events ============================= */
@@ -4558,11 +4569,11 @@ function onClick(e){
   if(!el) return;
   const act = el.dataset.act;
 
-  if(act==='set-tab'){ state.tab = el.dataset.tab; render(); window.scrollTo(0,0); return; }
+  if(act==='set-tab'){ state.tab = el.dataset.tab; render(); pageScrollTo(0); return; }
   if(act==='goto-today'){
     const idx = todayWeekIndex(state.plan);
     if(idx!==-1) state.currentWeekIndex = idx;
-    state.moveFrom = null; render(); window.scrollTo(0,0);
+    state.moveFrom = null; render(); pageScrollTo(0);
     return;
   }
   if(act==='dismiss-help-card'){ state.helpSeen = true; Store.setFlag('help_seen', true); render(); return; }
@@ -4617,13 +4628,13 @@ function onClick(e){
   if(act==='pick-skip-base'){ state.onboardDraft.skipBase = el.dataset.mode==='1'; render(); return; }
   if(act==='pick-taper-mode'){ state.onboardDraft.taperMode = el.dataset.mode; render(); return; }
   if(act==='pick-build-pace'){ state.onboardDraft.buildPace = el.dataset.mode; render(); return; }
+  if(act==='draft-equipment-all'){ state.onboardDraft.equipment = EQUIPMENT.map(e=>e.id); render(); return; }
+  if(act==='draft-equipment-none'){ state.onboardDraft.equipment = []; render(); return; }
   if(act==='toggle-draft-equipment'){
     const id = el.dataset.id; const list = new Set(state.onboardDraft.equipment || DEFAULT_EQUIPMENT);
     if(list.has(id)) list.delete(id); else list.add(id);
     state.onboardDraft.equipment = [...list];
-    // keep the <details> open across the re-render
-    render();
-    const dts = document.querySelector('details'); if(dts) dts.open = true; // keep the panel open while ticking
+    const y = pageScrollY(); render(); pageScrollTo(y);
     return;
   }
   if(act==='toggle-equipment'){
@@ -4632,7 +4643,7 @@ function onClick(e){
     state.setup.equipment = [...list];
     Store.setSetup(state.setup);
     refreshStrengthFromThisWeek();
-    const y = window.scrollY; render(); window.scrollTo(0, y);
+    const y = pageScrollY(); render(); pageScrollTo(y);
     const dts = document.getElementById('equip-details'); if(dts) dts.open = true;
     showToast('Strength sessions updated for your equipment');
     return;
@@ -4662,12 +4673,12 @@ function onClick(e){
     }
     render(); return;
   }
-  if(act==='onboard-back'){ state.onboardStep = Math.max(1, state.onboardStep-1); render(); window.scrollTo(0,0); return; }
+  if(act==='onboard-back'){ state.onboardStep = Math.max(1, state.onboardStep-1); render(); pageScrollTo(0); return; }
   if(act==='onboard-next'){
     const err = onboardStepError(state.onboardStep);
     if(err){ showToast(err); return; }
-    state.onboardStep = Math.min(3, state.onboardStep+1);
-    render(); window.scrollTo(0,0); return;
+    state.onboardStep = Math.min(onboardStepsFor(state.onboardDraft).length, state.onboardStep+1);
+    render(); pageScrollTo(0); return;
   }
   if(act==='generate-plan'){ submitOnboarding(); return; }
 
@@ -4907,13 +4918,13 @@ function onClick(e){
     state.onboardDraft = draftFromSetup(state.setup);
     state.onboardStep = 1;
     state.view = 'onboarding';
-    render(); window.scrollTo(0,0); return;
+    render(); pageScrollTo(0); return;
   }
   if(act==='cancel-switch-plan'){
     state.onboardMode = 'new';
     state.onboardDraft = null;
     state.view = 'app'; state.tab = 'settings';
-    render(); window.scrollTo(0,0); return;
+    render(); pageScrollTo(0); return;
   }
   if(act==='confirm-reset'){ state.modal={type:'confirm-reset'}; render(); return; }
   if(act==='do-reset'){
@@ -4922,7 +4933,7 @@ function onClick(e){
     state.strengthDone = []; state.achievementLog = []; state.strengthItems = {}; state.helpSeen = false; state.notesSeen = false;
     state.stravaAuth = null;
     state.view='onboarding'; state.onboardDraft = defaultDraft(); state.onboardStep = 1;
-    render(); window.scrollTo(0,0); return;
+    render(); pageScrollTo(0); return;
   }
   if(act==='close-modal'){ state.modal=null; state.moveFrom=null; render(); return; }
 
