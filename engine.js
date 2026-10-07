@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 10; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 11; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -1292,9 +1292,13 @@ function generatePlan(setup, dayOneOverride){
   const vdotForWeek = w => { if(w>=nTrain) return endVdot; const q0 = baseCount; if(w<q0) return startVdot; return startVdot + (endVdot-startVdot)*clamp((w-q0+1)/Math.max(qualityWeeks,1), 0, 1); };
 
   // --- quality configuration ---
-  // Two quality days plus the long run needs five run days: with four, the lone easy day
-  // would have to absorb everything else. Emphasis then scales the single session instead.
-  const nQualityMax = runsPerWeek>=5 && currentKm>=40 && speedEmphasis!=='low' ? 2 : 1;
+  // Second quality day: 'balanced' adds it once the week has five runs and 40 km to carry it;
+  // 'high' adds it from five runs and 30 km, or with four runs at 70+ km (the lone easy day
+  // is then long enough to absorb the rest); 'low' never adds it and holds quality for the
+  // final phase. Emphasis also scales the session length (0.85 / 1 / 1.1).
+  const nQualityMax = speedEmphasis==='low' ? 1
+    : speedEmphasis==='high' ? (((runsPerWeek>=5 && currentKm>=30) || (runsPerWeek===4 && currentKm>=70)) ? 2 : 1)
+    : ((runsPerWeek>=5 && currentKm>=40) ? 2 : 1);
   const qDows = qualityDowsFor(longDow, nQualityMax);
   const introducePhase = speedEmphasis==='low' ? 'peak' : 'build';
   const sessionScale = speedEmphasis==='high' ? 1.1 : speedEmphasis==='low' ? 0.85 : 1;
