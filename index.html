@@ -1114,7 +1114,7 @@ function defaultDraft(){
     raceKey:'half', raceDistanceKm:21.0975, raceDate:'', currentWeeklyMi: 20,
     units:'mi', recentDistanceKey:'5k', recentTime:'', goalTime:'',
     longestRecentMi:'', recent2DistanceKey:'', recent2Time:'',
-    longDow:0, weekStartDow:0, trainingStartDate:'', trackFromToday:false,
+    longDow:0, weekStartDow:0, trainingStartDate:'', trackFromToday:true,
     restDays: clamp(7 - runsPerWeekFor(unitToKm(20,'mi')), 1, 4),
     maxLongRunMi: '', maxWeeklyMi: '',
     longRunEmphasis: 'balanced', speedEmphasis: 'balanced', strengthPerWeek: 2,
@@ -1411,8 +1411,16 @@ function weekStartChipsHtml(value, act){
 // already drives: total weeks, phase lengths, frozen-week resume), but someone who isn't
 // going to log those past runs can say so explicitly instead of the app quietly reading
 // weeks of untracked history as "behind."
+function trackFromBlockHtml(d){
+  if(!d.trainingStartDate) return '';
+  return `<div class="field">
+      <label class="field-label">Track progress from</label>
+      <div class="chip-select">${trackFromChipsHtml(d.trackFromToday, d.trainingStartDate)}</div>
+      <div class="hint">${d.trackFromToday ? "Adherence and ahead/behind count from today on. The earlier weeks won't count against you, and won't count toward your totals either." : "Adherence and ahead/behind compare against the whole plan from your start date, so they'll only be right once you've logged those earlier runs too."}</div>
+    </div>`;
+}
 function trackFromChipsHtml(trackFromToday, startDate){
-  return `<button class="chip ${!trackFromToday?'active':''}" data-act="pick-track-from" data-mode="start">${startDate ? niceDate(parseDate(startDate)) : 'Start date'} (I'll log old runs)</button><button class="chip ${trackFromToday?'active':''}" data-act="pick-track-from" data-mode="today">Today (skip logging old runs)</button>`;
+  return `<button class="chip ${trackFromToday?'active':''}" data-act="pick-track-from" data-mode="today">Today (skip the old runs)</button><button class="chip ${!trackFromToday?'active':''}" data-act="pick-track-from" data-mode="start">${startDate ? niceDate(parseDate(startDate)) : 'Start date'} (I'll log them)</button>`;
 }
 
 /* ============================= render: onboarding ============================= */
@@ -1498,12 +1506,7 @@ function renderOnboardStep1(d){
       <input class="input" type="date" id="in-training-start" value="${d.trainingStartDate}" max="${fmtDate(todayDate())}">
       <div class="hint">Leave blank to start this week. If you enter a real start date, the plan builds its full length from there and drops you on whichever week that puts you in today — not week one.</div>
     </div>
-    ${d.trainingStartDate ? `
-    <div class="field">
-      <label class="field-label">Track progress from</label>
-      <div class="chip-select">${trackFromChipsHtml(d.trackFromToday, d.trainingStartDate)}</div>
-      <div class="hint">${d.trackFromToday ? "Plan adherence and ahead/behind only count from today on — those earlier weeks won't count against you, but they won't count toward your progress total either." : "Plan adherence and ahead/behind compare against the full plan from your real start date, so they'll be accurate only once you've logged those earlier runs too."}</div>
-    </div>` : ''}` : `
+    <div id="track-from-block">${trackFromBlockHtml(d)}</div>` : `
     <div class="hint" style="margin:-6px 0 16px;">This resumes from your plan's real start date automatically — you'll land on the correct current week, not week one.</div>`}
 
     <div class="section-title">Course profile</div>
@@ -1543,12 +1546,7 @@ function renderOnboardStep1(d){
       <input class="input" type="date" id="in-training-start" value="${d.trainingStartDate}" max="${fmtDate(todayDate())}">
       <div class="hint">Leave blank to start this week. If you enter a real start date, the plan builds its full length from there and drops you on whichever week that puts you in today — not week one.</div>
     </div>
-    ${d.trainingStartDate ? `
-    <div class="field">
-      <label class="field-label">Track progress from</label>
-      <div class="chip-select">${trackFromChipsHtml(d.trackFromToday, d.trainingStartDate)}</div>
-      <div class="hint">${d.trackFromToday ? "Plan adherence and ahead/behind only count from today on — those earlier weeks won't count against you, but they won't count toward your progress total either." : "Plan adherence and ahead/behind compare against the full plan from your real start date, so they'll be accurate only once you've logged those earlier runs too."}</div>
-    </div>` : ''}` : `
+    <div id="track-from-block">${trackFromBlockHtml(d)}</div>` : `
     <div class="hint" style="margin:-6px 0 16px;">This resumes from your plan's real start date automatically — you'll land on the correct current week, not week one.</div>`}`;
 
   return `
@@ -4942,7 +4940,17 @@ function onClick(e){
   if(act==='do-import-backup'){ doImportBackup(state.modal.data); return; }
 }
 
+// The training-start date drives the "Track progress from" choice: show it the moment a
+// date is set (default: skip the old runs) by refreshing only that block, so the native
+// date picker is not closed by a full re-render.
+function onTrainingStartChanged(value){
+  const had = !!state.onboardDraft.trainingStartDate;
+  state.onboardDraft.trainingStartDate = value;
+  if(!had && value) state.onboardDraft.trackFromToday = true;
+  const block = document.getElementById('track-from-block'); if(block) block.innerHTML = trackFromBlockHtml(state.onboardDraft);
+}
 function onInput(e){
+  if(state.view==='onboarding' && e.target.id==='in-training-start'){ onTrainingStartChanged(e.target.value); return; }
   if(e.target.id==='in-name'){
     state.onboardDraft.name = e.target.value;
     const n = e.target.value.trim().toLowerCase();
@@ -5035,7 +5043,7 @@ function onChange(e){
     // Same type="date" iOS picker-closing quirk as in-race-date above - no dependent UI
     // reads this value anywhere else on the step, so simply not calling render() here is
     // enough to keep the native picker from being yanked out from under itself.
-    state.onboardDraft.trainingStartDate = e.target.value;
+    onTrainingStartChanged(e.target.value);
     return;
   }
   if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; render(); return; }
