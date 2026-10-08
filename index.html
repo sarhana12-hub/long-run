@@ -3178,8 +3178,10 @@ function renderTrainingTrail(plan, unit, stats){
 // startPeekAnimation() for the runtime half of this (path.getTotalLength() needs a real
 // mounted DOM node, so the animation itself can't be precomputed into static markup the way
 // everything else in this app is).
-const PEEK_CLIMB_PTS = [[15,540],[70,486],[30,444],[85,402],[48,352],[105,310],[72,258],[128,216],[98,164],[145,122],[128,80],[160,42]];
-const PEEK_DESCENT_PTS = [[215,108],[195,180],[240,252],[210,334],[260,416],[225,478],[305,540]];
+// The climb is a switchback trail up the face of the foreground peak; the runner follows it
+// by arc length. Every point sits inside the peak's silhouette (PEEK_PEAK_D) with room to spare.
+const PEEK_SUMMIT = [160,74];
+const PEEK_TRAIL_PTS = [[44,492],[214,456],[96,408],[220,357],[110,306],[204,255],[128,208],[186,166],[148,128],[160,80]];
 // A staircase off the summit, offset relative to it (0,0 = summit) - only drawn once
 // there's real mileage beyond the plan's own total to justify it. Deliberately NOT another
 // data-driven axis: the runner always lands exactly halfway up it regardless of how far
@@ -3191,17 +3193,22 @@ function renderPeekThePeak(){
   const plan = state.plan, unit = state.setup.units;
   const progress = planMileageProgress(plan);
   const isOvershoot = progress.rawFrac>1;
-  const climbD = 'M ' + PEEK_CLIMB_PTS.map(p=>p.join(' ')).join(' L ');
-  const mountainD = climbD + ' L ' + PEEK_DESCENT_PTS.map(p=>p.join(' ')).join(' L ') + ' Z';
-  const capPts = PEEK_CLIMB_PTS.slice(6).concat(PEEK_DESCENT_PTS.slice(0,3));
-  const capD = 'M ' + capPts.map(p=>p.join(' ')).join(' L ') + ' Z';
-  const summit = PEEK_CLIMB_PTS[PEEK_CLIMB_PTS.length-1];
+  const summit = PEEK_SUMMIT;
+  // A smooth switchback: quadratic curves between the turns so the trail bends, not snaps.
+  const T = PEEK_TRAIL_PTS;
+  let climbD = `M ${T[0][0]} ${T[0][1]}`;
+  for(let i=1;i<T.length;i++){ const [x0,y0]=T[i-1], [x1,y1]=T[i]; const cx = (x0+x1)/2 + (i%2 ? 10 : -10), cy = (y0+y1)/2 + 8; climbD += ` Q ${cx} ${cy} ${x1} ${y1}`; }
   const flagLabel = plan.planKind ? 'FINISH' : 'RACE DAY';
   const pctDisplay = Math.round(progress.rawFrac*100);
   const overshootKm = Math.max(0, progress.loggedKm-progress.totalPlanKm);
   const captionSub = isOvershoot
     ? `${fmtDist(overshootKm,unit,1)} beyond this plan's ${fmtDist(progress.totalPlanKm,unit,0)} planned miles`
     : `${fmtDist(progress.loggedKm,unit,1)} of ${fmtDist(progress.totalPlanKm,unit,0)} planned miles for this plan`;
+  // Phase changes as fractions of the plan's miles, placed on the trail at runtime (they need
+  // the mounted path's length). Cutback weeks belong to the phase around them.
+  const weeks = plan.weeks; const totalKm = Math.max(1, weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.km,0),0));
+  const marks = []; let cum = 0, lastPhase = null;
+  weeks.forEach(w=>{ const km = w.days.reduce((b,d)=>b+d.km,0); const ph = w.phase==='cutback' ? lastPhase : w.phase; if(ph && lastPhase && ph!==lastPhase && ['build','peak','taper'].includes(ph)) marks.push({f: cum/totalKm, label: ph[0].toUpperCase()+ph.slice(1)}); if(ph) lastPhase = ph; cum += km; });
   // Extra sky above the summit only exists when it's needed - the normal viewBox is
   // unchanged for everyone still climbing the mountain itself.
   const topY = isOvershoot ? -160 : 0;
@@ -3212,33 +3219,61 @@ function renderPeekThePeak(){
     {x:summit[0]+62, y:summit[1]-100, s:22, o:0.7, g:'♫'},
     {x:summit[0]+38, y:summit[1]-135, s:15, o:0.9, g:'♪'},
   ] : [];
+  // A fixed field of stars (deterministic, so the sky is the same every time it opens).
+  const stars = [[18,40,1.2],[52,22,0.8],[88,58,1],[124,18,0.7],[203,34,1.1],[236,70,0.8],[282,28,1.3],[300,96,0.7],[40,110,0.9],[70,150,0.6],[250,140,0.8],[296,170,1],[150,44,0.6],[180,96,0.8],[20,190,0.7],[110,98,0.5],[265,206,0.6],[305,240,0.8],[12,250,0.6],[228,110,0.5]];
+  const pines = [[0,544,14],[18,546,18],[34,544,12],[52,547,16],[66,545,11],[244,546,15],[262,544,19],[282,547,13],[298,545,17],[314,546,12],[328,545,15]];
   return `<div class="overlay peek-overlay" data-act="close-modal-overlay">
     <div class="peek-card" data-stop="1">
       <button class="peek-close" data-act="close-modal" aria-label="Close">${ICONS.close}</button>
-      <svg id="peek-svg" viewBox="0 ${topY} 320 ${560-topY}" data-frac="${progress.frac}" data-overshoot="${isOvershoot?'1':''}">
+      <svg id="peek-svg" viewBox="0 ${topY} 320 ${560-topY}" data-frac="${progress.frac}" data-overshoot="${isOvershoot?'1':''}" data-marks="${esc(JSON.stringify(marks))}">
         <defs>
           <linearGradient id="peekSky" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#0b1120"/>
-            <stop offset="55%" stop-color="#3a2a52"/>
-            <stop offset="100%" stop-color="#c9713f"/>
+            <stop offset="0%" stop-color="#070b16"/>
+            <stop offset="45%" stop-color="#1b2140"/>
+            <stop offset="78%" stop-color="#5a3a5e"/>
+            <stop offset="100%" stop-color="#d4764a"/>
           </linearGradient>
           <linearGradient id="peekRock" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stop-color="#4b5561"/>
-            <stop offset="100%" stop-color="#2c333c"/>
+            <stop offset="0%" stop-color="#4a5566"/>
+            <stop offset="100%" stop-color="#2f3744"/>
           </linearGradient>
+          <linearGradient id="peekSnow" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#f6f8fb"/>
+            <stop offset="100%" stop-color="#c9d3df"/>
+          </linearGradient>
+          <linearGradient id="peekHaze" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#d4764a" stop-opacity="0"/>
+            <stop offset="100%" stop-color="#d4764a" stop-opacity="0.35"/>
+          </linearGradient>
+          <clipPath id="peekPeakClip"><path d="M -20 545 C 20 500, 40 450, 50 430 C 70 380, 95 320, 105 270 C 115 215, 128 170, 140 140 C 148 115, 155 90, 160 74 C 168 95, 178 118, 185 140 C 200 185, 215 235, 225 280 C 240 340, 262 390, 280 430 C 300 470, 322 520, 340 545 Z"/></clipPath>
         </defs>
         <rect x="0" y="${topY}" width="320" height="${560-topY}" fill="url(#peekSky)"/>
-        <ellipse cx="70" cy="330" rx="46" ry="10" fill="#fff" opacity="0.06"/>
-        <ellipse cx="250" cy="400" rx="60" ry="12" fill="#fff" opacity="0.05"/>
-        <rect x="0" y="536" width="320" height="24" fill="#05070a"/>
-        <path d="${mountainD}" fill="url(#peekRock)"/>
-        <path d="${capD}" fill="#eef3f7" opacity="0.92"/>
+        <g fill="#fff">${stars.map(([x,y,r])=>`<circle cx="${x}" cy="${y+topY}" r="${r}" opacity="${0.45+r*0.3}"/>`).join('')}</g>
+        <circle cx="258" cy="${88+topY}" r="15" fill="#f4efe0" opacity="0.95"/>
+        <circle cx="266" cy="${82+topY}" r="13" fill="#141a2c" opacity="0.98"/>
+        <!-- far and middle ridges, lighter with distance -->
+        <path d="M -10 420 C 30 380, 60 330, 95 350 C 125 365, 150 320, 180 300 C 215 275, 245 330, 275 320 C 300 312, 318 350, 335 335 L 335 560 L -10 560 Z" fill="#3a4766" opacity="0.85"/>
+        <path d="M -10 470 C 25 440, 55 410, 85 430 C 115 450, 140 395, 170 405 C 205 418, 230 380, 260 395 C 290 410, 310 445, 335 440 L 335 560 L -10 560 Z" fill="#2c3650"/>
+        <rect x="0" y="380" width="320" height="180" fill="url(#peekHaze)"/>
+        <!-- the peak: lit left face, shaded right face, snow above the line -->
+        <path d="M -20 545 C 20 500, 40 450, 50 430 C 70 380, 95 320, 105 270 C 115 215, 128 170, 140 140 C 148 115, 155 90, 160 74 C 168 95, 178 118, 185 140 C 200 185, 215 235, 225 280 C 240 340, 262 390, 280 430 C 300 470, 322 520, 340 545 Z" fill="url(#peekRock)"/>
+        <path d="M 160 74 C 168 95, 178 118, 185 140 C 200 185, 215 235, 225 280 C 240 340, 262 390, 280 430 C 300 470, 322 520, 340 545 L 340 545 L 200 545 C 196 470, 178 380, 182 300 C 184 240, 170 160, 160 74 Z" fill="#222a36" opacity="0.55"/>
+        <g clip-path="url(#peekPeakClip)">
+          <path d="M 60 240 C 90 225, 100 250, 125 236 C 150 222, 158 246, 180 232 C 205 218, 215 240, 240 228 L 260 60 L 60 60 Z" fill="url(#peekSnow)"/>
+          <path d="M 160 74 L 260 60 L 240 228 C 215 240, 205 218, 182 232 C 178 180, 170 130, 160 74 Z" fill="#aab6c6" opacity="0.5"/>
+        </g>
+        <!-- trees at the foot for scale -->
+        <g fill="#0f141c">${pines.map(([x,y,h])=>`<path d="M ${x} ${y} L ${x+6} ${y-h} L ${x+12} ${y} Z"/>`).join('')}</g>
+        <rect x="0" y="542" width="320" height="18" fill="#0a0e14"/>
+        <!-- the trail: a dark under-stroke so the dashes read on rock and on snow alike -->
+        <path d="${climbD}" fill="none" stroke="#141a24" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
+        <path id="peek-climb-path" d="${climbD}" fill="none" stroke="#f4f1e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 5" opacity="0.9"/>
+        <g id="peek-marks"></g>
         ${isOvershoot ? `<path id="peek-stair-path" d="${stairD}" fill="none" stroke="#cbd5df" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0" style="transition:opacity .9s ease;"/>` : ''}
         ${isOvershoot ? `<g id="peek-notes" opacity="0" style="transition:opacity .9s ease;">${notes.map(n=>`<text x="${n.x}" y="${n.y}" font-size="${n.s}" fill="var(--accent-strong)" opacity="${n.o}">${n.g}</text>`).join('')}</g>` : ''}
         <path d="M ${summit[0]} ${summit[1]} L ${summit[0]} ${summit[1]-34}" stroke="#dfe6ea" stroke-width="2.5" stroke-linecap="round"/>
-        <path d="M ${summit[0]} ${summit[1]-34} L ${summit[0]} ${summit[1]-20} L ${summit[0]+26} ${summit[1]-27} Z" fill="var(--accent-strong)"/>
-        <text x="${summit[0]+32}" y="${summit[1]-19}" fill="#fff" font-size="12" font-weight="800" letter-spacing="1" font-family="system-ui, sans-serif" stroke="#0b1120" stroke-width="3" paint-order="stroke fill">${esc(flagLabel)}</text>
-        <path id="peek-climb-path" d="${climbD}" fill="none" stroke="none"/>
+        <path d="M ${summit[0]} ${summit[1]-34} L ${summit[0]} ${summit[1]-20} L ${summit[0]+26} ${summit[1]-27} Z" fill="var(--accent)"/>
+        <text x="${summit[0]+32}" y="${summit[1]-19}" fill="#fff" font-size="12" font-weight="800" letter-spacing="1" font-family="Manrope, system-ui, sans-serif" stroke="#0b1120" stroke-width="3" paint-order="stroke fill">${esc(flagLabel)}</text>
         <g id="peek-runner" opacity="0">
           <!-- A white halo drawn under the red figure - the scene behind the runner ranges
                from dark rock to white ice to warm sky, and no single flat color stays
@@ -3283,6 +3318,11 @@ function startPeekAnimation(){
   svg.dataset.animated = '1';
   const frac = Number(svg.dataset.frac)||0;
   const climbLen = path.getTotalLength();
+  const marksEl = document.getElementById('peek-marks');
+  if(marksEl && !marksEl.childElementCount){
+    let marks = []; try{ marks = JSON.parse(svg.dataset.marks||'[]'); }catch(e){}
+    marks.forEach((m,i)=>{ const p = path.getPointAtLength(climbLen*clamp(m.f,0,1)); const right = i%2===0; marksEl.insertAdjacentHTML('beforeend', `<circle cx="${p.x}" cy="${p.y}" r="3.2" fill="var(--accent)" stroke="#0b1120" stroke-width="1.5"/><text x="${right ? p.x+8 : p.x-8}" y="${p.y+3}" text-anchor="${right ? 'start' : 'end'}" font-size="8.5" font-weight="700" fill="#fff" stroke="#0b1120" stroke-width="2.5" paint-order="stroke fill" font-family="Manrope, system-ui, sans-serif">${esc(m.label)}</text>`); });
+  }
   // Past 100%, the runner finishes the real mountain climb (frac is clamped to 1, so this
   // always reaches the summit) and then continues onto the staircase - fixed exactly
   // halfway up it, not proportional to how far past the summit the real mileage goes.
