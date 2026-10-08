@@ -88,6 +88,9 @@ function sanityCheck(plan, setup){
     const inWindow = d => d.daysToRace!=null && d.daysToRace<=Math.max(2, plan.taperDays||0); // days inside the taper window are reduced on purpose
     const rec = easies.find(d=>d.easyRole==='recovery' && !inWindow(d));
     if(rec && !w.days.some(x=>x.type==='race') && easies.some(e=>e!==rec && !inWindow(e) && e.km < rec.km-1.0)) push('recovery-not-shortest', `${wk} recovery ${rec.km} vs ${easies.map(e=>e.km).join('/')}`);
+    // 89 a session week has a session: build and peak weeks (race week excepted) must carry a quality run;
+    // the beginner structure is only acceptable when even three run days could not hold one
+    if(isRace && (w.phase==='build' || w.phase==='peak') && !w.days.some(x=>x.type==='race' || (x.daysToRace!=null && x.daysToRace>=0 && x.daysToRace<=2)) && !w.days.some(x=>g.QUALITY_TYPES.includes(x.type) && !x.easyVariety && x.type!=='long') && !w.beginnerStructure) push('no-session', `${wk} ${w.phase} week without a quality session (${w.runsPerWeek} runs, ${w.targetKm} km)`);
     // 74 two days out is a run when tapering (shakeout), never a rest day
     if(plan.taperMode && plan.taperMode!=='none'){ const d2 = w.days.find(x=>x.daysToRace===2); if(d2 && !(d2.km>0)) push('shakeout', `${wk} two days out is ${d2.label}`); }
     w.days.forEach((d,i)=>{
@@ -180,7 +183,7 @@ function sanityCheck(plan, setup){
     if(w.plannedKm && w.phase!=='taper' && isRace){
       const tot = w.days.reduce((a,d)=>a+(d.type==='race'?0:d.km),0);
       const few = (plan.warnings||[]).some(x=>/running days/.test(x));
-      if(!few && w.days.every(d=>d.daysToRace==null||d.daysToRace>2) && Math.abs(tot-w.plannedKm) > Math.max(1.5, w.plannedKm*0.08)) push('week-total-off', `${wk} ${tot.toFixed(1)} vs planned ${w.plannedKm}`);
+      if(!few && w.days.every(d=>d.daysToRace==null||d.daysToRace>Math.max(2, plan.taperDays||0)) && Math.abs(tot-w.plannedKm) > Math.max(1.5, w.plannedKm*0.08)) push('week-total-off', `${wk} ${tot.toFixed(1)} vs planned ${w.plannedKm}`);
     }
     const nomOf = x => x.nominalKm||x.plannedKm; if(w.isCutback && !w.beginnerStructure && w.weekIndex>0 && nomOf(plan.weeks[w.weekIndex-1]) && nomOf(w) >= nomOf(plan.weeks[w.weekIndex-1])) push('cutback-not-lower', wk);
     const runDays = w.days.filter(d=>d.km>0 && d.type!=='race').length;

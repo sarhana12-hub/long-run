@@ -9,7 +9,8 @@ const MI = g.KM_PER_MI;
 const DOW = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 function raceOn(weeks, dow){ let d = g.addDays(g.todayDate(), weeks*7); while(d.getDay()!==dow) d = g.addDays(d,1); return g.fmtDate(d); }
 const PROFILES = [
-  {name:'10K in 4 weeks, 20 mpw, 4 runs, 2 strength, trained since 8 weeks ago (the owner)', s:{units:'mi', raceKey:'10k', raceDistanceKm:10, weeks:4, raceDow:6, mpw:20, recent:{km:5, sec:25*60+30}, runs:4, strength:2, longDow:0, skipBase:false, taper:'full', hills:'flat', trainedWeeksAgo:8}},
+  {name:'THE OWNER — 10K on 7 Nov 2026, 20 mpw, 5 runs, 3 strength, long run Saturday, hilly, 23:15 5K, training since 15 Aug', s:{units:'mi', raceKey:'10k', raceDistanceKm:10, raceDate:'2026-11-07', mpw:20, recent:{km:5, sec:23*60+15}, longest:10, runs:5, strength:3, longDow:6, skipBase:false, taper:'full', hills:'hilly', speed:'high', dayOne:'2026-08-15'}},
+  {name:'10K in 4 weeks, 20 mpw, 4 runs, 2 strength, trained since 8 weeks ago', s:{units:'mi', raceKey:'10k', raceDistanceKm:10, weeks:4, raceDow:6, mpw:20, recent:{km:5, sec:25*60+30}, runs:4, strength:2, longDow:0, skipBase:false, taper:'full', hills:'flat', trainedWeeksAgo:8}},
   {name:'Half in 16 weeks, 25 mpw, 5 runs, 2 strength', s:{units:'mi', raceKey:'half', raceDistanceKm:21.0975, weeks:16, raceDow:0, mpw:25, recent:{km:5, sec:25*60+30}, runs:5, strength:2, longDow:0, skipBase:false, taper:'full', hills:'flat'}},
   {name:'Marathon in 20 weeks, 35 mpw, 5 runs, 2 strength, hilly', s:{units:'mi', raceKey:'marathon', raceDistanceKm:42.195, weeks:20, raceDow:0, mpw:35, recent:{km:10, sec:52*60}, runs:5, strength:2, longDow:6, skipBase:false, taper:'full', hills:'hilly'}},
   {name:'5K in 8 weeks, 12 mpw, 3 runs, 1 strength, bodyweight only', s:{units:'mi', raceKey:'5k', raceDistanceKm:5, weeks:8, raceDow:6, mpw:12, recent:{km:5, sec:30*60}, runs:3, strength:1, longDow:0, skipBase:false, taper:'full', hills:'flat', equipment:[]}},
@@ -20,13 +21,13 @@ const PROFILES = [
   {name:'General: Build distance to 35 mpw, 10 weeks, 20 mpw', s:{planKind:'distance', units:'mi', weeks:10, mpw:20, recent:{km:5, sec:27*60}, runs:4, strength:1, longDow:0, distanceGoalMetric:'weekly', target:35}},
 ];
 function setupFor(p){
-  const s = p.s; const base = {units:s.units, currentWeeklyKm:s.mpw*MI, recentDistanceKm:s.recent.km, recentTimeSec:s.recent.sec, longDow:s.longDow, weekStartDow:0, ...g.deriveScheduleFromLongDow(s.longDow, s.strength), runsPerWeek:s.runs, strengthPerWeek:s.strength, equipment: s.equipment!=null ? s.equipment : g.DEFAULT_EQUIPMENT.slice()};
+  const s = p.s; const base = {units:s.units, currentWeeklyKm:s.mpw*MI, recentDistanceKm:s.recent.km, recentTimeSec:s.recent.sec, longestRecentRunKm: s.longest ? s.longest*MI : null, longDow:s.longDow, weekStartDow:0, ...g.deriveScheduleFromLongDow(s.longDow, s.strength), runsPerWeek:s.runs, strengthPerWeek:s.strength, equipment: s.equipment!=null ? s.equipment : g.DEFAULT_EQUIPMENT.slice()};
   if(s.planKind){ return {...base, planKind:s.planKind, weeks:s.weeks, distanceGoalMetric:s.distanceGoalMetric||'weekly', distanceGoalCurrentKm:s.mpw*MI, distanceGoalTargetKm:(s.target||s.mpw)*MI}; }
-  return {...base, raceKey:s.raceKey, raceDistanceKm:s.raceDistanceKm, raceDate:raceOn(s.weeks, s.raceDow), goalTimeSec:s.goalSec||null, longRunEmphasis:'balanced', speedEmphasis:'balanced', hillsMode:s.hills, skipBase:!!s.skipBase, taperMode:s.taper, buildPace:s.buildPace||'standard'};
+  return {...base, raceKey:s.raceKey, raceDistanceKm:s.raceDistanceKm, raceDate: s.raceDate || raceOn(s.weeks, s.raceDow), goalTimeSec:s.goalSec||null, longRunEmphasis:'balanced', speedEmphasis:s.speed||'balanced', hillsMode:s.hills, skipBase:!!s.skipBase, taperMode:s.taper, buildPace:s.buildPace||'standard'};
 }
 PROFILES.forEach(p=>{
   const setup = setupFor(p);
-  const dayOne = p.s.trainedWeeksAgo ? g.addDays(g.todayDate(), -7*p.s.trainedWeeksAgo) : undefined;
+  const dayOne = p.s.dayOne ? g.parseDate(p.s.dayOne) : p.s.trainedWeeksAgo ? g.addDays(g.todayDate(), -7*p.s.trainedWeeksAgo) : undefined;
   const plan = setup.planKind ? g.generateGeneralPlan(setup, dayOne) : g.generatePlan(setup, dayOne);
   const unit = setup.units;
   console.log(`\n==================== ${p.name} ====================`);

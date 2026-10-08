@@ -230,6 +230,14 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 88. **Both leg sessions stacked onto hard days while three rest days sat empty** (the owner's own week: intervals + legs Monday, cruise intervals + legs Wednesday, rest Tuesday/Thursday/Friday). *Cause:* rest days were barred from leg work, so with the only easy run sitting before a hard day the fallback was the hard days. *Owner rule:* an empty day beats stacking strength onto a run day. *Fix:* leg sessions rank easy run day > rest day > hard day after the run, still never the day before a key session; the owner's week becomes legs after Monday's intervals and legs on Thursday. *Guard:* the rest-day ban is removed from the validator and the sweep.
 
+89. **A peak week with no quality session** — the owner's plan, three weeks before a 10K: five easy runs and a long run. *Cause:* at 20 mi/week on five run days the week could not hold a session plus five 30-minute runs, and the engine dropped the session (beginner structure) instead of the fifth run day; every build week was the same. *Fix:* the session outranks an extra run day — a session week sheds run days down to three before it gives up the session; the beginner structure is only for weeks that cannot hold a session on three days. *Guard:* plan-invariants scenario "10k, 20 mpw, 5 runs: build weeks keep their session".
+
+90. **"Less speed" produced a build phase with no sessions at all**, at any mileage (the sweep's new no-session rule found it in a quarter of all plans). *Cause:* the option deferred quality to the peak phase. *Fix:* Less means one session a week, 15% shorter, from the build phase on.
+
+91. **Six hill-repeat sessions in eight weeks and no 10K-pace running** in the owner's hilly 10K plan; the last sharpening week was hills plus a light fartlek. *Fix:* hills stay in Phase II (and as a second session only there); Phase IV for 5K/10K opens with a race-pace session; second sessions in Phases III–IV are fartlek, cruise or progression.
+
+92. **A 13-week 10K plan that never left 20 miles a week.** *Cause:* 5K/10K targets were set equal to the starting mileage. *Fix:* 5K/10K plans build to about a quarter above the start, within the step rule.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

@@ -75,6 +75,7 @@ rule would be.
 | I reps 3–5 min with jog recovery about equal time; R reps 200–400 m with full recovery | `structuredEffort` | Daniels | Sourced | — |
 | Hills 6–10 × 60–90 s | `structuredEffort` | Daniels (hills as R-type work), Pfitzinger | Sourced | — |
 | Session minute budgets ramp through a phase (e.g. T 20→25 short, 20→40 long) | `qualityMinutes` | Daniels ranges | Within source | — |
+| The session outranks an extra run day: a session week sheds run days (down to three) before it falls back to the beginner structure | `generatePlan` | Daniels (a quality day plus 30-minute easy runs beats five easy runs) | Within source | — |
 | Floors scale down below 40 km/wk; weeks too small for a session at all use Daniels' beginner structure (easy runs + strides) | `floorMinutesFor`, `generatePlan` | Daniels beginner plans | Within source; the scaling curve is Judgement | — |
 | Quality day shorter than the long run | `sizeQuality` | — | Judgement (owner complaint: tempo as long as the long run) | Keep as an owner decision |
 | Warm-up 2 km, cool-down 1.5 km | `QUALITY_WARMUP_KM` | Daniels (10–20 min warm-up) | Within source | — |
@@ -83,7 +84,9 @@ rule would be.
 | A session floor never pushes T/I/R work above its share cap once that cap is 20 min or more | `sizeQuality` | Daniels (10% T, 20-min minimum) | Within source | — |
 | Rep durations are shown from the runner's own pace ("about 2:55 each") | page `fillPacePlaceholders` | — | Presentation | — |
 | No strides on a fartlek or progression day | `buildWeekDays` | — | Judgement (two speed stimuli on one easy day) | Keep flagged |
-| Emphasis scales sessions 0.85 / 1 / 1.1; secondary session at 65% | `generatePlan`, `sizeQuality` | — | Judgement | None found; keep flagged |
+| Emphasis scales sessions 0.85 / 1 / 1.1; secondary session at 65%; "Less" is one session a week from the build phase on, never a build phase without sessions | `generatePlan`, `sizeQuality` | — | Judgement | None found; keep flagged |
+| 5K/10K plans build to about 25% above the starting mileage (within the step rule), capped at the "plenty" level | `targetPeakWeeklyKm` | — | Judgement (a flat 13-week plan is not what any coach writes) | Keep flagged |
+| Hills only in Phase II (and as the second session only in Phase II); Phase IV for 5K/10K opens with race-pace work | `ROTATIONS` | Daniels (R/hills early, race-specific work last) | Within source | — |
 | Base phase: easy only, strides, one gentle pickup run every other week | `generatePlan` | Daniels Phase I | Sourced | — |
 | Strides on 2 easy days | `generatePlan` | Daniels | Sourced | — |
 | Recovery-run label only when the day after the long run is ≤ 45 min and the shortest easy run of the week; with three or more easy days that slot is capped at 45 min while the week still fits | `buildWeekDays` | Pfitzinger (recovery runs 4–6 mi) | Within source | — |
