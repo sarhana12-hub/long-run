@@ -320,6 +320,10 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 131. **Every leg session was the 40-minute version with 2–3 minutes between all heavy sets** (owner: too long after an easy run; too much rest on a leg press). *Fix:* rest between heavy sets is 2 minutes on machines and single-leg lifts, 2–3 minutes only under a barbell; and each leg day carries a Full / Shorter toggle in the day sheet. Shorter is the same session cut to about 25 minutes: the plyometric, the two lifts that matter, calves paired with the single-leg lift, one core set. The choice is per day and survives rebuilds.
 
+## Round 13 — coaching features (2026-10-08)
+
+132. **The plan never adapted to a light week.** *Fix:* a check-in card at the top of the Plan tab after any tracked week under two-thirds of its plan: last week's actual, sessions done, and an offer to ease this week to last week's actual plus one step (never below 60% of plan), easy runs shorter and the key session kept; or keep as planned. Offered once per week; the eased week's coach note says what changed. *Guard:* tests/plan-invariants.js "eased week".
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

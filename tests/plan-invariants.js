@@ -127,6 +127,32 @@ console.log('\n=== mid-week start: a Thursday 10K plan ===');
   if(viol.length){ failures++; console.log('  FAIL:'); viol.forEach(x=>console.log('   - '+x)); } else console.log('  ok');
 }
 
+// easing a week after a light one: easy and long runs shrink toward the target, the key
+// session is kept as written, a second session becomes easy only when the cut is deep
+console.log('\n=== eased week ===');
+{
+  const s = {units:'mi', raceKey:'10k', raceDistanceKm:10, raceDate:g.fmtDate(g.addDays(g.todayDate(), 70)), currentWeeklyKm:25*MI, recentDistanceKm:5, recentTimeSec:23*60+15, longDow:6, weekStartDow:0, ...g.deriveScheduleFromLongDow(6,2), runsPerWeek:5, strengthPerWeek:2, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'flat', skipBase:true, taperMode:'full', equipment:g.DEFAULT_EQUIPMENT.slice()};
+  const p = g.generatePlan(s); const viol = [];
+  const wi = p.weeks.findIndex(w=>w.days.filter(d=>g.QUALITY_TYPES.includes(d.type) && d.type!=='long' && !d.easyVariety).length>=2);
+  if(wi<0) viol.push('no two-session week to test');
+  else {
+    const before = JSON.parse(JSON.stringify(p.weeks[wi]));
+    const key = before.days.find(d=>g.QUALITY_TYPES.includes(d.type) && d.type!=='long' && !d.easyVariety && !d.secondary);
+    const w = g.easeWeek(p, wi, before.targetKm*0.65);
+    if(!w || !w.eased) viol.push('week not eased');
+    else {
+      if(w.targetKm >= before.targetKm) viol.push('target did not fall');
+      const keyAfter = w.days.find(d=>d.date===key.date);
+      if(!keyAfter || keyAfter.type!==key.type || Math.abs(keyAfter.km-key.km)>0.05) viol.push('key session changed');
+      if(w.days.some(d=>d.km>0 && d.km<3)) viol.push('a run under 3 km');
+      const secondAfter = w.days.filter(d=>g.QUALITY_TYPES.includes(d.type) && d.type!=='long' && !d.easyVariety).length;
+      if(secondAfter!==1) viol.push('deep cut should leave one session, left '+secondAfter);
+      if(Math.abs(w.plannedKm - before.plannedKm)>0.01) viol.push('nominal volume changed');
+    }
+  }
+  if(viol.length){ failures++; console.log('  FAIL:'); viol.forEach(x=>console.log('   - '+x)); } else console.log('  ok');
+}
+
 // prediction sanity
 console.log('\n=== prediction table (5k -> others), 30 mpw, longest run 10 mi ===');
 [[18],[20],[22],[25],[28],[32]].forEach(([m])=>{

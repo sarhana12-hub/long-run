@@ -1617,6 +1617,36 @@ function generatePlan(setup, dayOneOverride){
   };
 }
 
+// Eases a week after a light one: easy and long runs are scaled toward the target, the key
+// session is kept as written, a second session becomes an easy run when the cut is deep,
+// and no run drops below 3 km. The nominal volume (plannedKm) is untouched so the step rule
+// still reads the plan as written; the week records what it was eased from.
+function easeWeek(plan, weekIndex, targetKm){
+  const w = plan.weeks[weekIndex]; if(!w) return null;
+  const isQ = d => QUALITY_TYPES.includes(d.type) && d.type!=='long' && !d.easyVariety;
+  const runs = w.days.filter(d=>d.km>0 && d.type!=='race');
+  const qualityKm = runs.filter(isQ).reduce((s,d)=>s+d.km,0);
+  const easyLongKm = runs.filter(d=>!isQ(d)).reduce((s,d)=>s+d.km,0);
+  if(easyLongKm<=0) return null;
+  const f = clamp((targetKm - qualityKm)/easyLongKm, 0.5, 1);
+  if(f>=0.98) return null;
+  const fromKm = round1(runs.reduce((s,d)=>s+d.km,0));
+  w.days = w.days.map(d=>{
+    if(!(d.km>0) || d.type==='race') return d;
+    if(isQ(d)){
+      if(f<0.8 && d.secondary){
+        const km = round1(Math.max(3, d.km*f));
+        return {...d, type:'easy', label:TYPE_LABELS.easy, km, secondary:false, warmupKm:0, cooldownKm:0, qualityKm:0, structuredKm:0, workKm:0, strides:false, paceKey2:null, desc2:null, ...buildWorkoutMeta({type:'easy', km, easyRole:null}, plan.raceDistanceKm)};
+      }
+      return d;
+    }
+    return {...d, km: round1(Math.max(3, d.km*f)), racePaceKm: d.racePaceKm ? round1(d.racePaceKm*f) : d.racePaceKm};
+  });
+  w.targetKm = round1(w.days.reduce((s,d)=>s+d.km,0));
+  w.eased = {fromKm, toKm: w.targetKm, factor: round1(f)};
+  recomputeStrengthFocus(w.days);
+  return w;
+}
 function blankDayBeforeStart(d){
   return {...d, type:'rest', km:0, label:'Rest', beforeStart:true, strength:false, strengthFocus:null, strides:false, hillStrides:false, easyRole:null, terrain:null,
     warmupKm:0, cooldownKm:0, qualityKm:0, structuredKm:0, workKm:0, easyVariety:false, progressionEasy:false, racePaceKm:0, paceKey:null, paceKey2:null, desc2:null,
@@ -2141,7 +2171,7 @@ function projectionImpacts(plan, logs, today, km, opts){
 }
 
 return {
-  FITNESS, effortPaceSecPerKm, repMetersForDay, projectFitness, fitnessProjections, projectionImpacts,
+  FITNESS, effortPaceSecPerKm, repMetersForDay, projectFitness, fitnessProjections, projectionImpacts, easeWeek,
   KM_PER_MI, ENGINE_VERSION, pad2, uid, clamp, round1, fmtDate, parseDate, addDays, daysBetween, startOfWeek, todayDate,
   kmToUnit, unitToKm, fmtDist, interp, parseDurationToSec, secToClock, distanceWeeksNeeded, paceStr, speedStr, paceOrSpeedStr, circularDayDist,
   kmForMinutes, minutesForKm,

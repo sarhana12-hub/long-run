@@ -927,6 +927,8 @@ const Store = {
   // strength attached) has no run to log against.
   getStrengthDone(){ return this._get('lr_strength_done', []); },
   getStrengthShort(){ return this._get('lr_strength_short', []); },
+  getCheckins(){ return this._get('lr_checkins', {}); },
+  setCheckins(v){ this._set('lr_checkins', v); },
   setStrengthShort(v){ this._set('lr_strength_short', v); },
   // Per-exercise ticks inside a strength session: {date: [bool,...]} in exercise order.
   getStrengthItems(){ return this._get('lr_strength_items', {}); },
@@ -1107,6 +1109,7 @@ function boot(){
   state.logs = Store.getLogs();
   state.strengthDone = Store.getStrengthDone();
   state.strengthShort = Store.getStrengthShort();
+  state.checkins = Store.getCheckins();
   state.strengthItems = Store.getStrengthItems();
   state.helpSeen = Store.getFlag('help_seen');
   state.notesSeen = Store.getFlag('notes_seen');
@@ -2121,6 +2124,34 @@ function weekColorVar(week){ return week.isCutback ? 'var(--z-rest)' : phaseColo
 // top of the Plan tab - deliberately quiet (returns null) when nothing stands out, rather
 // than restating "similar to last week" every single time. Checked in priority order: the
 // biggest-picture thing worth knowing first, mileage-jump last since it's the most routine.
+// After a week under two-thirds of its plan, the current week is offered eased: last week's
+// actual plus one step, never below 60% of this week's plan, key session kept. Offered once
+// per week, from the second week on, only for weeks that were being tracked.
+function weekCheckIn(){
+  const plan = state.plan; if(!plan || !plan.weeks) return null;
+  const wi = todayWeekIndex(plan); if(wi<1) return null;
+  const week = plan.weeks[wi], prev = plan.weeks[wi-1];
+  if(prev.partialStart || week.eased || week.days.some(d=>d.type==='race')) return null;
+  if(state.checkins && state.checkins[week.weekStart]) return null;
+  const ts = state.setup && state.setup.trackingStartDate ? parseDate(state.setup.trackingStartDate) : null;
+  if(ts && parseDate(prev.weekStart) < ts) return null;
+  const actual = weekActualKm(prev), planned = prev.targetKm || 0;
+  if(planned<=0 || actual >= planned*0.67) return null;
+  const stepKm = unitToKm(plan.runsWeekOne || plan.runsPerWeek || 4, 'mi');
+  const suggested = round1(Math.min(week.targetKm, Math.max(actual + stepKm, week.targetKm*0.6)));
+  if(suggested >= week.targetKm*0.98) return null;
+  return {weekIndex: wi, week, prev, actual, planned, suggested};
+}
+function renderCheckInCard(unit){
+  const c = weekCheckIn(); if(!c) return '';
+  const sessions = c.prev.days.filter(d=>QUALITY_TYPES.includes(d.type) && d.type!=='long' && !d.easyVariety && d.km>0);
+  const logged = new Set(state.logs.map(l=>l.date)); const sessionsDone = sessions.filter(d=>logged.has(d.date)).length;
+  return `<div class="card" style="margin:0 18px 14px; padding:14px 16px; border-color:var(--z-tempo);">
+    <div style="font-weight:700; font-size:14.5px; margin-bottom:4px;">Light week behind you</div>
+    <div class="hint" style="margin:0 0 10px;">Last week: ${fmtDist(c.actual,unit,1)} of ${fmtDist(c.planned,unit,1)}${sessions.length ? `, ${sessionsDone} of ${sessions.length} session${sessions.length===1?'':'s'}` : ''}. A coach would not jump straight back to ${fmtDist(c.week.targetKm,unit,0)}. Ease this week to about ${fmtDist(c.suggested,unit,0)}: easy runs shorter, the key session kept.</div>
+    <div class="row"><button class="btn btn-primary btn-block" data-act="checkin-ease" data-wi="${c.weekIndex}" data-km="${c.suggested}">Ease this week</button><button class="btn btn-block" data-act="checkin-keep" data-ws="${c.week.weekStart}">Keep as planned</button></div>
+  </div>`;
+}
 function computeCoachNote(plan, week, unit){
   const isRacePlan = !plan.planKind;
   const isFinalWeek = week.weekIndex===plan.totalWeeks-1;
@@ -2130,6 +2161,7 @@ function computeCoachNote(plan, week, unit){
   if(week.isCutback){
     return "Scheduled cutback week — lighter mileage on purpose, so your body can absorb the work you've already put in before the next push.";
   }
+  if(week.eased) return `Eased after a light week: ${fmtDist(week.targetKm,unit,1)} instead of ${fmtDist(week.eased.fromKm,unit,1)}. Easy runs are shorter; the key session stands.`;
   const prev = week.weekIndex>0 ? plan.weeks[week.weekIndex-1] : null;
   if(!prev) return null;
   if(week.phase==='taper' && prev.phase!=='taper'){
@@ -2352,6 +2384,7 @@ function renderPlanTab(week, plan){
 
   return `
   ${state.moveFrom!=null ? (()=>{ const sd = plan.weeks[state.moveFrom.weekIndex].days[state.moveFrom.dayIndex]; return `<div class="banner">${ICONS.move}<span>Choose a day to swap with "${sd.label}" (${DOW_LABELS[sd.dow]} ${niceDate(parseDate(sd.date))}) — in this week or any other. <a class="link-btn" data-act="cancel-move" style="color:inherit">Cancel</a></span></div>`; })() : ''}
+  ${renderCheckInCard(unit)}
   ${renderTodayCard(plan)}
   <div class="week-strip">${strip}</div>
   <div class="week-header">
@@ -5198,6 +5231,17 @@ function onClick(e){
     const {weekIndex, dayIndex} = state.modal;
     const day = state.plan.weeks[weekIndex].days[dayIndex];
     state.modal={type:'log-run', data:{date:day.date, dist:'', time:'', notes:'', kind: day.type==='race' ? 'race' : 'run', rep:''}};
+    render(); return;
+  }
+  if(act==='checkin-ease'){
+    const wi = Number(el.dataset.wi), km = Number(el.dataset.km);
+    const w = easeWeek(state.plan, wi, km);
+    if(w){ refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); Store.setPlan(state.plan); }
+    state.checkins = {...(state.checkins||{}), [state.plan.weeks[wi].weekStart]: 'eased'}; Store.setCheckins(state.checkins);
+    render(); showToast(w ? `Week eased to ${fmtDist(w.targetKm, state.setup.units, 0)}` : 'Nothing to ease'); return;
+  }
+  if(act==='checkin-keep'){
+    state.checkins = {...(state.checkins||{}), [el.dataset.ws]: 'kept'}; Store.setCheckins(state.checkins);
     render(); return;
   }
   if(act==='set-strength-length'){
