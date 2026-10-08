@@ -266,6 +266,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 104. **No way to choose light mode on a phone set to dark.** *Fix:* Settings → Appearance (System / Light / Dark), applied before first paint, with the theme-color metas following the effective theme. *Caveat:* iOS fixes a home-screen app's status-bar text colour at install time, so the light theme may need the app re-added to the home screen to get dark status text.
 
+105. **Three type families and nineteen font sizes.** Bricolage Grotesque appeared in four headings; the mono face was asked for weight 800, which it is not loaded at, so the browser synthesised it; sizes ran from 8px to 34px in half-point steps. *Fix:* two families (Manrope reads, JetBrains Mono counts), headings by weight and tracking, mono capped at 700, one ten-step scale (10.5 / 11.5 / 12.5 / 13.5 / 14.5 / 16 / 18 / 20 / 24 / 32) with nothing under 10.5px, tabular figures everywhere.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
