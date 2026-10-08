@@ -1060,6 +1060,8 @@ function showToast(msg, undo, ms){ state.toast = msg; state.toastUndo = undo || 
 // Closes whatever sheet is open. A projection note that was held back while a milestone
 // screen was up shows the moment that screen closes.
 document.addEventListener('toggle', e=>{ if(e.target && e.target.id==='strength-details' && state.modal) state.modal.strengthOpen = e.target.open; }, true);
+// Re-renders an open sheet in place: same scroll position, no entrance animation.
+function rerenderSheet(){ const sh = document.querySelector('.sheet'); const top = sh ? sh.scrollTop : 0; if(state.modal) state.modal.quiet = true; render(); const sh2 = document.querySelector('.sheet'); if(sh2) sh2.scrollTop = top; }
 function closeModal(){ const held = state.modal && state.modal.type==='milestone' ? state.pendingToast : null; state.modal=null; state.moveFrom=null; state.pendingToast=null; if(held) showToast(held.msg, held.undo, held.ms); else render(); }
 // Flashes a message inline next to the "Your name" label (the lexi-badge span) instead of
 // a floating toast — a fixed-position popup kept landing either behind the Dynamic Island
@@ -4249,7 +4251,7 @@ function renderPacingSheet(strategy, courseKey){
 
 function modalShell(title, innerHtml, headerButtonHtml){
   return `<div class="overlay" data-act="close-modal-overlay">
-    <div class="sheet" data-stop="1">
+    <div class="sheet" data-stop="1"${state.modal && state.modal.quiet ? ' style="animation:none"' : ''}>
       <div class="sheet-handle"></div>
       ${headerButtonHtml || ''}
       <button class="sheet-close" data-act="close-modal" aria-label="Close">${ICONS.close}</button>
@@ -5203,7 +5205,7 @@ function onClick(e){
     const wi = state.plan.weeks.findIndex(w=>w.days.some(d=>d.date===date));
     if(wi>=0){ const w = state.plan.weeks[wi]; refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); Store.setPlan(state.plan); }
     if(state.modal) state.modal.strengthOpen = true; // the section stays open across the re-render
-    render(); return;
+    rerenderSheet(); return;
   }
   if(act==='toggle-strength-done'){
     const date = el.dataset.date;
