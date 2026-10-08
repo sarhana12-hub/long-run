@@ -2155,6 +2155,44 @@ function renderCheckInCard(unit){
     <div class="row"><button class="btn btn-primary btn-block" data-act="checkin-ease" data-wi="${c.weekIndex}" data-km="${c.suggested}">Ease this week</button><button class="btn btn-block" data-act="checkin-keep" data-ws="${c.week.weekStart}">Keep as planned</button></div>
   </div>`;
 }
+// The race, once logged: the time against what the plan projected on day one and on the
+// eve of the race, the fitness it implies, how the training went, and a way to carry the
+// result into the next plan. A race log within three days of race day at about the race
+// distance counts.
+function raceReview(){
+  const plan = state.plan, setup = state.setup; if(!plan || !plan.weeks || isGeneralPlan(setup) || !plan.raceDate || plan.startVdot==null) return null;
+  const km = plan.raceDistanceKm;
+  const race = state.logs.filter(l=>l.kind==='race' && l.distanceKm>=km*0.9 && l.distanceKm<=km*1.1 && Math.abs(daysBetween(parseDate(l.date), parseDate(plan.raceDate)))<=3).sort((a,b)=>a.date<b.date?1:-1)[0];
+  if(!race) return null;
+  const before = fitnessProjections(plan, state.logs.filter(l=>l.id!==race.id), addDays(parseDate(race.date), -1), km, setup.goalTimeSec||0, {trackingStart: setup.trackingStartDate});
+  if(!before) return null;
+  const sec = race.durationSec * (km/race.distanceKm);
+  return {race, sec, vdot: round1(vdotFromRace(race.distanceKm, race.durationSec)), startVdot: round1(plan.startVdot), before, goalSec: setup.goalTimeSec||0};
+}
+function renderRaceReviewCard(unit, stats){
+  const r = raceReview(); if(!r) return '';
+  const label = raceLabelKm(state.plan.raceDistanceKm);
+  const vsStart = r.before.start.sec - r.sec, vsEve = r.before.now.sec - r.sec;
+  const verdict = r.sec <= r.before.now.lowSec ? 'faster than the likely range on the eve of the race' : r.sec <= r.before.now.highSec ? 'inside the likely range on the eve of the race' : 'slower than the likely range on the eve of the race';
+  const fit = r.vdot - r.startVdot;
+  const goalLine = r.goalSec ? (r.sec <= r.goalSec ? `Goal ${secToClock(r.goalSec)}: beaten by ${secToClock(r.goalSec - r.sec)}.` : `Goal ${secToClock(r.goalSec)}: missed by ${secToClock(r.sec - r.goalSec)}.`) : '';
+  const trainingLine = stats ? `Training: ${fmtDist(stats.planScopedLoggedKm,unit,0)} of ${fmtDist(stats.totalPlanTrainingKm,unit,0)} logged, ${stats.adherence}% of run days, ${stats.strengthCompletedToDate} of ${stats.strengthPlannedToDate} strength sessions.` : '';
+  return `<div class="container">
+    <div class="card" style="padding:16px; margin-bottom:16px; border-color:var(--accent-strong); background:var(--today-bg);">
+      <div class="section-title" style="margin:0 0 6px;">Race review · ${esc(label)}</div>
+      <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;"><span class="mono" style="font-size:32px; font-weight:700;">${secToClock(r.sec)}</span><span style="font-size:13.5px; color:var(--ink-soft);">${paceOrSpeedStr(r.sec/state.plan.raceDistanceKm, unit, state.paceFormat)} · ${niceDate(parseDate(r.race.date))}</span></div>
+      <div style="margin-top:10px; font-size:13.5px; line-height:1.5;">
+        <div>Projected on day one: <b class="mono">${secToClock(r.before.start.sec)}</b> · you ran <b style="color:${vsStart>=0?'var(--done)':'var(--z-tempo)'};">${secToClock(Math.abs(vsStart))} ${vsStart>=0?'faster':'slower'}</b>.</div>
+        <div>Projected on the eve: <b class="mono">${secToClock(r.before.now.sec)}</b> · ${verdict}${Math.abs(vsEve)>=5 ? ` (${secToClock(Math.abs(vsEve))} ${vsEve>=0?'faster':'slower'})` : ''}.</div>
+        <div>Fitness number: <b class="mono">${r.vdot}</b>, ${fit>=0?'up':'down'} ${Math.abs(fit).toFixed(1)} from ${r.startVdot} at the start.</div>
+        ${goalLine ? `<div>${goalLine}</div>` : ''}
+        ${trainingLine ? `<div class="hint" style="margin-top:6px;">${trainingLine}</div>` : ''}
+      </div>
+      <button class="btn btn-primary btn-block" data-act="open-switch-plan-from-race" style="margin-top:12px;">Start the next plan from this result</button>
+      <div class="hint" style="margin-top:6px;">The new plan takes this race as your recent result, so every pace starts from the fitness you just proved.</div>
+    </div>
+  </div>`;
+}
 function computeCoachNote(plan, week, unit){
   const isRacePlan = !plan.planKind;
   const isFinalWeek = week.weekIndex===plan.totalWeeks-1;
@@ -3585,6 +3623,7 @@ function renderProgressTab(){
   <div class="card" style="margin:0 18px 24px;">${logRows}</div>
   `;
   return header + `
+  ${renderRaceReviewCard(unit, stats)}
   ${renderTrainingTrail(plan, unit, stats)}
   <div class="container">
     ${renderRaceProjectionSection(stats, unit, state.paceFormat)}
@@ -5378,6 +5417,17 @@ function onClick(e){
     state.paceFormat = f;
     Store.setPaceFormat(f);
     render(); return;
+  }
+  if(act==='open-switch-plan-from-race'){
+    const r = raceReview(); if(!r) return;
+    state.onboardMode = 'switch';
+    const d = draftFromSetup(state.setup);
+    const preset = RACE_PRESETS.find(p=>Math.abs(p.km - state.plan.raceDistanceKm)<0.05);
+    if(preset) d.recentDistanceKey = preset.key;
+    d.recentTime = secToClock(r.race.durationSec); d.recent2DistanceKey = ''; d.recent2Time = '';
+    d.raceDate = ''; d.goalTime = ''; d.trainingStartDate = '';
+    state.onboardDraft = d; state.onboardStep = 1; state.view = 'onboarding';
+    render(); pageScrollTo(0); return;
   }
   if(act==='open-switch-plan'){
     state.onboardMode = 'switch';

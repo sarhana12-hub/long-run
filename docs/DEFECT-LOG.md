@@ -326,6 +326,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 133. **Strength had no memory.** Exercises could be ticked but no weight was ever recorded, so the load note stayed generic. *Fix:* every lift that takes a weight has a Weight field in its row (lb with miles, kg with kilometres), saved per exercise and date without re-rendering the sheet; the row shows the last weight and its date, and once one exists, a plain cue to add 2.5–5 lb (1–2.5 kg) when every set finished with reps to spare.
 
+134. **Race day closed with a badge and nothing else.** *Fix:* once a race is logged (within three days of race day, about the race distance), the Progress overview leads with a Race review: the time and pace, against the day-one projection and the eve-of-race projection with its likely range, the fitness number achieved against the start, the goal if one was set, the training totals, and a button that opens Change plan with this race prefilled as the recent result.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
