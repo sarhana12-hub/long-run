@@ -1038,6 +1038,19 @@ function runCountUps(){
 // One system tap for a moment that deserves it: a run logged, strength marked done, a day
 // moved or swapped, a milestone earned. Must run synchronously inside the tap that caused it.
 function haptic(){ try{ const el = document.getElementById('haptic-switch'); if(el) el.click(); }catch(e){} }
+// How the phone is laying the app out, for the Settings card: tells apart "the page is
+// shorter than the screen" from "the page is tall but padded".
+function fillDisplayDiag(){
+  const el = document.getElementById('display-diag'); if(!el) return;
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed; left:0; top:0; width:0; height:0; padding-bottom:env(safe-area-inset-bottom); padding-top:env(safe-area-inset-top); visibility:hidden;';
+  document.body.appendChild(probe);
+  const cs = getComputedStyle(probe); const sab = Math.round(parseFloat(cs.paddingBottom)||0), sat = Math.round(parseFloat(cs.paddingTop)||0); probe.remove();
+  const vv = window.visualViewport;
+  el.textContent = (navigator.standalone ? 'standalone' : 'browser') + ' · window ' + window.innerWidth + '×' + window.innerHeight
+    + (vv ? ' · visual ' + Math.round(vv.width) + '×' + Math.round(vv.height) : '')
+    + ' · screen ' + screen.width + '×' + screen.height + ' · insets top ' + sat + ' bottom ' + sab + ' · dpr ' + window.devicePixelRatio;
+}
 function showToast(msg, undo, ms){ state.toast = msg; state.toastUndo = undo || null; render(); setTimeout(()=>{ state.toast=null; state.toastUndo=null; render(); }, ms||2200); }
 // Closes whatever sheet is open. A projection note that was held back while a milestone
 // screen was up shows the moment that screen closes.
@@ -1460,6 +1473,7 @@ function render(){
   }
   app.innerHTML = html;
   runCountUps();
+  fillDisplayDiag();
   document.documentElement.classList.toggle('modal-open', !!state.modal && state.view!=='loading');
   bindGlobal();
   if(state.view==='app' && state.tab==='plan') keepActiveWeekTabVisible();
@@ -3757,6 +3771,7 @@ function renderSettingsTab(){
     <div class="card" style="padding:14px 16px; margin-bottom:16px;">
       <div class="mono" style="font-size:13.5px; word-break:break-all;">${esc(APP_URL)}</div>
       <div class="hint" style="margin:6px 0 12px;">To put Peak back on your home screen: open this link in Safari, tap Share, then Add to Home Screen.</div>
+      <div class="hint mono" id="display-diag" style="margin:0 0 12px; font-size:11.5px;"></div>
       <div class="row"><button class="btn btn-block" data-act="copy-app-link">${ICONS.pin} Copy link</button>${(navigator.share ? `<button class="btn btn-block" data-act="share-app-link">Share…</button>` : '')}</div>
     </div>
     <div class="section-title">Backup</div>
