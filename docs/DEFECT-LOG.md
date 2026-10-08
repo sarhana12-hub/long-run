@@ -288,6 +288,10 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 115. **Pacing sheet repeated "avg pace — go by effort, not this number" on every mile row**, under a three-sentence banner and a three-sentence explainer. *Fix:* banner and explainer are one sentence each; rows read "by effort · 7:34/mi average". Even and negative-split notes shortened too.
 
+116. **The app icon and launch image did not match the brand.** The icon was the mark in black on off-white; the launch image was a hard-edged white square on black; neither used the lime mark every screen carries. *Fix:* tools/make-icons.js renders the mark by signed distance and writes every size through node's zlib (no image library): a full-bleed lime icon with the mark inside the maskable safe zone, and launch images for all twelve iPhone sizes in dark and light, the light set served through a prefers-color-scheme media query. Manifest and theme-color metas use the new page background.
+
+117. **Motion was incidental.** *Fix (owner-approved three moments):* figures that change count to their new value over half a second (the Now projection, this week's logged miles, total logged), a just-logged day card settles into green while its tick pops in once, and sheets ease in over 200 ms with a slight scale instead of sliding 28 px. All three honour reduced-motion. *Note:* requestAnimationFrame does not fire inside the desktop preview pane, so the count-up was verified by trace (right keys and values, one render) rather than by eye.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
