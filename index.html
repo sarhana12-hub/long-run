@@ -3935,7 +3935,7 @@ function renderSettingsTab(){
     <div class="section-title">Reminders</div>
     <div class="card" style="padding:14px 16px; margin-bottom:16px;">
       <div class="settings-row" style="padding-top:0;"><div><div class="lbl">Reminders</div><div class="sub">${state.push && state.push.enabled ? 'On · one line per notification, local time' : 'Today\'s workout in the morning, tomorrow\'s in the evening'}</div></div>
-        <button class="btn btn-sm ${state.push && state.push.enabled ? '' : 'btn-primary'}" data-act="${state.push && state.push.enabled ? 'reminders-off' : 'reminders-on'}">${state.push && state.push.enabled ? 'Turn off' : 'Turn on'}</button></div>
+        <button class="btn btn-sm ${state.push && state.push.enabled ? '' : 'btn-primary'}" data-act="${state.push && state.push.enabled ? 'reminders-off' : 'reminders-on'}" style="white-space:nowrap;">${state.push && state.push.enabled ? 'Turn off' : 'Turn on'}</button></div>
       ${[['morning','Morning','Today\'s workout'],['evening','Evening','Tomorrow\'s workout']].map(([k,label,sub])=>`
       <div class="settings-row" style="${state.push && state.push.enabled ? '' : 'opacity:.6;'}"><div><div class="lbl">${label}</div><div class="sub">${sub}</div></div>
         <div style="display:flex; align-items:center; gap:8px;"><button class="chip ${state.push[k+'On'] ? 'active' : ''}" data-act="push-toggle" data-which="${k}" style="padding:6px 12px;">${state.push[k+'On'] ? 'On' : 'Off'}</button><input class="input" type="time" id="push-${k}-time" value="${esc(state.push[k+'Time'] || (k==='morning' ? '07:00' : '20:00'))}" style="width:auto; padding:8px 10px; ${state.push[k+'On'] ? '' : 'opacity:.5;'}"></div></div>`).join('')}
