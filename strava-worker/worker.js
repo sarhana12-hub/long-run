@@ -151,7 +151,7 @@ export default {
       if (!env.PEAK_PUSH) return json({ error: 'Reminders are not set up on the server' }, 503);
       const rec = body.endpoint ? await env.PEAK_PUSH.get(await sha256hex(body.endpoint), 'json') : null;
       if (!rec) return json({ error: 'Not registered' }, 404);
-      const r = await sendPush(env, rec.sub, { title: 'Peak', body: 'Reminders are on. This is what a morning will look like.', url: './' });
+      const r = await sendPush(env, rec.sub, { title: 'Reminders are on', body: 'This is what a morning will look like: one line with the day's workout.', url: './' });
       return json({ ok: r === 'ok', result: r, status: LAST_PUSH && LAST_PUSH.status, detail: LAST_PUSH && LAST_PUSH.text });
     }
 
