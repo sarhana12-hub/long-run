@@ -242,7 +242,7 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 ## Round 11 — Progress tab: projection explained on demand, per-run impact, logging feedback (2026-10-08)
 
-94. **The projection tile carried three lines of explanation** (evidence, range note, goal check) above the numbers a runner actually wants. *Fix:* the tile shows the three times and the change since the start; everything else sits behind an "i" button (and a tap on the tile) in the detail sheet, which now also carries the basis for what moves the number and what does not.
+94. **The projection tile carried three lines of explanation** (evidence, range note, goal check) above the numbers a runner actually wants. *Fix:* the tile shows the three times and the change since the start; everything else sits behind an "i" button (and a tap on the tile) in the detail sheet, which now also carries the basis for what moves the number and what does not. *Follow-up (owner screenshot, 2026-10-08):* the sheet itself was a wall of centred text with the change line set in the 32px number font. Now the sheet is numbers, a normal-size change line, the evidence line and the "What moved it" list; the basis sits in a collapsed "How this is worked out" section, left-aligned in three short paragraphs, which opens expanded only from the "i" button.
 
 95. **No way to see which runs moved the projection.** *Fix:* `projectionImpacts` (engine) lists every logged run that moved the "now" number, newest first, with the seconds it added or took off and why (race reset, session banked, pace implied more/less fitness, volume back on plan). The Progress tab shows the latest five under the tile; the detail sheet shows them all. Each row opens its day. *Guard:* tests/projection.js 8.
 

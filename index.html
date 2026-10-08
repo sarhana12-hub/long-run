@@ -2871,7 +2871,7 @@ function renderRaceProjectionSection(stats, unit, fmt){
   if(stats.raceProjection){
     const p = stats.raceProjection;
     return `
-    <div class="section-title section-row" style="padding:0; margin-top:0;"><span>Projected race performance</span><button class="info-btn" data-act="open-stat-detail" data-stat="race-projection" aria-label="How this is worked out">i</button></div>
+    <div class="section-title section-row" style="padding:0; margin-top:0;"><span>Projected race performance</span><button class="info-btn" data-act="open-stat-detail" data-stat="race-projection" data-explain="1" aria-label="How this is worked out">i</button></div>
     <button class="card stat-tile" data-act="open-stat-detail" data-stat="race-projection" style="padding:6px 16px 12px; margin-bottom:${stats.impacts.length ? 10 : 16}px;">
       ${projectionRowsHtml(p, unit, fmt)}
       <div class="hint" style="margin-top:8px;">${projectionDeltaText(p.start.sec, p.current.sec)}</div>
@@ -2888,7 +2888,7 @@ function renderRaceProjectionSection(stats, unit, fmt){
         </div>
       </div>`).join('');
     return `
-    <div class="section-title section-row" style="padding:0; margin-top:0;"><span>Projected race performance</span><button class="info-btn" data-act="open-stat-detail" data-stat="general-projection-5k" aria-label="How this is worked out">i</button></div>
+    <div class="section-title section-row" style="padding:0; margin-top:0;"><span>Projected race performance</span><button class="info-btn" data-act="open-stat-detail" data-stat="general-projection-5k" data-explain="1" aria-label="How this is worked out">i</button></div>
     <div class="card" style="padding:0 16px; margin-bottom:${stats.impacts.length ? 10 : 16}px;">${rows}</div>
     ${renderImpactsCard(stats.impacts, unit, fmt, 5, 'general-projection-5k')}`;
   }
@@ -3836,12 +3836,25 @@ function renderStatDetailModal(statKey){
     const p = statKey==='race-projection' ? s.raceProjection : s.generalProjections.find(x=>statKey===`general-projection-${x.key}`);
     title = statKey==='race-projection' ? 'Projected race performance' : `Projected ${p.label} performance`;
     const impacts = statKey==='race-projection' ? s.impacts : projectionImpacts(state.plan, state.logs, todayDate(), p.km, {trackingStart: state.setup.trackingStartDate});
-    content = `<div class="card" style="padding:4px 14px; margin-bottom:14px;">${projectionRowsHtml(p, unit, state.paceFormat)}</div>`
-      + statResultHtml(projectionDeltaText(p.start.sec, p.current.sec), 'change since you started', 'var(--accent-strong)')
-      + (p.goalCheck ? `<div class="hint" style="text-align:center; margin-top:10px; color:${p.goalCheck.status==='beyond' ? 'var(--z-tempo)' : 'var(--ink)'};">${esc(goalCheckText(p.goalCheck, p.goal))}</div>` : '')
-      + `<div class="hint" style="margin-top:14px;">${esc(projectionEvidenceText(p.fitness))} The range is the reliable part; the headline is its middle.</div>`
-      + `<div style="margin-top:14px;">${renderImpactsCard(impacts, unit, state.paceFormat, 0, statKey)}</div>`;
-    footnote = `<strong>What moves it.</strong> A logged race resets the number outright: a race is the truest measure of fitness. Each quality session logged on its planned day banks its share of the gain the plan expects, about one fitness point per six weeks of sessions. Tempo and over/under runs also count as evidence through their pace, and cruise, interval and rep sessions through the average rep time you enter; the last five such runs within six weeks count, and one run can only ever move it a fraction. Hill, fartlek, progression and race-pace sessions bank their share but carry no pace evidence. Easy and long runs don't move it: they are run at a pace that says nothing about your ceiling. They only count against you if two weeks fall under half the planned volume, when the number eases slowly. "If you complete the plan" adds the gain still to come, in full.`;
+    const deltaSec = Math.round(p.start.sec - p.current.sec); // positive = faster now
+    const deltaLine = Math.abs(deltaSec) < 5
+      ? `<div class="hint" style="text-align:center; margin-top:12px;">No change yet. It moves as you log quality sessions and races.</div>`
+      : `<div style="text-align:center; margin-top:12px;"><span class="mono" style="font-weight:800; font-size:24px; color:${deltaSec>0 ? 'var(--accent-strong)' : 'var(--z-tempo)'};">${secToClock(Math.abs(deltaSec))}</span><span style="font-weight:700; font-size:14px; margin-left:6px;">${deltaSec>0 ? 'faster' : 'slower'} than at the start</span></div>`;
+    const explain = !!state.modal.explain;
+    content = `<div class="card" style="padding:4px 14px; margin-bottom:4px;">${projectionRowsHtml(p, unit, state.paceFormat)}</div>`
+      + deltaLine
+      + (p.goalCheck ? `<div class="hint" style="text-align:center; margin-top:8px; color:${p.goalCheck.status==='beyond' ? 'var(--z-tempo)' : 'var(--ink)'};">${esc(goalCheckText(p.goalCheck, p.goal))}</div>` : '')
+      + `<div class="hint" style="text-align:center; margin-top:8px;">${esc(projectionEvidenceText(p.fitness))}</div>`
+      + `<div style="margin-top:14px;">${renderImpactsCard(impacts, unit, state.paceFormat, 0, statKey)}</div>`
+      + `<details class="card settings-details" style="padding:0 16px; margin-top:4px;"${explain ? ' open' : ''}>
+        <summary><span class="lbl" style="font-weight:700; font-size:14px;">How this is worked out</span><span class="chev" style="color:var(--muted);">${ICONS.chevron}</span></summary>
+        <div class="hint" style="margin:0 0 14px; font-size:13px; line-height:1.5;">
+          <p style="margin:0 0 10px;"><strong>Three numbers, one model.</strong> Each time is the middle of a range, and the range is the reliable part. "At the start" is your setup fitness. "If you complete the plan" adds the gain the remaining sessions are expected to bring.</p>
+          <p style="margin:0 0 10px;"><strong>What moves "Now".</strong> A logged race resets it outright. Each quality session logged on its planned day banks its share of the plan's expected gain, about one fitness point per six weeks of sessions. Tempo and over/under runs also count through their pace; cruise, interval and rep sessions through the average rep time you enter. The last five such runs within six weeks count, and one run only ever moves it a fraction.</p>
+          <p style="margin:0;"><strong>What doesn't.</strong> Hill, fartlek, progression and race-pace sessions bank their share but carry no pace evidence. Easy and long runs never move it: their pace says nothing about your ceiling. Two weeks under half the planned volume ease it down slowly.</p>
+        </div>
+      </details>`;
+    footnote = '';
   }
   return modalShell(title, `${content}${footnote?`<div class="hint" style="text-align:center; margin-top:16px;">${footnote}</div>`:''}`);
 }
@@ -4947,7 +4960,7 @@ function onClick(e){
     render(); return;
   }
   if(act==='open-stat-detail'){
-    state.modal={type:'stat-detail', stat: el.dataset.stat};
+    state.modal={type:'stat-detail', stat: el.dataset.stat, explain: el.dataset.explain==='1'};
     render(); return;
   }
   if(act==='open-achievements'){
