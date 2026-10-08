@@ -278,6 +278,10 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 110. **Mixed iconography**: a ⛰ emoji on hilly days and a text arrow in the then-vs-now row among line icons. *Fix:* both are SVG line icons in the same set (mountain, arrowRight).
 
+111. **The day sheet's Logged card still wore the accent** after "done" got its own colour, and on a rep session it compared the whole-run average (recovery jogs included) with the rep pace, so a faster-than-planned session read "0:10/mi slower than planned" above "reps averaged 3:25". *Fix:* the card uses the done colours; rep sessions compare rep against planned rep ("reps 3:25 per 800 m, 0:06 faster than planned"); the impact line says what the run did to the race projection, from the same per-run figure the Progress tab shows, plus the training-pace shift when there is one.
+
+112. **Log sheet hints were paragraphs.** The screenshot guidance ran five sentences; the rep-time hint two. *Fix:* one line each.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

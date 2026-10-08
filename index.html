@@ -4257,7 +4257,7 @@ function repFieldHtml(dateStr, repValue, idPrefix){
   if(!day || !['intervals','cruise','reps'].includes(day.type)) return '';
   const repM = repMetersForDay(day);
   if(!repM) return '';
-  return `<div class="field"><label class="field-label">Average time per ${repM} m rep (m:ss)</label><input class="input" type="text" inputmode="numeric" id="${idPrefix}-rep" value="${esc(repValue||'')}" placeholder="e.g. 3:45"><div class="hint">Your reps feed the fitness projection; the whole-run time alone can't, because it includes the recovery jogs.</div></div>`;
+  return `<div class="field"><label class="field-label">Average time per ${repM} m rep (m:ss)</label><input class="input" type="text" inputmode="numeric" id="${idPrefix}-rep" value="${esc(repValue||'')}" placeholder="e.g. 3:45"><div class="hint">Only the rep time can feed the projection; the whole-run time includes the recovery jogs.</div></div>`;
 }
 // "Scan a workout screenshot": the picture is read on the phone (Tesseract.js, fetched on
 // first use), parsed by scan.js, and the form is prefilled for the runner to check.
@@ -4267,7 +4267,7 @@ function scanBlockHtml(scan){
     : status==='reading' ? `<div class="hint">Reading the screenshot… ${scan.progress!=null ? Math.round(scan.progress*100)+'%' : ''}</div>`
     : status==='done' ? `<div class="hint" style="color:var(--done);">${esc(scan.summary)}</div>${scan.notes && scan.notes.length ? `<div class="hint">${scan.notes.map(esc).join(' ')}</div>` : ''}${scan.splits && scan.splits.length ? `<button class="btn btn-sm" data-act="remove-splits" style="margin-top:6px;">Remove splits</button>` : ''}<details style="margin-top:4px;"><summary class="hint" style="cursor:pointer;">What was read</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(scan.raw||'')}</pre></details>`
     : status==='error' ? `<div class="hint" style="color:var(--z-tempo);">${esc(scan.error||'Could not read that screenshot.')}</div>`
-    : `<div class="hint">Apple Fitness: open the run, tap Splits and screenshot that page. One picture is enough. The summary screen of any app (Apple, Strava, Garmin, Nike) works too. Copy the screenshot and tap Paste, or choose it from your photos. The numbers are read on your phone and filled in below; every field can be changed before you save.</div>`;
+    : `<div class="hint">Screenshot the run summary or splits page from any app, then paste or choose it. The numbers fill in below and you can change any of them.</div>`;
   return `<div class="card" style="padding:12px 14px; margin-bottom:14px; background:var(--surface-2);">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
       <div style="font-weight:700; font-size:13.5px;">Scan a workout screenshot</div>
@@ -4444,7 +4444,14 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
     ? `${fmtDist(log.distanceKm,unit)} logged vs ${fmtDist(plannedKm,unit)} planned`
     : `${fmtDist(log.distanceKm,unit)} logged — nothing was planned this day`;
 
-  const paceCompareLine = paceDeltaLine(comparisonPaceSecPerKm, plannedPaceSecPerKm, unit, fmt);
+  const repBasedDay = ['intervals','cruise','reps'].includes(day.type);
+  const plannedRepSec = (repBasedDay && log.repMeters>0 && plannedPaceSecPerKm) ? plannedPaceSecPerKm*log.repMeters/1000 : null;
+  // On a rep day the whole-run average includes the recovery jogs, so it says nothing about
+  // the effort; the comparison is rep against planned rep once the rep time is known.
+  const paceCompareLine = (repBasedDay && log.repSec>0 && plannedRepSec)
+    ? (Math.abs(log.repSec-plannedRepSec)<3 ? `reps ${secToClock(log.repSec)} per ${log.repMeters} m, right on target` : `reps ${secToClock(log.repSec)} per ${log.repMeters} m, ${secToClock(Math.abs(log.repSec-plannedRepSec))} ${log.repSec<plannedRepSec?'faster':'slower'} than planned`)
+    : repBasedDay ? '' : paceDeltaLine(comparisonPaceSecPerKm, plannedPaceSecPerKm, unit, fmt);
+  const repCompared = repBasedDay && log.repSec>0 && !!plannedRepSec;
 
   const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs', racepace:'race-pace runs', race:'race-day runs'};
   const repBased = ['intervals','cruise','reps'].includes(day.type);
@@ -4460,21 +4467,20 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
     const withoutPaces = getWeekPaces(plan, week, logs.filter(l=>l.id!==log.id));
     const deltaSecPerKm = withPaces.tempoPerKm - withoutPaces.tempoPerKm;
     const deltaPerUnit = unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm;
-    const repNote = log.repSec>0 && log.repMeters>0 ? ` Reps averaged ${secToClock(log.repSec)} per ${log.repMeters} m.` : '';
-    if(Math.abs(deltaPerUnit)<1){
-      impactLine = `Counted toward your fitness projection; no meaningful change to training paces from this run alone.${repNote}`;
-    } else {
-      impactLine = `Counted toward your fitness projection — training paces moved about ${Math.round(Math.abs(deltaPerUnit))} sec/${unit} ${deltaPerUnit>0?'slower':'faster'}.${repNote}`;
-    }
+    const impactKm = isGeneralPlan(state.setup) ? 5 : plan.raceDistanceKm;
+    const impact = projectionImpacts(plan, logs, todayDate(), impactKm, {trackingStart: state.setup.trackingStartDate}).find(x=>x.id===log.id);
+    const projNote = impact && impact.deltaSec!==0 ? `${raceLabelKm(impactKm)} projection ${secToClock(Math.abs(impact.deltaSec))} ${impact.deltaSec<0?'faster':'slower'}.` : 'Counted toward the projection; no change from this run alone.';
+    const paceNote = Math.abs(deltaPerUnit)>=1 ? ` Training paces about ${Math.round(Math.abs(deltaPerUnit))} sec/${unit} ${deltaPerUnit>0?'slower':'faster'}.` : '';
+    impactLine = projNote + paceNote;
   }
 
-  return `<div class="card" style="padding:14px 16px; margin-bottom:16px; background:var(--accent-soft); border-color:var(--accent-strong);">
-    <div style="display:flex; align-items:center; gap:6px; font-weight:800; font-size:12.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink); margin-bottom:8px;">
+  return `<div class="card" style="padding:14px 16px; margin-bottom:16px; background:var(--done-bg); border-color:var(--done);">
+    <div style="display:flex; align-items:center; gap:6px; font-weight:800; font-size:12.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--done); margin-bottom:8px;">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
       Logged
     </div>
     <div style="font-weight:700; font-size:14.5px;">${esc(distLine)}</div>
-    <div style="font-size:13.5px; color:var(--ink-soft); margin-top:2px;">${secToClock(log.durationSec)}${actualPaceSecPerKm!=null?' · '+paceOrSpeedStr(actualPaceSecPerKm,unit,fmt):''}${paceCompareLine?' · '+(warmupAdjusted?'excluding warm-up, ':'')+paceCompareLine:''}</div>
+    <div style="font-size:13.5px; color:var(--ink-soft); margin-top:2px;">${secToClock(log.durationSec)}${actualPaceSecPerKm!=null?' · '+paceOrSpeedStr(actualPaceSecPerKm,unit,fmt):''}${paceCompareLine?' · '+((warmupAdjusted && !repCompared)?'excluding warm-up, ':'')+paceCompareLine:''}</div>
     <div class="hint" style="margin-top:8px; color:var(--ink-soft);">${impactLine}</div>
     <button class="btn btn-ghost btn-sm" data-act="delete-log" data-id="${log.id}" style="margin-top:10px; color:#C4432E;">Remove this log</button>
   </div>`;
