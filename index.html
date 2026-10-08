@@ -2242,7 +2242,7 @@ function renderRaceReviewCard(unit, stats){
       <div style="margin-top:10px; font-size:13.5px; line-height:1.5;">
         <div>Projected on day one: <b class="mono">${secToClock(r.before.start.sec)}</b> · you ran <b style="color:${vsStart>=0?'var(--done)':'var(--z-tempo)'};">${secToClock(Math.abs(vsStart))} ${vsStart>=0?'faster':'slower'}</b>.</div>
         <div>Projected on the eve: <b class="mono">${secToClock(r.before.now.sec)}</b> · ${verdict}${Math.abs(vsEve)>=5 ? ` (${secToClock(Math.abs(vsEve))} ${vsEve>=0?'faster':'slower'})` : ''}.</div>
-        <div>Fitness number: <b class="mono">${r.vdot}</b>, ${fit>=0?'up':'down'} ${Math.abs(fit).toFixed(1)} from ${r.startVdot} at the start.</div>
+        <div>Fitness now: a <b class="mono">${secToClock(predictedTimeMinFromVdot(r.vdot, 5)*60)}</b> 5K, from ${secToClock(predictedTimeMinFromVdot(r.startVdot, 5)*60)} at the start.</div>
         ${goalLine ? `<div>${goalLine}</div>` : ''}
         ${trainingLine ? `<div class="hint" style="margin-top:6px;">${trainingLine}</div>` : ''}
       </div>
@@ -3871,7 +3871,7 @@ function renderSettingsTab(){
     <div class="card" style="padding:6px 16px;">
       ${row(esc(planLabel(s)), general ? `${s.weeks} week${s.weeks===1?'':'s'}` : niceDateFull(parseDate(s.raceDate)), btn('open-switch-plan', 'Change plan'))}
       ${row('Mileage', `${fmtDist(s.currentWeeklyKm,unit,0)}/week${state.plan.peakWeeklyKm ? ` → peaks at ${fmtDist(state.plan.peakWeeklyKm,unit,0)}${state.plan.peakLongKm ? `, long run up to ${fmtDist(state.plan.peakLongKm,unit,0)}` : ''}` : ''}`)}
-      ${row("This week's paces", `Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)}${general ? '' : ` · Race ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}`}${fit && fit.nowVdot!=null ? ` · fitness ${fit.nowVdot}` : ''}`)}
+      ${row("This week's paces", `Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)}${general ? '' : ` · Race ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}`}`)}
       ${general ? '' : row('Race-day pacing sheet', 'Mile by mile, with checkpoints', btn('open-pacing-sheet', 'Open'))}
       ${row('Calendar', 'Every planned day as an all-day event', btn('export-ics', 'Add (.ics)'))}
       <details class="settings-details">
@@ -3891,7 +3891,7 @@ function renderSettingsTab(){
           ${state.plan.prediction ? row('Projected finish at the start', `${secToClock(state.plan.prediction.lowSec)}–${secToClock(state.plan.prediction.highSec)} · ${esc(state.plan.prediction.basis)}`) : ''}
           ${state.plan.warnings && state.plan.warnings.length ? row("Coach's notes", state.plan.warnings.map(w=>esc(w)).join('<br><br>')) : ''}
           ${!general && s.hillsMode==='hilly' && (s.strengthPerWeek||0)<2 ? `<div class="hint" style="color:var(--z-tempo); padding:4px 0 6px;">Hilly course with ${s.strengthPerWeek||0} strength days: two a week is the usual advice for climbs and descents.</div>` : ''}
-          <div class="hint" style="padding:4px 0 6px;">Paces follow your fitness number, which moves with logged races and quality sessions. To change any input, use Change plan.</div>
+          <div class="hint" style="padding:4px 0 6px;">Paces follow your current fitness, which moves with logged races and quality sessions. To change any input, use Change plan.</div>
         </div>
       </details>
     </div>
@@ -4147,7 +4147,7 @@ function renderStatDetailModal(statKey){
         <summary><span class="lbl" style="font-weight:700; font-size:14.5px;">Methodology</span><span class="chev" style="color:var(--muted);">${ICONS.chevron}</span></summary>
         <div class="hint" style="margin:0 0 14px; font-size:13.5px; line-height:1.5;">
           <p style="margin:0 0 10px;"><strong>Three numbers, one model.</strong> Each time is the middle of a range, and the range is the reliable part. "At the start" is your setup fitness. "If you complete the plan" adds the gain the remaining sessions are expected to bring.</p>
-          <p style="margin:0 0 10px;"><strong>What moves "Now".</strong> A logged race resets it outright. Each quality session logged on its planned day banks its share of the plan's expected gain, about one fitness point per six weeks of sessions. Tempo and over/under runs also count through their pace; cruise, interval and rep sessions through the average rep time you enter. The last five such runs within six weeks count, and one run only ever moves it a fraction.</p>
+          <p style="margin:0 0 10px;"><strong>What moves "Now".</strong> A logged race resets it outright. Each quality session logged on its planned day banks its share of the plan's expected gain, about the gain six weeks of sessions usually bring. Tempo and over/under runs also count through their pace; cruise, interval and rep sessions through the average rep time you enter. The last five such runs within six weeks count, and one run only ever moves it a fraction.</p>
           <p style="margin:0;"><strong>What doesn't.</strong> Hill, fartlek, progression and race-pace sessions bank their share but carry no pace evidence. Easy and long runs never move it: their pace says nothing about your ceiling. Two weeks under half the planned volume ease it down slowly.</p>
         </div>
       </details>`;
@@ -4563,7 +4563,7 @@ function modalLogManualHtml(d){
       <button class="chip ${d.kind!=='race'?'active':''}" data-act="log-kind" data-kind="run">Training run</button>
       <button class="chip ${d.kind==='race'?'active':''}" data-act="log-kind" data-kind="race">This was a race</button>
     </div>
-    ${d.kind==='race' ? `<div class="hint" style="margin:-6px 0 14px;">A race result resets your fitness number and every training pace from here on.</div>` : ''}
+    ${d.kind==='race' ? `<div class="hint" style="margin:-6px 0 14px;">A race result resets your fitness and every training pace from here on.</div>` : ''}
     <div id="lr-planned">${d.kind==='race' ? '' : plannedWorkoutHtml(d.date)}</div>
     ${d.kind==='race' ? '' : repFieldHtml(d.date, d.rep, 'lr')}
     <div class="row">
@@ -4673,7 +4673,7 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
   const eligible = log.kind==='race' || day.type==='tempo' || day.type==='overunder' || (repBased && log.repSec>0);
   let impactLine;
   if(log.kind==='race'){
-    impactLine = `A race result: it resets your fitness number and the training paces from here on.`;
+    impactLine = `A race result: it resets your fitness and the training paces from here on.`;
   } else if(!eligible){
     const noun = NONELIGIBLE_NOUNS[day.type];
     impactLine = repBased ? `Not used for the projection: enter the average rep time to count this session.` : (noun ? `No impact on the projection — ${noun} aren't used for it.` : `No impact on the projection — this run type isn't used for it.`);
