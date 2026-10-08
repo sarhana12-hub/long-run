@@ -468,8 +468,6 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 <body>
 <div class="status-scrim"></div>
 <div id="app"></div>
-<!-- Safari on iPhone has no vibration API; toggling a native switch inside a user gesture produces the system haptic (iOS 17.4+). Off-screen, never display:none. -->
-<label id="haptic-label" aria-hidden="true" style="position:fixed; left:0; bottom:0; width:1px; height:1px; overflow:hidden; opacity:0.02; pointer-events:none; z-index:-1;"><input type="checkbox" switch id="haptic-switch" tabindex="-1"></label>
 
 <script src="engine.js"></script>
 <script src="library.js"></script>
@@ -1037,9 +1035,6 @@ function runCountUps(){
     requestAnimationFrame(step);
   });
 }
-// One system tap for a moment that deserves it: a run logged, strength marked done, a day
-// moved or swapped, a milestone earned. Must run synchronously inside the tap that caused it.
-function haptic(){ try{ const el = document.getElementById('haptic-switch'); if(!el) return; el.checked = !el.checked; el.dispatchEvent(new Event('change', {bubbles:true})); const lb = document.getElementById('haptic-label'); if(lb) lb.click(); }catch(e){} }
 // How the phone is laying the app out, for the Settings card: tells apart "the page is
 // shorter than the screen" from "the page is tall but padded".
 function fillDisplayDiag(){
@@ -2484,7 +2479,6 @@ function commitLogEntry(logData){
   state.logs = [item, ...state.logs];
   state.modal = null;
   state.justLogged = item.date; setTimeout(()=>{ if(state.justLogged===item.date) state.justLogged = null; }, 1500);
-  haptic();
   const note = projectionChangeMessage(before, projectionSnapshot(), item);
   const fired = evaluateAndTriggerAchievements(item);
   // No inline Undo when an achievement fires - that flow already lands on its own
@@ -2894,7 +2888,6 @@ function evaluateAndTriggerAchievements(newLog){
     earned.push({def, message: result.message});
   }
   if(!earned.length) return false;
-  haptic();
   const top = earned[0];
   state.modal = {type:'milestone', data:{
     hero: top.def.tier==='summit' ? ICONS[top.def.hero] : null,
@@ -3774,7 +3767,6 @@ function renderSettingsTab(){
       <div class="mono" style="font-size:13.5px; word-break:break-all;">${esc(APP_URL)}</div>
       <div class="hint" style="margin:6px 0 12px;">To put Peak back on your home screen: open this link in Safari, tap Share, then Add to Home Screen.</div>
       <div class="hint mono" id="display-diag" style="margin:0 0 12px; font-size:11.5px;"></div>
-      <div class="row" style="margin-bottom:10px;"><button class="btn btn-block" data-act="test-haptic">Test haptic</button></div>
       <div class="row"><button class="btn btn-block" data-act="copy-app-link">${ICONS.copy} Copy link</button>${(navigator.share ? `<button class="btn btn-block" data-act="share-app-link">Share…</button>` : '')}</div>
     </div>
     <div class="section-title">Backup</div>
@@ -5125,7 +5117,6 @@ function onClick(e){
     state.modal={type:'day-detail', weekIndex:found.weekIndex, dayIndex:found.dayIndex};
     render(); return;
   }
-  if(act==='test-haptic'){ haptic(); showToast(('switch' in (document.getElementById('haptic-switch')||{})) ? 'Tapped the switch' : 'This iOS has no switch control (needs 17.4+)'); return; }
   if(act==='copy-app-link'){
     const done = () => showToast('Link copied');
     if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(APP_URL).then(done, ()=>showToast(APP_URL, null, 6000)); }
@@ -5191,7 +5182,6 @@ function onClick(e){
       ? state.strengthDone.filter(d=>d!==date)
       : [...state.strengthDone, date];
     Store.setStrengthDone(state.strengthDone);
-    if(state.strengthDone.includes(date)) haptic();
     // Marking done (not un-marking) can itself earn an achievement (Strength Session
     // Logged, Strength Streak) - checked the same way a logged run is, just with no
     // specific run to pass through. evaluateAndTriggerAchievements sets state.modal to
@@ -5224,7 +5214,6 @@ function onClick(e){
     const {weekIndexA:wa, dayIndexA:a, weekIndexB:wb, dayIndexB:b} = state.modal.data;
     swapDayContents(wa, a, wb, b);
     state.modal = null;
-    haptic();
     showToast('Swapped');
     return;
   }
@@ -5232,7 +5221,6 @@ function onClick(e){
     const wi = Number(el.dataset.wi), di = Number(el.dataset.di), twi = Number(el.dataset.twi), tdi = Number(el.dataset.tdi);
     const label = state.plan.weeks[wi].days[di].label;
     moveMissedSession(wi, di, twi, tdi);
-    haptic();
     state.currentWeekIndex = twi;
     state.modal = {type:'day-detail', weekIndex:twi, dayIndex:tdi};
     render();
