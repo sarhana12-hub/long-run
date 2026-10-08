@@ -308,6 +308,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 125. **Too many colours on the Plan screen** (owner): coloured card edge, coloured pill, purple strength badge, blue tinted numbers, lime today outline, on every row. *Fix:* colour answers one question per screen. The coloured left edge is gone; easy and rest pills are grey, so only sessions and the long run carry a hue; strength is a grey dumbbell beside the distance that turns green when done; hilly and treadmill marks are grey; lime is today and the Log button only; done green stays. A row went from four colour signals to one.
 
+126. **The floating Log a run button covered the list and was the third Log button on the screen** (today card, day sheet). *Fix (owner question, my recommendation):* removed. Today logs from the today card, any other day from its sheet, a new runner from the Progress empty state. Toasts sit just above the tab bar.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

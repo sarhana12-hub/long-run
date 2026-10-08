@@ -443,7 +443,7 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 
 .center-screen{min-height:100dvh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; padding:20px;}
 .banner{margin:8px 18px 0; padding:10px 13px; border-radius:12px; background:var(--z-tempo-bg); color:var(--z-tempo); font-size:12.5px; font-weight:600; display:flex; gap:8px; align-items:flex-start;}
-.toast{position:fixed; bottom:calc(150px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); animation:overlayIn .15s ease-out; width:max-content; max-width:calc(100% - 36px); text-align:center; background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:999px; font-size:13.5px; font-weight:700; z-index:60; box-shadow:var(--shadow);}
+.toast{position:fixed; bottom:calc(92px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); animation:overlayIn .15s ease-out; width:max-content; max-width:calc(100% - 36px); text-align:center; background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:999px; font-size:13.5px; font-weight:700; z-index:60; box-shadow:var(--shadow);}
 .dow-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px;}
 .dow-opt{padding:8px 0; text-align:center; border-radius:9px; border:1px solid var(--line); background:var(--surface-2); font-size:11.5px; font-weight:700; color:var(--muted);}
 .dow-opt.sel{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
@@ -2041,7 +2041,6 @@ function renderApp(){
     </div>
   </div>
   ${body}
-  ${state.tab==='plan' ? `<button class="fab" data-act="open-log">${ICONS.plus} Log a run</button>` : ''}
   <div class="tabbar"><div class="tabbar-inner">
     ${tabBtn('plan', ICONS.route, 'Plan')}
     ${tabBtn('progress', ICONS.chart, 'Progress')}
