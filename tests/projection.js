@@ -99,6 +99,13 @@ console.log('6b. nothing logged at all: no decline (defect 84)');
   check('weeks before the tracking start count as done in full', g2.sessionsDue>0 ? g2.sessionsDone===g2.sessionsDue : true, `${g2.sessionsDone}/${g2.sessionsDue}`);
 }
 
+console.log('6c. back-dated plan, tracking from today: now is faster than the start (defect 93)');
+{
+  const today = at(35);
+  const p = g.fitnessProjections(plan, [], today, plan.raceDistanceKm, 0, {trackingStart: g.fmtDate(today)});
+  check('now beats the start when past sessions are credited', p.now.sec < p.start.sec - 5, g.secToClock(p.now.sec)+' vs '+g.secToClock(p.start.sec));
+}
+
 console.log('7. race-time projections');
 {
   const t = dayOf('tempo'); const today = g.parseDate(t.day.date);

@@ -238,6 +238,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 92. **A 13-week 10K plan that never left 20 miles a week.** *Cause:* 5K/10K targets were set equal to the starting mileage. *Fix:* 5K/10K plans build to about a quarter above the start, within the step rule.
 
+93. **"Now" projected slower than "At the start" and the trail sat at zero for eight weeks** on a back-dated plan tracked from today. *Cause:* the Progress page called the projection without the tracking start, so the credited weeks were not credited there; the trail and the mileage totals excluded days before the tracking start. *Fix:* the tracking start is passed through; the trail counts the whole plan and the climber starts where the assumed weeks left off; the onboarding hint says those weeks count as done. *Guard:* tests/projection.js 6c.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

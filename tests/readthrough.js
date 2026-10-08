@@ -9,7 +9,7 @@ const MI = g.KM_PER_MI;
 const DOW = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 function raceOn(weeks, dow){ let d = g.addDays(g.todayDate(), weeks*7); while(d.getDay()!==dow) d = g.addDays(d,1); return g.fmtDate(d); }
 const PROFILES = [
-  {name:'THE OWNER — 10K on 7 Nov 2026, 20 mpw, 5 runs, 3 strength, long run Saturday, hilly, 23:15 5K, training since 15 Aug', s:{units:'mi', raceKey:'10k', raceDistanceKm:10, raceDate:'2026-11-07', mpw:20, recent:{km:5, sec:23*60+15}, longest:10, runs:5, strength:3, longDow:6, skipBase:false, taper:'full', hills:'hilly', speed:'high', dayOne:'2026-08-15'}},
+  {name:'THE OWNER — 10K on 31 Oct 2026, 20 mpw, 5 runs, 3 strength, long run Saturday, hilly, 23:15 5K, training since 15 Aug', s:{units:'mi', raceKey:'10k', raceDistanceKm:10, raceDate:'2026-10-31', mpw:20, recent:{km:5, sec:23*60+15}, longest:10, runs:5, strength:3, longDow:6, skipBase:false, taper:'full', hills:'hilly', speed:'high', dayOne:'2026-08-15'}},
   {name:'10K in 4 weeks, 20 mpw, 4 runs, 2 strength, trained since 8 weeks ago', s:{units:'mi', raceKey:'10k', raceDistanceKm:10, weeks:4, raceDow:6, mpw:20, recent:{km:5, sec:25*60+30}, runs:4, strength:2, longDow:0, skipBase:false, taper:'full', hills:'flat', trainedWeeksAgo:8}},
   {name:'Half in 16 weeks, 25 mpw, 5 runs, 2 strength', s:{units:'mi', raceKey:'half', raceDistanceKm:21.0975, weeks:16, raceDow:0, mpw:25, recent:{km:5, sec:25*60+30}, runs:5, strength:2, longDow:0, skipBase:false, taper:'full', hills:'flat'}},
   {name:'Marathon in 20 weeks, 35 mpw, 5 runs, 2 strength, hilly', s:{units:'mi', raceKey:'marathon', raceDistanceKm:42.195, weeks:20, raceDow:0, mpw:35, recent:{km:10, sec:52*60}, runs:5, strength:2, longDow:6, skipBase:false, taper:'full', hills:'hilly'}},

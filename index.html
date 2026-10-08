@@ -1441,7 +1441,7 @@ function trackFromBlockHtml(d){
   return `<div class="field">
       <label class="field-label">Track progress from</label>
       <div class="chip-select">${trackFromChipsHtml(d.trackFromToday, d.trainingStartDate)}</div>
-      <div class="hint">${d.trackFromToday ? "Adherence and ahead/behind count from today on. The earlier weeks won't count against you, and won't count toward your totals either." : "Adherence and ahead/behind compare against the whole plan from your start date, so they'll only be right once you've logged those earlier runs too."}</div>
+      <div class="hint">${d.trackFromToday ? "The earlier weeks are taken as done in full — they count toward your trail and your fitness. Adherence and ahead/behind are measured from today on." : "Adherence and ahead/behind compare against the whole plan from your start date, so they'll only be right once you've logged those earlier runs too."}</div>
     </div>`;
 }
 function trackFromChipsHtml(trackFromToday, startDate){
@@ -2315,10 +2315,10 @@ function computeProgressStats(){
   const hasGoal = goalVdot!=null && plan.startVdot!=null && Math.abs(goalVdot-plan.startVdot) > 0.05;
   void hasGoal;
   const raceProjection = (!isGeneralPlan(state.setup) && plan.startVdot!=null && currentVdot!=null)
-    ? (()=>{ const p = fitnessProjections(plan, state.logs, todayDate(), plan.raceDistanceKm, state.setup.goalTimeSec||0); return p ? { km: plan.raceDistanceKm, start:p.start, current:p.now, goal:p.potential, goalCheck:p.goal, fitness:p.fitness } : null; })()
+    ? (()=>{ const p = fitnessProjections(plan, state.logs, todayDate(), plan.raceDistanceKm, state.setup.goalTimeSec||0, {trackingStart: state.setup.trackingStartDate}); return p ? { km: plan.raceDistanceKm, start:p.start, current:p.now, goal:p.potential, goalCheck:p.goal, fitness:p.fitness } : null; })()
     : null;
   const generalProjections = (isGeneralPlan(state.setup) && plan.startVdot!=null && currentVdot!=null)
-    ? PROJECTION_DISTANCES.map(d=>{ const p = fitnessProjections(plan, state.logs, todayDate(), d.km, 0); return { ...d, start:p.start, current:p.now, goal: Math.abs(p.potential.vdot-p.now.vdot)>0.05 ? p.potential : null, fitness:p.fitness }; })
+    ? PROJECTION_DISTANCES.map(d=>{ const p = fitnessProjections(plan, state.logs, todayDate(), d.km, 0, {trackingStart: state.setup.trackingStartDate}); return { ...d, start:p.start, current:p.now, goal: Math.abs(p.potential.vdot-p.now.vdot)>0.05 ? p.potential : null, fitness:p.fitness }; })
     : null;
 
   return {
@@ -2850,16 +2850,19 @@ function renderTrainingFlashback(unit, fmt){
 // reachable number - not permanently out of reach because of training weeks that were never
 // going to be logged in the first place.
 function planMileageProgress(plan){
+  // Days before the tracking start ("I've been training, skip the old runs") are assumed done
+  // in full, so the climb counts the whole plan and the climber starts where those weeks left off.
   const planStart = state.setup.trackingStartDate ? parseDate(state.setup.trackingStartDate) : parseDate(plan.weeks[0].weekStart);
-  const totalPlanKm = Math.max(1, plan.weeks.reduce((s,w)=> s + w.days.filter(d=>parseDate(d.date)>=planStart).reduce((s2,d)=>s2+d.km,0), 0));
+  const totalPlanKm = Math.max(1, plan.weeks.reduce((s,w)=> s + w.days.reduce((s2,d)=>s2+d.km,0), 0));
   const today = todayDate();
-  const loggedKm = state.logs.filter(l=>{ const d=parseDate(l.date); return d>=planStart && d<=today; }).reduce((s,l)=>s+l.distanceKm,0);
+  const assumedKm = plan.weeks.reduce((s,w)=> s + w.days.filter(d=>parseDate(d.date)<planStart && d.type!=='race').reduce((s2,d)=>s2+d.km,0), 0);
+  const loggedKm = assumedKm + state.logs.filter(l=>{ const d=parseDate(l.date); return d>=planStart && d<=today; }).reduce((s,l)=>s+l.distanceKm,0);
   const rawFrac = loggedKm/totalPlanKm;
   // `frac` stays clamped to 0-1 for anything positioning a marker on a bounded chart (the
   // trail's y-axis, Peek the Peak's climb path - neither can physically place something
   // past their own top edge); `rawFrac` is the real, uncapped ratio for anywhere that wants
   // to say something honest about actually beating the plan's total mileage.
-  return {loggedKm, totalPlanKm, frac: clamp(rawFrac,0,1), rawFrac};
+  return {loggedKm, totalPlanKm, assumedKm, frac: clamp(rawFrac,0,1), rawFrac};
 }
 
 // A persistent trail map of the plan itself, not a one-off illustration: elevation is
@@ -2888,9 +2891,8 @@ function renderTrainingTrail(plan, unit, stats){
   // (see computeProgressStats) contributes nothing to the climb, so a backdated plan
   // tracked from today reads as a flat stretch through the untracked weeks, then a real
   // climb starting exactly where tracking does, reaching the same total either way.
-  const trackingStart = state.setup.trackingStartDate ? parseDate(state.setup.trackingStartDate) : parseDate(weeks[0].weekStart);
   let running = 0;
-  const plannedCum = weeks.map(w => (running += w.days.filter(d=>parseDate(d.date)>=trackingStart).reduce((s,d)=>s+d.km,0)));
+  const plannedCum = weeks.map(w => (running += w.days.reduce((s,d)=>s+d.km,0)));
   const totalPlanKm = planMileageProgress(plan).totalPlanKm;
   const yFor = km => baseY - clamp(km/totalPlanKm,0,1) * (baseY-topY);
   const plannedPts = weeks.map((w,i)=>({x:xFor(i), y:yFor(plannedCum[i])}));

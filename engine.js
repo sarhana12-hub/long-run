@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 19; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 20; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -2048,8 +2048,8 @@ function projectFitness(plan, logs, today, opts){
 // mileage term uses the mileage that applies to each number: setup mileage at the start,
 // recent logged mileage now (setup mileage until three weeks of logs exist), the plan's
 // peak for the potential.
-function fitnessProjections(plan, logs, today, km, goalSec){
-  const f = projectFitness(plan, logs, today);
+function fitnessProjections(plan, logs, today, km, goalSec, opts){
+  const f = projectFitness(plan, logs, today, opts);
   if(f.nowVdot==null) return null;
   const a = plan.athlete || {};
   const at = (vdot, band, weeklyKm) => {
