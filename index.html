@@ -2141,10 +2141,12 @@ function computeCoachNote(plan, week, unit){
   if(prev.isCutback && week.targetKm>prev.targetKm*1.08){
     return `Back up to full volume after last week's cutback — ${fmtDist(week.targetKm,unit,1)} this week. That's the rhythm, not a jump.`;
   }
-  if(prev.targetKm>0){
-    const pctChange = (week.targetKm-prev.targetKm)/prev.targetKm*100;
+  // A partial first week is judged at the volume it was planned at, not the days it held.
+  const prevKm = prev.partialStart ? (prev.plannedKm || prev.targetKm) : prev.targetKm;
+  if(prevKm>0){
+    const pctChange = (week.targetKm-prevKm)/prevKm*100;
     if(pctChange>=15){
-      return `Weekly mileage steps up from ${fmtDist(prev.targetKm,unit,1)} to ${fmtDist(week.targetKm,unit,1)} this week — a bigger jump than usual, so prioritize sleep and fueling.`;
+      return `Weekly mileage steps up from ${fmtDist(prevKm,unit,1)} to ${fmtDist(week.targetKm,unit,1)} this week — a bigger jump than usual, so prioritize sleep and fueling.`;
     }
   }
   return null;
