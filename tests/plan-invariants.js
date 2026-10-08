@@ -110,6 +110,23 @@ check('Marathon, 30 weeks out', {race:'marathon', mpw:30, weeks:30, recentSec:25
   if(viol.length){ failures++; console.log('  FAIL:'); viol.forEach(x=>console.log('   - '+x)); } else console.log('  ok');
 });
 
+// a plan made mid-week starts on that day: the earlier days of week one are blank, hold no
+// sessions, earn no credit, and the week is judged by what remains
+console.log('\n=== mid-week start: a Thursday 10K plan ===');
+{
+  let thu = g.todayDate(); while(thu.getDay()!==4) thu = g.addDays(thu, 1);
+  const s = {units:'mi', raceKey:'10k', raceDistanceKm:10, raceDate:g.fmtDate(g.addDays(thu, 60)), currentWeeklyKm:20*MI, recentDistanceKm:5, recentTimeSec:23*60+15, longDow:6, weekStartDow:0, ...g.deriveScheduleFromLongDow(6,3), runsPerWeek:5, strengthPerWeek:3, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'hilly', skipBase:false, taperMode:'full', equipment:g.DEFAULT_EQUIPMENT.slice(), planStartDate:g.fmtDate(thu)};
+  const p = g.generatePlan(s); const w0 = p.weeks[0];
+  const viol = [];
+  if(p.startDate!==g.fmtDate(thu)) viol.push('startDate '+p.startDate);
+  if(!w0.partialStart) viol.push('week 1 not marked partial');
+  w0.days.forEach(d=>{ const before = g.parseDate(d.date) < thu; if(before && (d.km>0 || d.strength || !d.beforeStart)) viol.push('day before start not blank: '+d.date); if(!before && d.beforeStart) viol.push('day on/after start blanked: '+d.date); });
+  if(Math.abs(w0.targetKm - w0.days.reduce((a,d)=>a+d.km,0))>0.05) viol.push('week 1 target not the remaining days');
+  const f = g.projectFitness(p, [], thu, {trackingStart:g.fmtDate(thu)}); if(f.sessionsDone>0 || f.earnedGain>0) viol.push('credit earned for blank days');
+  const v = g.validatePlan(p, s); if(v.length) viol.push('validator: '+v.join('; '));
+  if(viol.length){ failures++; console.log('  FAIL:'); viol.forEach(x=>console.log('   - '+x)); } else console.log('  ok');
+}
+
 // prediction sanity
 console.log('\n=== prediction table (5k -> others), 30 mpw, longest run 10 mi ===');
 [[18],[20],[22],[25],[28],[32]].forEach(([m])=>{

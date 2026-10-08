@@ -1126,6 +1126,9 @@ function boot(){
     // same inputs, anchored to the original day one so elapsed weeks keep their place.
     // Logged runs are untouched.
     try{
+      // Plans from before the mid-week start existed: a fresh plan tracked from a day inside
+      // its first week started on that day.
+      if(!setup.planStartDate && setup.trackingStartDate){ const ts = parseDate(setup.trackingStartDate), w0 = parseDate(plan.weeks[0].weekStart); if(ts>w0 && ts<addDays(w0,7)){ setup.planStartDate = setup.trackingStartDate; Store.setSetup(setup); } }
       const dayOne = parseDate(plan.weeks[0].weekStart);
       const fresh = isGeneralPlan(setup) ? generateGeneralPlan(setup, dayOne) : generatePlan(setup, dayOne);
       Store.setPlan(fresh); plan = fresh; rebuilt = true;
@@ -1358,6 +1361,9 @@ function submitOnboarding(){
   const dayOneOverride = (oldPlan && oldPlan.weeks && oldPlan.weeks.length)
     ? parseDate(oldPlan.weeks[0].weekStart)
     : trainingStartOverride;
+  // The plan's true first day: today for a fresh plan, the old plan's for a reconfigure, the
+  // given date for a backdated start. Days of week one before it stay blank.
+  const planStartDate = oldPlan && oldPlan.startDate ? oldPlan.startDate : (trainingStartOverride ? fmtDate(trainingStartOverride) : fmtDate(todayDate()));
 
   if(d.goalMode==='general'){
     const weeks = clamp(Number(d.weeks)||PLAN_KIND_META[d.planKind].weeksDefault, PLAN_KIND_META[d.planKind].weeksMin, PLAN_KIND_META[d.planKind].weeksMax);
@@ -1367,6 +1373,7 @@ function submitOnboarding(){
       ...fitnessFields,
       longDow: d.longDow, weekStartDow: d.weekStartDow||0, ...deriveScheduleFromLongDow(d.longDow, d.planKind==='speed'?2:1),
       runsPerWeek: clamp(7 - d.restDays, 3, 6), strengthPerWeek: d.strengthPerWeek, equipment: (d.equipment||DEFAULT_EQUIPMENT).slice(),
+      planStartDate,
     };
     if(d.planKind==='distance'){
       if(!d.distanceGoalTargetMi){ showToast('Enter a target to build toward'); return; }
@@ -1394,6 +1401,7 @@ function submitOnboarding(){
       longRunEmphasis: d.longRunEmphasis, speedEmphasis: d.speedEmphasis,
       hillsMode: d.hillsMode, skipBase: d.skipBase, taperMode: d.taperMode || 'full', buildPace: d.buildPace || 'standard',
       equipment: (d.equipment||DEFAULT_EQUIPMENT).slice(),
+      planStartDate,
     };
     plan = generatePlan(setup, dayOneOverride);
   }
@@ -2305,6 +2313,7 @@ function renderPlanTab(week, plan){
   const loggedKm = loggedThisWeek.reduce((s,l)=>s+l.distanceKm,0);
 
   const dayCards = week.days.map((day,di)=>{
+    if(day.beforeStart) return '';
     const meta = TYPE_META[day.type];
     const isToday = fmtDate(todayDate())===day.date;
     const cardFmt = dayFmt(day, fmt);

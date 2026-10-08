@@ -316,6 +316,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 129. **The grey dumbbell beside the distance was too easy to miss on strength days** (owner). *Fix:* a short grey badge in the pill row again, "Strength" or "Upper" with the icon, green with a tick once done. Purple stays off the screen.
 
+130. **A plan made on a Thursday showed Sunday to Wednesday as planned days and the Progress tab credited their sessions as done** (owner, on a fresh plan). *Cause:* week one always began on the week's first day, and a fresh mid-week plan was tracked from today, which the projection read as "everything before today was done". *Fix:* the plan carries its start date; days of week one before it are blank (no run, no strength, nothing to log, credit or miss), the week's target is what remains, the validator and sweep judge that week by what it holds, and the week list leaves the blank days out. Existing fresh plans migrate on rebuild from their tracking start. *Guard:* tests/plan-invariants.js "mid-week start". Owner decision 2026-10-08.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

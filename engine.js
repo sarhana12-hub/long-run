@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 23; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 24; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -1580,7 +1580,18 @@ function generatePlan(setup, dayOneOverride){
     weeks.push({weekIndex:w, runsPerWeek: runsW, levelKm: w<nTrain ? levels[w] : peakBase, phase, danielsPhase: w<nTrain ? danielsPhaseFor(w) : 'IV', isCutback: isCutback && !heldCutback, beginnerStructure: beginnerWeek, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), plannedKm: weekHasRace ? round1(days.reduce((s,d)=>s+(d.type==='race'?0:d.km),0)) : weeklyKm, nominalKm: (w<nTrain && !beginnerWeek && !heldCutback) ? vols[w] : weeklyKm, paces, days, baselineVdot:weekVdot, daysToRaceAtStart: daysBetween(weekStart, raceDate)});
   }
 
+  // A plan made mid-week starts today, not last Sunday: the days of week one before the
+  // start date are blank (no run, no strength, nothing to log, credit or miss). The week's
+  // nominal volume is unchanged for the step rule; its target is what the remaining days hold.
+  const planStartDate = setup.planStartDate ? parseDate(setup.planStartDate) : null;
+  if(planStartDate && planStartDate > weekStart0 && weeks.length){
+    const w0 = weeks[0];
+    w0.days = w0.days.map(d => parseDate(d.date) < planStartDate ? blankDayBeforeStart(d) : d);
+    w0.partialStart = true; w0.targetKm = round1(w0.days.reduce((s,d)=>s+d.km,0));
+    refreshStrengthWorkouts(w0.days, w0.phase, w0.weekIndex, {equipment:setup.equipment, minDaysToRace:w0.daysToRaceAtStart, strengthCutoffDays});
+  }
   return {
+    startDate: planStartDate ? fmtDate(planStartDate) : fmtDate(weekStart0),
     generatedAt:new Date().toISOString(), engineVersion:ENGINE_VERSION, raceDate:setup.raceDate, raceDistanceKm:raceKm, totalWeeks,
     athlete:{races:athlete.races, weeklyKm:athlete.weeklyKm, longestKm:athlete.longestKm, vdot:athlete.vdot, marathonSec:athlete.marathonSec},
     startVdot, endVdot, buildWeeksCount:nTrain, rampWeeks, taperDays, taperWeeks:nTaper, taperMode,
@@ -1590,6 +1601,11 @@ function generatePlan(setup, dayOneOverride){
   };
 }
 
+function blankDayBeforeStart(d){
+  return {...d, type:'rest', km:0, label:'Rest', beforeStart:true, strength:false, strengthFocus:null, strides:false, hillStrides:false, easyRole:null, terrain:null,
+    warmupKm:0, cooldownKm:0, qualityKm:0, structuredKm:0, workKm:0, easyVariety:false, progressionEasy:false, racePaceKm:0, paceKey:null, paceKey2:null, desc2:null,
+    descBase:'Before the plan started', notesOverride:null, treadmill:false, treadmillHills:false};
+}
 // What the plan actually built (the nominal ramp can sit above what the run days carry).
 function achievedPeakWeekly(weeks, nTrain, fallback){ const t = weeks.filter(w=>nTrain==null || w.weekIndex<nTrain).map(w=>w.targetKm||0); return t.length ? round1(Math.max(...t)) : fallback; }
 function achievedPeakLongKm(weeks, fallback){ const t = weeks.flatMap(w=>w.days.filter(d=>d.type==='long').map(d=>d.km||0)); return t.length ? round1(Math.max(...t)) : (fallback||0); }
@@ -1790,6 +1806,7 @@ function validatePlan(plan, setup){
   const isRace = raceKm!=null;
   const weeks = plan.weeks;
   weeks.forEach(w=>{
+    if(w.partialStart) return; // a mid-week start: the first week holds whatever days remain
     // A week that contains race day has post-race rest days; judge its sessions against the
     // volume it was planned at, not the truncated total.
     const actualTot = w.days.reduce((s,d)=>s+(d.type==='race'?0:d.km),0);
@@ -1860,6 +1877,7 @@ function validatePlan(plan, setup){
   });
   // a session week has a session (build/peak, race week excepted; a 3-run beginner week is the only exemption)
   weeks.forEach(w=>{
+    if(w.partialStart) return;
     if(!isRace || !(w.phase==='build' || w.phase==='peak')) return;
     if(w.days.some(d=>d.type==='race' || (d.daysToRace!=null && d.daysToRace>=0 && d.daysToRace<=2))) return;
     const hasSession = w.days.some(d=>QUALITY_TYPES.includes(d.type) && !d.easyVariety && d.type!=='long');
@@ -1879,7 +1897,7 @@ function validatePlan(plan, setup){
   if(isRace && setup){
     const cur = setup.currentWeeklyKm||0;
     const fewDays = (plan.warnings||[]).some(x=>/running days/.test(x));
-    if(weeks.length>1 && vols[0] < cur*0.93 && !fewDays && !(setup.maxWeeklyKm>0 && setup.maxWeeklyKm<cur)) v.push(`week 1 volume ${vols[0].toFixed(1)} below current ${cur.toFixed(1)}`);
+    if(weeks.length>1 && !weeks[0].partialStart && vols[0] < cur*0.93 && !fewDays && !(setup.maxWeeklyKm>0 && setup.maxWeeklyKm<cur)) v.push(`week 1 volume ${vols[0].toFixed(1)} below current ${cur.toFixed(1)}`);
     const peak = Math.max(...vols);
     if((raceKm<=10) && peak > Math.max(cur*1.27, 40)+0.5) v.push(`peak ${peak.toFixed(1)} km exceeds +25% over current for a short race`);
     // a real taper, measured in days before the race rather than calendar weeks

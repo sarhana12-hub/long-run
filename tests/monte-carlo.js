@@ -74,6 +74,7 @@ function sanityCheck(plan, setup){
   // 70 one note per cause
   if((plan.warnings||[]).filter(x=>/doesn't fit/.test(x)).length>1) push('dup-notes', (plan.warnings||[]).filter(x=>/doesn't fit/.test(x)).join(' | ').slice(0,160));
   plan.weeks.forEach(w=>{
+    if(w.partialStart) return; // a mid-week start's first week is judged by the engine's validator only
     const p = w.paces; const wk = `w${w.weekIndex+1}`;
     if(!(p.easyPerKm > p.tempoPerKm && p.tempoPerKm > p.intervalPerKm && p.intervalPerKm > p.repPerKm)) push('pace-order', wk);
     if(p.marathonPerKm!=null && !(p.marathonPerKm > p.tempoPerKm && p.marathonPerKm <= p.easyPerKm+1)) push('m-pace-order', `${wk} M ${paceOf(p.marathonPerKm)} T ${paceOf(p.tempoPerKm)} E ${paceOf(p.easyPerKm)}`);
