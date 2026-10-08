@@ -328,6 +328,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 134. **Race day closed with a badge and nothing else.** *Fix:* once a race is logged (within three days of race day, about the race distance), the Progress overview leads with a Race review: the time and pace, against the day-one projection and the eve-of-race projection with its likely range, the fitness number achieved against the start, the goal if one was set, the training totals, and a button that opens Change plan with this race prefilled as the recent result.
 
+135. **The app never reached out.** *Fix:* morning reminders by Web Push through the Cloudflare Worker (strava-worker/worker.js now carries subscribe/unsubscribe/test and a 15-minute schedule; Web Push encryption and VAPID done with WebCrypto, no dependencies). Settings → Reminders: turn on (iOS permission prompt, subscription registered with the chosen local time, timezone and a one-line-per-day plan summary), pick the time, send a test. The summary is re-sent on every plan change and once a day on open. Rest days without strength send nothing. One-time server setup is in strava-worker/PUSH-SETUP.md; the keys live in an ignored local file.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

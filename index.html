@@ -903,7 +903,7 @@ const Store = {
   getSetup(){ return this._get('lr_setup', null); },
   setSetup(setup){ this._set('lr_setup', setup); },
   getPlan(){ return this._get('lr_plan', null); },
-  setPlan(plan){ this._set('lr_plan', plan); },
+  setPlan(plan){ this._set('lr_plan', plan); schedulePushSync(); },
   getLogs(){ return this._get('lr_logs', []); },
   addLog(entry){
     const logs = this.getLogs();
@@ -929,6 +929,8 @@ const Store = {
   getStrengthShort(){ return this._get('lr_strength_short', []); },
   getCheckins(){ return this._get('lr_checkins', {}); },
   getStrengthLoads(){ return this._get('lr_strength_loads', {}); },
+  getPush(){ return this._get('lr_push', {enabled:false, time:'07:00', syncedAt:0}); },
+  setPush(v){ this._set('lr_push', v); },
   setStrengthLoads(v){ this._set('lr_strength_loads', v); },
   setCheckins(v){ this._set('lr_checkins', v); },
   setStrengthShort(v){ this._set('lr_strength_short', v); },
@@ -1060,6 +1062,57 @@ function fillDisplayDiag(){
     + (vv ? ' · visual ' + Math.round(vv.width) + '×' + Math.round(vv.height) : '')
     + ' · screen ' + screen.width + '×' + screen.height + ' · insets top ' + sat + ' bottom ' + sab + ' · dpr ' + window.devicePixelRatio;
 }
+// ---- Morning reminders (Web Push through the Cloudflare Worker) ----
+// The phone keeps the subscription; the Worker keeps the chosen time, the timezone and a
+// one-line-per-day summary of the plan, refreshed whenever the plan changes.
+function pushSupported(){ return 'PushManager' in window && 'Notification' in window && !!navigator.serviceWorker; }
+function pushApi(body){ return fetch(STRAVA_WORKER_URL, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)}).then(r=>r.json()); }
+function b64uToU8(s){ s = String(s).replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s += '='; const bin = atob(s); const out = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i); return out; }
+// One line per day for the next four months: the workout, its distance, and strength.
+function pushPlanSummary(){
+  const plan = state.plan; if(!plan || !plan.weeks) return {days:{}};
+  const unit = state.setup.units, fmt = state.paceFormat; const today = todayDate(); const until = addDays(today, 120); const days = {};
+  plan.weeks.forEach(w=>{ const paces = getWeekPaces(plan, w, state.logs); w.days.forEach(d=>{
+    const dt = parseDate(d.date); if(dt<today || dt>until || d.beforeStart) return;
+    if(!(d.km>0) && !d.strength) return;
+    let line = d.km>0 ? `${TYPE_META[d.type] ? TYPE_META[d.type].label : 'Run'} · ${fmtDist(d.km,unit)}` : 'Rest day';
+    if(d.km>0 && QUALITY_TYPES.includes(d.type)){ const t = daySummaryText(d, paces, unit, dayFmt(d, fmt)); if(t) line += ' · ' + t; }
+    if(d.strength) line += d.km>0 ? ` · strength after the run (${d.strengthTimeMin||40} min)` : ` · strength ${d.strengthFocus==='upper' ? 'upper body' : 'legs'} (${d.strengthTimeMin||40} min)`;
+    days[d.date] = line.length>140 ? line.slice(0,137)+'…' : line;
+  }); });
+  return {days};
+}
+async function syncPush(sub){
+  if(!state.push || !state.push.enabled || !pushSupported()) return;
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    sub = sub || await reg.pushManager.getSubscription(); if(!sub) return;
+    const [h,m] = String(state.push.time||'07:00').split(':').map(Number);
+    const res = await pushApi({action:'subscribe', subscription: sub.toJSON(), minutes: h*60+m, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, plan: pushPlanSummary(), name: state.name||''});
+    if(res && res.ok){ state.push = {...state.push, syncedAt: Date.now(), endpoint: sub.endpoint}; Store.setPush(state.push); }
+  }catch(e){ /* offline: the next plan change or open tries again */ }
+}
+let _pushSyncTimer = null;
+function schedulePushSync(){ if(!state.push || !state.push.enabled) return; clearTimeout(_pushSyncTimer); _pushSyncTimer = setTimeout(()=>syncPush(), 1500); }
+async function enableReminders(){
+  if(!pushSupported()){ showToast('Reminders need Peak on your home screen (iOS 16.4 or later)', null, 5000); return; }
+  let perm = Notification.permission;
+  if(perm!=='granted') perm = await Notification.requestPermission();
+  if(perm!=='granted'){ showToast('Allow notifications for Peak to turn reminders on', null, 4000); return; }
+  try{
+    const info = await pushApi({action:'vapid'});
+    if(!info || !info.enabled){ showToast('Reminders are not set up on the server yet', null, 4000); return; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub) sub = await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey: b64uToU8(info.publicKey)});
+    state.push = {...state.push, enabled:true, endpoint: sub.endpoint}; Store.setPush(state.push);
+    await syncPush(sub); render(); showToast('Reminders on');
+  }catch(e){ showToast('Could not turn reminders on: ' + (e && e.message ? e.message : 'unknown error'), null, 5000); }
+}
+async function disableReminders(){
+  try{ const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if(sub){ pushApi({action:'unsubscribe', endpoint: sub.endpoint}).catch(()=>{}); await sub.unsubscribe().catch(()=>{}); } }catch(e){}
+  state.push = {...state.push, enabled:false}; Store.setPush(state.push); render(); showToast('Reminders off');
+}
 function showToast(msg, undo, ms){ state.toast = msg; state.toastUndo = undo || null; render(); setTimeout(()=>{ state.toast=null; state.toastUndo=null; render(); }, ms||2200); }
 // Closes whatever sheet is open. A projection note that was held back while a milestone
 // screen was up shows the moment that screen closes.
@@ -1113,6 +1166,8 @@ function boot(){
   state.strengthShort = Store.getStrengthShort();
   state.checkins = Store.getCheckins();
   state.strengthLoads = Store.getStrengthLoads();
+  state.push = Store.getPush();
+  if(state.push.enabled && Date.now() - (state.push.syncedAt||0) > 20*3600*1000) setTimeout(()=>syncPush(), 3000);
   state.strengthItems = Store.getStrengthItems();
   state.helpSeen = Store.getFlag('help_seen');
   state.notesSeen = Store.getFlag('notes_seen');
@@ -3877,6 +3932,15 @@ function renderSettingsTab(){
       <button class="btn btn-block" data-act="export-ics">${ICONS.calendarCheck} Add to calendar (.ics)</button>
     </div>
 
+    <div class="section-title">Reminders</div>
+    <div class="card" style="padding:14px 16px; margin-bottom:16px;">
+      <div class="settings-row" style="padding-top:0;"><div><div class="lbl">Morning reminder</div><div class="sub">${state.push && state.push.enabled ? 'On · one line with the day\'s workout' : 'One notification a day with the workout'}</div></div>
+        <button class="btn btn-sm ${state.push && state.push.enabled ? '' : 'btn-primary'}" data-act="${state.push && state.push.enabled ? 'reminders-off' : 'reminders-on'}">${state.push && state.push.enabled ? 'Turn off' : 'Turn on'}</button></div>
+      <div class="settings-row" style="${state.push && state.push.enabled ? '' : 'opacity:.6;'}"><div><div class="lbl">Time</div><div class="sub">Local time, every day the plan has something</div></div>
+        <input class="input" type="time" id="push-time" value="${esc((state.push && state.push.time) || '07:00')}" style="width:auto; padding:8px 10px;"></div>
+      ${state.push && state.push.enabled ? `<div class="row" style="margin-top:10px;"><button class="btn btn-block" data-act="reminders-test">Send a test</button></div>` : ''}
+      ${pushSupported() ? '' : `<div class="hint" style="margin-top:8px;">On iPhone, reminders need Peak added to the home screen with "Open as Web App" on, and iOS 16.4 or later.</div>`}
+    </div>
     <div class="section-title">App link</div>
     <div class="card" style="padding:14px 16px; margin-bottom:16px;">
       <div class="mono" style="font-size:13.5px; word-break:break-all;">${esc(APP_URL)}</div>
@@ -5233,6 +5297,12 @@ function onClick(e){
     state.modal={type:'day-detail', weekIndex:found.weekIndex, dayIndex:found.dayIndex};
     render(); return;
   }
+  if(act==='reminders-on'){ enableReminders(); return; }
+  if(act==='reminders-off'){ disableReminders(); return; }
+  if(act==='reminders-test'){
+    (async()=>{ try{ const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if(!sub){ showToast('Turn reminders on first'); return; } await syncPush(sub); const r = await pushApi({action:'test', endpoint: sub.endpoint}); showToast(r && r.ok ? 'Test sent' : 'The server could not send: ' + ((r && (r.error||r.result)) || 'unknown'), null, 4000); }catch(e){ showToast('Could not send a test', null, 3000); } })();
+    return;
+  }
   if(act==='copy-app-link'){
     const done = () => showToast('Link copied');
     if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(APP_URL).then(done, ()=>showToast(APP_URL, null, 6000)); }
@@ -5588,6 +5658,7 @@ function onChange(e){
     state.modal.strava.confirm.date = e.target.value;
     render(); return;
   }
+  if(e.target.id==='push-time'){ state.push = {...(state.push||{}), time: e.target.value || '07:00'}; Store.setPush(state.push); schedulePushSync(); return; }
   if(e.target.dataset && e.target.dataset.act==='set-strength-load'){
     const name = e.target.dataset.name, date = e.target.dataset.date, v = Number(e.target.value);
     const loads = {...(state.strengthLoads||{})}; const hist = (loads[name]||[]).filter(h=>h.date!==date);
