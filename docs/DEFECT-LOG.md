@@ -302,6 +302,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 122. **Day numbers and distances rendered blue on the phone** (owner screenshot). *Cause:* iOS data detectors in a home-screen app wrap numbers and dates in tappable links, styled with the default link blue. *Fix:* a format-detection meta switches telephone, date, address and email detection off, and a CSS rule neutralises any detector link that still appears.
 
+123. **A system-grey strip about 62 pt tall under the tab bar on the owner's phone, on every tab** (present in every phone screenshot of the session). *Diagnosis:* a display line added to Settings reported standalone, screen 402×874, window 402×812, top inset 62, bottom inset 34: iOS 26 shortened the page by the status-bar height while keeping it anchored at the top, under the black-translucent status-bar style. *Fix:* status-bar style default (the status bar takes its colour from theme-color); read at install time, so the app must be re-added to the home screen. Copy link also got a copy icon in place of a map pin.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
