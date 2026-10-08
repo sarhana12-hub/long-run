@@ -324,6 +324,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 132. **The plan never adapted to a light week.** *Fix:* a check-in card at the top of the Plan tab after any tracked week under two-thirds of its plan: last week's actual, sessions done, and an offer to ease this week to last week's actual plus one step (never below 60% of plan), easy runs shorter and the key session kept; or keep as planned. Offered once per week; the eased week's coach note says what changed. *Guard:* tests/plan-invariants.js "eased week".
 
+133. **Strength had no memory.** Exercises could be ticked but no weight was ever recorded, so the load note stayed generic. *Fix:* every lift that takes a weight has a Weight field in its row (lb with miles, kg with kilometres), saved per exercise and date without re-rendering the sheet; the row shows the last weight and its date, and once one exists, a plain cue to add 2.5–5 lb (1–2.5 kg) when every set finished with reps to spare.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

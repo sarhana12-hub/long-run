@@ -928,6 +928,8 @@ const Store = {
   getStrengthDone(){ return this._get('lr_strength_done', []); },
   getStrengthShort(){ return this._get('lr_strength_short', []); },
   getCheckins(){ return this._get('lr_checkins', {}); },
+  getStrengthLoads(){ return this._get('lr_strength_loads', {}); },
+  setStrengthLoads(v){ this._set('lr_strength_loads', v); },
   setCheckins(v){ this._set('lr_checkins', v); },
   setStrengthShort(v){ this._set('lr_strength_short', v); },
   // Per-exercise ticks inside a strength session: {date: [bool,...]} in exercise order.
@@ -1110,6 +1112,7 @@ function boot(){
   state.strengthDone = Store.getStrengthDone();
   state.strengthShort = Store.getStrengthShort();
   state.checkins = Store.getCheckins();
+  state.strengthLoads = Store.getStrengthLoads();
   state.strengthItems = Store.getStrengthItems();
   state.helpSeen = Store.getFlag('help_seen');
   state.notesSeen = Store.getFlag('notes_seen');
@@ -2284,6 +2287,23 @@ function exerciseLibraryHtml(name){
       ${e.link ? `<div><a class="sx-link" href="${e.link.url}" target="_blank" rel="noopener">${ICONS.view||''}Step photos and instructions at ${esc(e.link.source)} ↗</a>${e.link.note ? `<div class="hint" style="margin-top:2px;">${esc(e.link.note)}</div>` : ''}</div>` : `<div class="hint" style="margin-top:4px;">No verified reference page for this one yet.</div>`}
     </div>`;
 }
+// Lifts that take a weight get a load field: the last weight used is shown with its date,
+// and once there is one, a plain progression cue (add a little when every set finished
+// with reps to spare: common double-progression practice, judgement).
+const LOADABLE_EQUIP = /barbell|dumbbell|kettlebell|machine|plate|leg press|cable|weighted|vest|weight in/i;
+function loadUnit(){ return (state.setup && state.setup.units)==='km' ? 'kg' : 'lb'; }
+function strengthLoadHtml(name, date){
+  const hist = (state.strengthLoads && state.strengthLoads[name]) || [];
+  const today = hist.find(h=>h.date===date);
+  const last = [...hist].filter(h=>h.date!==date).sort((a,b)=>a.date<b.date?1:-1)[0];
+  const unit = loadUnit();
+  const step = unit==='kg' ? '1–2.5 kg' : '2.5–5 lb';
+  return `<div style="display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap;">
+    <label class="field-label" style="margin:0;">Weight</label>
+    <input class="input" type="number" inputmode="decimal" step="0.5" min="0" data-act="set-strength-load" data-name="${esc(name)}" data-date="${date}" value="${today ? today.value : ''}" placeholder="${last ? last.value : '—'}" style="width:88px; padding:7px 10px;">
+    <span class="hint" style="margin:0;">${unit}${last ? ` · last ${last.value} ${last.unit||unit} on ${niceDate(parseDate(last.date))}` : ''}</span>
+  </div>${last ? `<div class="hint" style="margin-top:6px;">If every set finished with reps to spare at ${last.value} ${last.unit||unit}, add ${step} this time.</div>` : ''}`;
+}
 function strengthRowsHtml(lines, date, howTo, optional){
   const ticks = (state.strengthItems && state.strengthItems[date]) || [];
   return lines.map((line,i)=>{
@@ -2295,7 +2315,7 @@ function strengthRowsHtml(lines, date, howTo, optional){
       ${optional?'':`<input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${i}" ${done?'checked':''} aria-label="Done: ${esc(p.name)}">`}
       <details>
         <summary><span><span class="sx-name">${esc(p.name)}</span><div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
-        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}</div>
+        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${(!optional && LOADABLE_EQUIP.test(p.equip||'')) ? strengthLoadHtml(p.name, date) : ''}</div>
         ${exerciseLibraryHtml(p.name)}
       </details>
     </div>`;
@@ -5517,6 +5537,15 @@ function onChange(e){
   if(state.modal && state.modal.type==='log-run' && e.target.id==='lr-strava-date' && state.modal.strava && state.modal.strava.confirm){
     state.modal.strava.confirm.date = e.target.value;
     render(); return;
+  }
+  if(e.target.dataset && e.target.dataset.act==='set-strength-load'){
+    const name = e.target.dataset.name, date = e.target.dataset.date, v = Number(e.target.value);
+    const loads = {...(state.strengthLoads||{})}; const hist = (loads[name]||[]).filter(h=>h.date!==date);
+    if(v>0) hist.push({date, value:v, unit:loadUnit()});
+    loads[name] = hist; state.strengthLoads = loads; Store.setStrengthLoads(loads);
+    // confirm in place: no re-render, the field keeps focus and the section stays open
+    const note = e.target.parentElement && e.target.parentElement.querySelector('.hint'); if(note && v>0) note.textContent = `${loadUnit()} · saved`;
+    return;
   }
   if(state.modal && state.modal.type==='confirm-swap' && e.target.id==='swap-ack'){
     state.modal.data.ack = e.target.checked;
