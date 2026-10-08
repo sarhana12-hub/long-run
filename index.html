@@ -9,6 +9,8 @@
 <meta name="theme-color" content="#F2F4EE" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0E1310" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#0E1310">
+<!-- A forced Light/Dark choice is applied before anything paints, and the theme-color tags are rewritten here so iOS reads the chosen colour at launch rather than the system one. -->
+<script>try{const t=JSON.parse(localStorage.getItem('lr_theme'));if(t==='light'||t==='dark'){document.documentElement.dataset.theme=t;document.querySelectorAll('meta[name="theme-color"]').forEach(m=>{m.removeAttribute('media');m.setAttribute('content', t==='dark'?'#0E1310':'#F2F4EE');});}}catch(e){}</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <!-- iOS turns numbers and dates into blue tappable links in a home-screen app unless told not to. -->
 <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
@@ -43,7 +45,6 @@
 <link rel="apple-touch-startup-image" media="screen and (device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icons/splash/640x1136.png">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="icon" href="icons/favicon-16.png" sizes="16x16" type="image/png">
-<script>try{const t=JSON.parse(localStorage.getItem('lr_theme'));if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <style>
 /* Every text/background pair below holds at least 4.5:1 (checked by script); cards sit one
@@ -1017,7 +1018,7 @@ function applyTheme(){
   const pref = state.theme || 'system';
   if(pref==='system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = pref;
   const dark = pref==='dark' || (pref==='system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  document.querySelectorAll('meta[name="theme-color"]').forEach(m=>{ m.setAttribute('content', dark ? '#0E1310' : '#F2F4EE'); });
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m=>{ if(pref!=='system') m.removeAttribute('media'); m.setAttribute('content', dark ? '#0E1310' : '#F2F4EE'); });
 }
 // Figures that count up: an element with data-count (the numeric value), data-count-fmt
 // ('clock' for seconds, 'dist' for km) and data-count-key remembers its last value across
