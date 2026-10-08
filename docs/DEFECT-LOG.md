@@ -310,6 +310,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 126. **The floating Log a run button covered the list and was the third Log button on the screen** (today card, day sheet). *Fix (owner question, my recommendation):* removed. Today logs from the today card, any other day from its sheet, a new runner from the Progress empty state. Toasts sit just above the tab bar.
 
+127. **The "How to read your plan" card filled the top of the Plan screen on first open** (owner). *Fix:* never shown inline; the guide is behind the ? in the top bar only.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

@@ -2271,6 +2271,7 @@ function renderTodayCard(plan){
   </div>`;
 }
 function renderHelpCard(){
+  return ''; // the guide lives behind the ? in the top bar only (owner decision 2026-10-08)
   if(state.helpSeen) return '';
   return `<div class="card help-card">
     <div style="font-weight:800; font-size:14.5px;">How to read your plan</div>
@@ -2329,7 +2330,6 @@ function renderPlanTab(week, plan){
 
   return `
   ${state.moveFrom!=null ? (()=>{ const sd = plan.weeks[state.moveFrom.weekIndex].days[state.moveFrom.dayIndex]; return `<div class="banner">${ICONS.move}<span>Choose a day to swap with "${sd.label}" (${DOW_LABELS[sd.dow]} ${niceDate(parseDate(sd.date))}) — in this week or any other. <a class="link-btn" data-act="cancel-move" style="color:inherit">Cancel</a></span></div>`; })() : ''}
-  ${renderHelpCard()}
   ${renderTodayCard(plan)}
   <div class="week-strip">${strip}</div>
   <div class="week-header">
