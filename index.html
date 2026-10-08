@@ -468,7 +468,7 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 <div class="status-scrim"></div>
 <div id="app"></div>
 <!-- Safari on iPhone has no vibration API; toggling a native switch inside a user gesture produces the system haptic (iOS 17.4+). Off-screen, never display:none. -->
-<input type="checkbox" switch id="haptic-switch" aria-hidden="true" tabindex="-1" style="position:fixed; left:-40px; top:0; width:1px; height:1px; opacity:0; pointer-events:none;">
+<label id="haptic-label" aria-hidden="true" style="position:fixed; left:0; bottom:0; width:1px; height:1px; overflow:hidden; opacity:0.02; pointer-events:none; z-index:-1;"><input type="checkbox" switch id="haptic-switch" tabindex="-1"></label>
 
 <script src="engine.js"></script>
 <script src="library.js"></script>
@@ -1037,7 +1037,7 @@ function runCountUps(){
 }
 // One system tap for a moment that deserves it: a run logged, strength marked done, a day
 // moved or swapped, a milestone earned. Must run synchronously inside the tap that caused it.
-function haptic(){ try{ const el = document.getElementById('haptic-switch'); if(el) el.click(); }catch(e){} }
+function haptic(){ try{ const el = document.getElementById('haptic-switch'); if(!el) return; el.checked = !el.checked; el.dispatchEvent(new Event('change', {bubbles:true})); const lb = document.getElementById('haptic-label'); if(lb) lb.click(); }catch(e){} }
 // How the phone is laying the app out, for the Settings card: tells apart "the page is
 // shorter than the screen" from "the page is tall but padded".
 function fillDisplayDiag(){
@@ -3772,6 +3772,7 @@ function renderSettingsTab(){
       <div class="mono" style="font-size:13.5px; word-break:break-all;">${esc(APP_URL)}</div>
       <div class="hint" style="margin:6px 0 12px;">To put Peak back on your home screen: open this link in Safari, tap Share, then Add to Home Screen.</div>
       <div class="hint mono" id="display-diag" style="margin:0 0 12px; font-size:11.5px;"></div>
+      <div class="row" style="margin-bottom:10px;"><button class="btn btn-block" data-act="test-haptic">Test haptic</button></div>
       <div class="row"><button class="btn btn-block" data-act="copy-app-link">${ICONS.pin} Copy link</button>${(navigator.share ? `<button class="btn btn-block" data-act="share-app-link">Share…</button>` : '')}</div>
     </div>
     <div class="section-title">Backup</div>
@@ -5122,6 +5123,7 @@ function onClick(e){
     state.modal={type:'day-detail', weekIndex:found.weekIndex, dayIndex:found.dayIndex};
     render(); return;
   }
+  if(act==='test-haptic'){ haptic(); showToast(('switch' in (document.getElementById('haptic-switch')||{})) ? 'Tapped the switch' : 'This iOS has no switch control (needs 17.4+)'); return; }
   if(act==='copy-app-link'){
     const done = () => showToast('Link copied');
     if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(APP_URL).then(done, ()=>showToast(APP_URL, null, 6000)); }
