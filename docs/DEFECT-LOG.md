@@ -306,6 +306,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 124. **The tab bar was a square-cornered band the full width of the screen** (owner: too big, wasted space, square against a rounded screen). *Fix:* a floating rounded bar with a 14 px side margin and a 10 px margin above the home indicator, translucent with a backdrop blur so content scrolls beneath it; the floating Log button and toasts moved up to clear it. Desktop keeps the top bar.
 
+125. **Too many colours on the Plan screen** (owner): coloured card edge, coloured pill, purple strength badge, blue tinted numbers, lime today outline, on every row. *Fix:* colour answers one question per screen. The coloured left edge is gone; easy and rest pills are grey, so only sessions and the long run carry a hue; strength is a grey dumbbell beside the distance that turns green when done; hilly and treadmill marks are grey; lime is today and the Log button only; done green stays. A row went from four colour signals to one.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

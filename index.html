@@ -252,13 +252,15 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .day-pace{font-family:var(--font-mono); font-size:11.5px; color:var(--muted);}
 .day-check{width:19px; height:19px; border-radius:50%; background:var(--done); color:var(--done-ink); display:flex; align-items:center; justify-content:center; flex:none;}
 .day-check svg{width:11px; height:11px;}
-.strength-badge{display:inline-flex; align-items:center; gap:4px; height:20px; font-size:10.5px; font-weight:700; color:var(--z-strength); background:var(--z-strength-bg); border-radius:6px; padding:0 6px; line-height:1;}
+.strength-badge{display:inline-flex; align-items:center; gap:4px; height:20px; font-size:10.5px; font-weight:700; color:var(--muted); background:var(--surface-2); border-radius:6px; padding:0 6px; line-height:1;}
 .strength-badge svg{width:11px; height:11px; flex:none;}
 .ibadge{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:6px; font-size:11.5px; line-height:1;}
 .ibadge svg{width:12px; height:12px;}
 .day-ring{width:19px; height:19px; border-radius:50%; border:2px solid var(--line); flex:none;}
-.day-card{border-left:4px solid var(--card-edge, var(--line));}
-.day-card.today{border-color:var(--accent-strong); border-left-color:var(--card-edge, var(--accent-strong));}
+.day-sx{width:18px; height:18px; color:var(--muted); display:inline-flex;}
+.day-sx svg{width:18px; height:18px;}
+.day-sx.done{color:var(--done);}
+.day-card.today{border-color:var(--accent-strong);}
 .pill .pill-ico{display:inline-flex; width:11px; height:11px;}
 .pill .pill-ico svg{width:11px; height:11px;}
 /* today card */
@@ -500,7 +502,7 @@ const RACE_PRESETS = [
 ];
 const TYPE_META = {
   rest:{label:'Rest', bg:'--z-rest-bg', fg:'--z-rest'},
-  easy:{label:'Easy Run', bg:'--z-easy-bg', fg:'--z-easy'},
+  easy:{label:'Easy Run', bg:'--surface-2', fg:'--ink-soft'}, // quiet: colour is for sessions and the long run
   long:{label:'Long Run', bg:'--z-long-bg', fg:'--z-long'},
   tempo:{label:'Tempo', bg:'--z-tempo-bg', fg:'--z-tempo'},
   intervals:{label:'Intervals', bg:'--z-intervals-bg', fg:'--z-intervals'},
@@ -2261,7 +2263,7 @@ function renderTodayCard(plan){
   const tm = treadmillNote(day); if(tm) parts.push(tm);
   return `<div class="card today-card">
     <div class="tc-head"><span class="tc-label">Today</span><span class="tc-date">${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}${logged?' · logged':''}</span></div>
-    <div class="tc-title">${dayPill(day)}${day.km>0?`<span class="mono">${fmtDist(day.km,unit)}</span>`:''}${strengthBadgeHtml(day)}${day.treadmill?'<span class="strength-badge" style="color:var(--z-easy); background:var(--z-easy-bg);">Treadmill</span>':''}</div>
+    <div class="tc-title">${dayPill(day)}${day.km>0?`<span class="mono">${fmtDist(day.km,unit)}</span>`:''}${strengthBadgeHtml(day)}${day.treadmill?'<span class="strength-badge">Treadmill</span>':''}</div>
     <ul>${parts.slice(0,4).map(p=>`<li>${esc(p)}</li>`).join('')}</ul>
     <div class="row">
       <button class="btn" data-act="open-day" data-i="${di}">Details</button>
@@ -2308,20 +2310,20 @@ function renderPlanTab(week, plan){
     const dt = parseDate(day.date);
     const notLogged = day.km>0 && day.type!=='race' && !match && dt < todayDate() && !beforeTrackingStart(day);
     return `
-    <button class="card day-card ${match?'logged':''} ${(match && state.justLogged===day.date)?'just-logged':''} ${isToday?'today':''} ${isMoveSrc?'move-source':''} ${isMoveTarget?'move-target':''}" data-act="${isMoveTarget ? 'move-target' : 'open-day'}" data-i="${di}" style="${day.type!=='rest'?`--card-edge:var(${meta.fg});`:''}">
+    <button class="card day-card ${match?'logged':''} ${(match && state.justLogged===day.date)?'just-logged':''} ${isToday?'today':''} ${isMoveSrc?'move-source':''} ${isMoveTarget?'move-target':''}" data-act="${isMoveTarget ? 'move-target' : 'open-day'}" data-i="${di}">
       <div class="day-date"><div class="dow">${DOW_LABELS[day.dow]}</div><div class="dom mono">${dt.getDate()}</div></div>
       <div class="day-main">
         <div class="day-top">
           ${dayPill(day)}
-          ${strengthBadgeHtml(day)}
-          ${day.terrain==='hilly'?`<span class="ibadge" style="color:var(--z-hill); background:var(--z-hill-bg);" title="Hilly" aria-label="Hilly">${ICONS.mountain}</span>`:''}
-          ${day.treadmill?`<span class="ibadge" style="color:var(--z-easy); background:var(--z-easy-bg);" title="Treadmill" aria-label="Treadmill">${ICONS.treadmill}</span>`:''}
+          ${day.terrain==='hilly'?`<span class="ibadge" style="color:var(--muted); background:var(--surface-2);" title="Hilly" aria-label="Hilly">${ICONS.mountain}</span>`:''}
+          ${day.treadmill?`<span class="ibadge" style="color:var(--muted); background:var(--surface-2);" title="Treadmill" aria-label="Treadmill">${ICONS.treadmill}</span>`:''}
         </div>
         <div class="day-desc">${esc(daySummaryText(day, weekPaces, unit, cardFmt))}</div>
       </div>
       <div class="day-side">
         ${match?`<div class="day-check">${ICONS.check}</div>`:(notLogged?`<div class="day-ring" title="Not logged"></div>`:'')}
         ${day.km>0?`<div class="day-dist mono">${fmtDist(day.km,unit)}</div>`:''}
+        ${day.strength?`<div class="day-sx ${state.strengthDone.includes(day.date)?'done':''}" title="${state.strengthDone.includes(day.date)?'Strength done':(day.strengthFocus==='upper'?'Upper body and core':'Strength')}">${ICONS.dumbbell}</div>`:''}
       </div>
     </button>`;
   }).join('');
