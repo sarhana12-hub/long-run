@@ -248,6 +248,10 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 96. **Logging a run said only "Run logged".** *Fix:* the toast now reports the projection move ("10K projection 0:06 faster — now 47:13. Fitness is moving the right way."), plainly for a slower move, and "unchanged" after a quality session that did not move it. Easy runs keep the short toast. A move that lands behind a milestone screen shows when that screen closes. The toast also moved above the floating Log button, which it used to sit behind.
 
+97. **A missed quality session could only go to a rest day, and only if one fit.** Most weeks with five run days have no rest day that keeps 48 h either side, so the offer was usually "let it go". *Fix:* the sheet offers the next rest day, else the next plain easy run day within seven days of the day it was due; the session takes that slot, the easy run is dropped, and the missed day becomes a rest day. The vacated day no longer counts as a hard neighbour. After seven days the sheet says the plan has moved on. *Owner decision 2026-10-08.*
+
+98. **"Swap with another day" could not cross a week boundary** (changing week cancelled the swap). *Fix:* the swap survives a week change; the target can be any day in any week except race day; the confirmation previews both weeks' warnings and adds its own for a session landing within two days of the race or crossing phases.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

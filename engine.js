@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 21; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 22; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
