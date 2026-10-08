@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 24; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 25; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -700,13 +700,27 @@ function buildLowerStrengthWorkout(tier, weekIndex, weekInBlock, avail){
       coreLine(core, 2, 30, 'controlled'),
     ];
   }
+  const heavyRest = ex => (ex.equip && /barbell/i.test(ex.equip)) ? 150 : 120;
+  if(tier==='short'){
+    // The same session cut to about 25 minutes: the plyometric, the two lifts that matter,
+    // calves paired with the single-leg lift (one rests while the other works), one core set.
+    const plyoS = wb>=1 ? pickFromPool(PLYO_POOL_INTRO, weekIndex, avail, taken) : null;
+    const rirS = wb===3 ? '3 reps left in the tank (easier week)' : wb===0 ? '3 reps left in the tank' : wb===1 ? '2 reps left in the tank' : '1–2 reps left in the tank';
+    const out = [];
+    if(plyoS) out.push(strengthSetLine(plyoS, 2, plyoS.name==='Pogo hops' ? 20 : 5, 60, 'maximal intent, full recovery; first while fresh'));
+    out.push(primary.bodyweight ? strengthSetLine(primary, 3, 8, 60, `slow, three seconds down — ${rirS}`) : strengthSetLine(primary, 3, 5, heavyRest(primary), `heavy — ${rirS}`));
+    out.push(uni.bodyweight ? strengthSetLine(uni, 2, 10, 30, 'slow and controlled; go straight to the calf raises, then rest') : strengthSetLine(uni, 2, 6, 30, 'moderate-heavy, 2 left in the tank; go straight to the calf raises, then rest'));
+    out.push(strengthSetLine(calf, 2, 10, 60, 'paired with the single-leg lift; 3s down'));
+    out.push(coreLine(core, 2, 30));
+    return out;
+  }
   // heavy
   const sets = wb===3 ? 3 : wb===0 ? 3 : 4;
   const rir = wb===3 ? '3 reps left in the tank (easier week)' : wb===0 ? '3 reps left in the tank' : wb===1 ? '2 reps left in the tank' : '1–2 reps left in the tank';
   const plyo = wb>=1 ? pickFromPool(PLYO_POOL_INTRO, weekIndex, avail, taken) : null;
   const lines = [];
   if(plyo) lines.push(strengthSetLine(plyo, wb===3 ? 2 : 3, plyo.name==='Pogo hops' ? 20 : 5, 60, 'maximal intent, full recovery — quality over quantity; do these first while fresh'));
-  lines.push(primary.bodyweight ? strengthSetLine(primary, sets, 8, 60, `slow, three seconds down — ${rir}`) : strengthSetLine(primary, sets, 5, 150, `heavy — ${rir}`));
+  lines.push(primary.bodyweight ? strengthSetLine(primary, sets, 8, 60, `slow, three seconds down — ${rir}`) : strengthSetLine(primary, sets, 5, heavyRest(primary), `heavy — ${rir}`));
   lines.push(uni.bodyweight ? strengthSetLine(uni, 3, 10, 45, 'slow and controlled, 2 left in the tank') : strengthSetLine(uni, 3, 6, 75, 'moderate-heavy, 2 left in the tank'));
   lines.push(isSwing(post)
     ? strengthSetLine(post, 3, 12, 60, 'crisp and powerful, hips doing the work')
@@ -744,7 +758,7 @@ function buildLowerOptional(avail){
   const r = resolveExercise(OPTIONAL_EXTRAS.legExtension, avail);
   return r ? [strengthSetLine(r, 2, 12, 45, 'moderate, slow lowering — easy on the knees')] : [];
 }
-const STRENGTH_TIME_MIN = {heavy:40, maintain:28, express:20, light:15, upper:22};
+const STRENGTH_TIME_MIN = {heavy:40, short:25, maintain:28, express:20, light:15, upper:22};
 // Load is set by effort, not by a number the app can't know: "N reps left in the tank"
 // means the set ends N reps before you would fail. These notes tell a runner how to pick a
 // weight the first time and when to add to it.
@@ -855,9 +869,11 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
       const usedSoFar = _used.length; d.strengthOptional = buildUpperOptional(variant, avail); _used.length = usedSoFar; // extras need no how-to
     } else {
       const express = !!d.strengthExpress && tier!=='light';
-      const useTier = express ? 'express' : tier;
-      d.strengthExercises = buildLowerStrengthWorkout(useTier, variant, opts.weekInBlock, avail); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : STRENGTH_TIME_MIN[tier];
-      d.strengthLoadNote = (_used.filter(x=>!x.bodyweight).length===0) ? STRENGTH_LOAD_NOTE.bodyweight : STRENGTH_LOAD_NOTE[useTier];
+      const short = !express && (tier==='heavy' || tier==='maintain') && opts.shortDates && opts.shortDates.has(d.date);
+      const useTier = express ? 'express' : short ? 'short' : tier;
+      d.strengthShort = !!short; d.strengthShortable = (tier==='heavy' || tier==='maintain') && !express;
+      d.strengthExercises = buildLowerStrengthWorkout(useTier, variant, opts.weekInBlock, avail); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : short ? STRENGTH_TIME_MIN.short : STRENGTH_TIME_MIN[tier];
+      d.strengthLoadNote = (_used.filter(x=>!x.bodyweight).length===0) ? STRENGTH_LOAD_NOTE.bodyweight : (STRENGTH_LOAD_NOTE[useTier] || STRENGTH_LOAD_NOTE.heavy);
       const usedSoFar = _used.length; d.strengthOptional = useTier==='heavy' ? buildLowerOptional(avail) : undefined; _used.length = usedSoFar;
     }
     // One how-to per unfamiliar exercise in this session, in the order they appear.

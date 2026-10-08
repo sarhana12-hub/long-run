@@ -318,6 +318,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 130. **A plan made on a Thursday showed Sunday to Wednesday as planned days and the Progress tab credited their sessions as done** (owner, on a fresh plan). *Cause:* week one always began on the week's first day, and a fresh mid-week plan was tracked from today, which the projection read as "everything before today was done". *Fix:* the plan carries its start date; days of week one before it are blank (no run, no strength, nothing to log, credit or miss), the week's target is what remains, the validator and sweep judge that week by what it holds, and the week list leaves the blank days out. Existing fresh plans migrate on rebuild from their tracking start. *Guard:* tests/plan-invariants.js "mid-week start". Owner decision 2026-10-08.
 
+131. **Every leg session was the 40-minute version with 2–3 minutes between all heavy sets** (owner: too long after an easy run; too much rest on a leg press). *Fix:* rest between heavy sets is 2 minutes on machines and single-leg lifts, 2–3 minutes only under a barbell; and each leg day carries a Full / Shorter toggle in the day sheet. Shorter is the same session cut to about 25 minutes: the plyometric, the two lifts that matter, calves paired with the single-leg lift, one core set. The choice is per day and survives rebuilds.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

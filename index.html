@@ -926,6 +926,8 @@ const Store = {
   // separate "did it happen" record, since a strength day (including a rest day with
   // strength attached) has no run to log against.
   getStrengthDone(){ return this._get('lr_strength_done', []); },
+  getStrengthShort(){ return this._get('lr_strength_short', []); },
+  setStrengthShort(v){ this._set('lr_strength_short', v); },
   // Per-exercise ticks inside a strength session: {date: [bool,...]} in exercise order.
   getStrengthItems(){ return this._get('lr_strength_items', {}); },
   setStrengthItems(v){ this._set('lr_strength_items', v); },
@@ -1101,6 +1103,7 @@ function boot(){
   let plan = Store.getPlan();
   state.logs = Store.getLogs();
   state.strengthDone = Store.getStrengthDone();
+  state.strengthShort = Store.getStrengthShort();
   state.strengthItems = Store.getStrengthItems();
   state.helpSeen = Store.getFlag('help_seen');
   state.notesSeen = Store.getFlag('notes_seen');
@@ -2080,9 +2083,10 @@ function equipmentChipsHtml(selected, act){
     <div class="chip-select">${g.items.map(e=>`<button class="chip ${sel.has(e.id)?'active':''}" data-act="${act}" data-id="${e.id}">${esc(e.label)}</button>`).join('')}</div>`).join('');
 }
 // Options every post-generation strength refresh needs (edits, swaps, equipment changes).
+const STRENGTH_TIME_MIN_PAGE = {full:40, short:25};
 function strengthOptsFor(week){
   const mode = (state.setup && state.setup.taperMode) || 'full';
-  return {equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none'};
+  return {equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none', shortDates: new Set(state.strengthShort||[])};
 }
 function refreshStrengthFromThisWeek(){
   const plan = state.plan; if(!plan) return;
@@ -4640,6 +4644,7 @@ function renderDayDetail(){
     <details class="card settings-details" id="strength-details" style="padding:0 14px; margin-bottom:14px;" ${day.km>0 ? '' : 'open'}>
       <summary><span><div class="lbl" style="font-weight:700; font-size:14.5px;">Strength${day.strengthFocus==='upper' ? ' — upper body & core' : ''}</div><div class="sub" style="font-size:12.5px; color:var(--muted); margin-top:2px;">${day.strengthTimeMin ? `About ${day.strengthTimeMin} min` : ''}${day.km>0 ? (day.strengthAfterRun ? ' · after the run, not before it' : ' · after the run') : ''}${isStrengthDone ? ' · done' : ''}</div></span><span class="chev">${ICONS.chevron}</span></summary>
       <div style="padding-bottom:14px;">
+        ${day.strengthShortable ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthShort?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-short="0">Full · ${STRENGTH_TIME_MIN_PAGE.full} min</button><button class="chip ${day.strengthShort?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-short="1">Shorter · ${STRENGTH_TIME_MIN_PAGE.short} min</button></div>` : ''}
         ${strengthFocusNote ? `<div class="hint" style="margin:0 0 8px;">${esc(strengthFocusNote)}</div>` : ''}
         ${strengthRowsHtml(day.strengthExercises, day.date, day.strengthHowTo, false)}
         <div class="hint" style="margin:8px 0 12px;">Tap an exercise for the effort, rest and how to do it. Tick each one as you go.</div>
@@ -5188,6 +5193,14 @@ function onClick(e){
     const {weekIndex, dayIndex} = state.modal;
     const day = state.plan.weeks[weekIndex].days[dayIndex];
     state.modal={type:'log-run', data:{date:day.date, dist:'', time:'', notes:'', kind: day.type==='race' ? 'race' : 'run', rep:''}};
+    render(); return;
+  }
+  if(act==='set-strength-length'){
+    const date = el.dataset.date, short = el.dataset.short==='1';
+    const list = (state.strengthShort||[]).filter(d=>d!==date); if(short) list.push(date);
+    state.strengthShort = list; Store.setStrengthShort(list);
+    const wi = state.plan.weeks.findIndex(w=>w.days.some(d=>d.date===date));
+    if(wi>=0){ const w = state.plan.weeks[wi]; refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); Store.setPlan(state.plan); }
     render(); return;
   }
   if(act==='toggle-strength-done'){
