@@ -27,7 +27,7 @@ values from `VAPID-KEYS.local.txt`:
 
 - `VAPID_PUBLIC_KEY`
 - `VAPID_PRIVATE_KEY`
-- `VAPID_SUBJECT` (the `mailto:` line)
+- `VAPID_SUBJECT`: the whole value including the prefix, `mailto:you@example.com` (the Worker adds `mailto:` if it is missing, but paste it anyway)
 
 The two Strava secrets already there stay as they are.
 
