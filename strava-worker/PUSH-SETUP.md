@@ -13,10 +13,12 @@ Cloudflare dashboard → Workers & Pages → `peakstravarelay`.
 
 ## 2. Add the key-value store
 
-Settings → Bindings → Add → KV namespace.
+The namespace has to exist before the Worker can be bound to it, and the binding dialog cannot create one.
 
-- Variable name: `PEAK_PUSH`
-- KV namespace: Create new → name it `PEAK_PUSH` → Save.
+1. Left sidebar → Storage & Databases → KV → Create a namespace → name it `PEAK_PUSH` → Create.
+2. Back in the Worker: Settings → Bindings → Add → KV namespace.
+   - Variable name: `PEAK_PUSH`
+   - KV namespace: pick `PEAK_PUSH` from the list (leave "Use production value" ticked) → Add Binding.
 
 ## 3. Add the three secrets
 
