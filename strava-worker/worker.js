@@ -115,6 +115,18 @@ export default {
 
     // ---- reminders ----
     if (body.action === 'vapid') return json({ publicKey: env.VAPID_PUBLIC_KEY || null, enabled: !!(env.VAPID_PUBLIC_KEY && env.PEAK_PUSH) });
+    if (body.action === 'selfcheck') {
+      // Signs a sample with the private key and verifies it with the public key, so a
+      // mismatched or mangled secret shows up here rather than as a 403 from Apple.
+      try {
+        const header = await vapidAuthHeader(env, 'https://web.push.apple.com/x');
+        const m = header.match(/^vapid t=([^,]+), k=(.+)$/); const [h, c, s] = m[1].split('.');
+        const pub = b64u.decode(env.VAPID_PUBLIC_KEY);
+        const pubKey = await crypto.subtle.importKey('raw', pub, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+        const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pubKey, b64u.decode(s), te.encode(h + '.' + c));
+        return json({ signatureValid: ok, publicKeyBytes: pub.length, privateKeyChars: (env.VAPID_PRIVATE_KEY || '').length, privateKeyBytes: b64u.decode(env.VAPID_PRIVATE_KEY || '').length, subject: env.VAPID_SUBJECT || null, signatureBytes: b64u.decode(s).length, claims: JSON.parse(new TextDecoder().decode(b64u.decode(c))) });
+      } catch (e) { return json({ signatureValid: false, error: String(e && e.message || e) }); }
+    }
     if (body.action === 'subscribe') {
       if (!env.PEAK_PUSH) return json({ error: 'Reminders are not set up on the server' }, 503);
       const sub = body.subscription;
