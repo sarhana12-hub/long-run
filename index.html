@@ -399,6 +399,14 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 
 /* ---------- progress ---------- */
 .stat-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; padding:0 18px;}
+.seg{display:flex; background:var(--surface-2); border-radius:12px; padding:3px; margin:0 0 16px;}
+.seg button{flex:1; border:none; background:transparent; padding:8px 6px; border-radius:9px; font-weight:700; font-size:13.5px; color:var(--muted); transition:background-color .15s ease, color .15s ease;}
+.seg button.active{background:var(--surface); color:var(--ink); box-shadow:var(--shadow);}
+.strip{display:flex; margin:0 18px 16px; padding:4px 0;}
+.strip > button{flex:1; min-width:0; background:none; border:none; border-right:1px solid var(--line-soft); padding:10px 6px; text-align:center; color:inherit;}
+.strip > button:last-child{border-right:none;}
+.strip .v{font-family:var(--font-mono); font-weight:700; font-size:18px; white-space:nowrap;}
+.strip .l{font-size:11.5px; color:var(--muted); margin-top:3px;}
 .stat-tile{padding:14px 12px; display:block; width:100%; text-align:left;}
 .stat-tile .v{font-family:var(--font-mono); font-weight:700; font-size:20px;}
 .stat-tile .l{font-size:11.5px; color:var(--muted); margin-top:2px;}
@@ -3187,7 +3195,7 @@ function renderTrainingTrail(plan, unit, stats){
     `<div style="display:flex; align-items:center; gap:5px;"><span style="width:8px; height:8px; border-radius:50%; background:${li.color}; flex:none;"></span><span style="font-size:12.5px; color:var(--muted);">${esc(li.phaseLabel)}</span></div>`
   ).join('')}</div>`;
 
-  return `<div class="section-title" style="padding:0 20px;">Your trail</div>
+  return `<div class="section-title section-row" style="padding:0 20px;"><span>Your trail</span><button class="btn btn-sm" data-act="open-peek-the-peak" style="text-transform:none; letter-spacing:0; padding:5px 10px; gap:5px;"><span style="width:14px; height:14px; color:var(--accent-strong); display:inline-flex;">${ICONS.peak}</span>Peek the Peak</button></div>
   <button class="card" data-act="open-trail-week" style="display:block; text-align:left; padding:14px 14px 10px; margin:0 18px 24px; cursor:pointer;">
     <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:auto; display:block;">
       <style>@media (prefers-reduced-motion: reduce){ .trail-pulse{ display:none; } }</style>
@@ -3449,53 +3457,22 @@ function renderProgressTab(){
       <button class="btn btn-primary" data-act="open-log">${ICONS.plus} Log a run</button>
     </div>`;
 
-  return `
+  const view = state.progressView==='history' ? 'history' : 'overview';
+  const deltaColor = stats.mileageStatusLabel==='behind plan' ? 'var(--z-tempo)' : stats.mileageStatusLabel==='ahead of plan' ? 'var(--done)' : 'var(--ink)';
+  const header = `
   <div class="container" style="padding-top:14px;">
     <h2 style="font-size:20px; margin-bottom:2px;">${esc(state.name)}'s progress</h2>
-    <div class="hint" style="margin-bottom:16px;">${plan.planKind
+    <div class="hint" style="margin-bottom:14px;">${plan.planKind
       ? (daysToRace>=0 ? `${planLabel(state.setup)} — ${daysToRace} day${daysToRace===1?'':'s'} left` : `${planLabel(state.setup)} — complete. Nice work.`)
       : (daysToRace>=0? daysToRace+' days until '+planLabel(state.setup) : 'Race day has passed — nice work.')}</div>
-  </div>
-  ${renderTrainingTrail(plan, unit, stats)}
-  <div class="container">
-    <button class="btn btn-block" data-act="open-peek-the-peak" style="margin-bottom:20px; padding:13px 16px;">
-      <span style="width:18px; height:18px; color:var(--accent-strong);">${ICONS.peak}</span> Peek the Peak
-    </button>
-    ${renderRaceProjectionSection(stats, unit, state.paceFormat)}
-    ${(!plan.planKind && daysToRace>=0 && daysToRace<=14) ? `<button class="btn btn-primary btn-block" data-act="open-pacing-sheet" style="margin-bottom:16px;">${ICONS.flag} Race-day pacing sheet</button>` : ''}
-  </div>
+    <div class="seg" role="tablist"><button class="${view==='overview'?'active':''}" data-act="set-progress-view" data-view="overview">Overview</button><button class="${view==='history'?'active':''}" data-act="set-progress-view" data-view="history">History</button></div>
+  </div>`;
+  if(view==='history') return header + `
+  ${renderTrainingFlashback(unit, state.paceFormat)}
   <div class="stat-grid" style="margin-bottom:16px;">
     <button class="card stat-tile" data-act="open-stat-detail" data-stat="total-logged"><div class="v" data-count="${stats.totalLoggedKm}" data-count-fmt="dist" data-count-unit="${unit}" data-count-dec="0" data-count-key="total-logged">${fmtDist(stats.totalLoggedKm,unit,0)}</div><div class="l">total logged</div></button>
-    <button class="card stat-tile" data-act="open-stat-detail" data-stat="training-miles"><div class="v">${stats.pctPlanMilesLogged}%</div><div class="l">training miles logged</div></button>
-    <button class="card stat-tile" data-act="open-stat-detail" data-stat="adherence"><div class="v">${stats.adherence}%</div><div class="l">plan adherence</div></button>
-    <button class="card stat-tile" data-act="open-stat-detail" data-stat="mileage-delta"><div class="v">${fmtDist(Math.abs(stats.mileageDeltaKm),unit,0)}</div><div class="l">${stats.mileageStatusLabel}</div></button>
+    <button class="card stat-tile" data-act="open-stat-detail" data-stat="training-miles"><div class="v">${stats.pctPlanMilesLogged}%</div><div class="l">of training miles logged</div></button>
   </div>
-  ${stats.strengthPlannedTotal>0 ? `
-  <div class="container">
-    <div class="card" style="padding:14px 16px; margin-bottom:16px;">
-      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
-        <span style="font-weight:700; font-size:14.5px;">Strength sessions</span>
-        <span class="mono" style="font-size:12.5px; color:var(--muted);">${stats.strengthPlannedTotal} in plan</span>
-      </div>
-      <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:8px;">
-        <span class="mono" style="font-size:24px; font-weight:700;">${stats.strengthCompletedToDate}<span style="color:var(--muted);"> / ${stats.strengthPlannedToDate}</span></span>
-        <span style="font-size:12.5px; color:var(--muted);">${stats.strengthPlannedToDate===0 ? 'none scheduled yet' : 'done so far'}</span>
-      </div>
-      <div style="height:6px; border-radius:3px; background:var(--surface-2); overflow:hidden;"><div style="height:100%; width:${stats.strengthPlannedToDate>0 ? Math.round(100*stats.strengthCompletedToDate/stats.strengthPlannedToDate) : 0}%; background:var(--done);"></div></div>
-      <div class="hint" style="margin-top:8px;">Counted separately from plan adherence, which only tracks runs.</div>
-    </div>
-  </div>` : ''}
-  <div class="container">
-    <button class="card" data-act="open-achievements" style="display:flex; align-items:center; gap:12px; padding:14px 16px; width:100%; text-align:left; margin-bottom:16px;">
-      <div style="width:40px; height:40px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; flex-shrink:0;"><div style="width:22px; height:22px;">${ICONS.summitBadge}</div></div>
-      <div style="flex:1; min-width:0;">
-        <div style="font-weight:700; font-size:14.5px;">Milestones &amp; badges</div>
-        <div style="font-size:12.5px; color:var(--muted);">${earnedAchievements} of ${ACHIEVEMENTS.length} earned</div>
-      </div>
-      <div style="color:var(--muted); font-size:18px;">›</div>
-    </button>
-  </div>
-  ${renderTrainingFlashback(unit, state.paceFormat)}
   <div class="section-title" style="padding:0 20px;">Weekly mileage — planned vs. actual</div>
   <div class="card chart-card">
     <div class="chart-rows">${bars}</div>
@@ -3510,6 +3487,28 @@ function renderProgressTab(){
   </div>` : ''}
   <div class="section-title" style="padding:0 20px;">Recent runs</div>
   <div class="card" style="margin:0 18px 24px;">${logRows}</div>
+  `;
+  return header + `
+  ${renderTrainingTrail(plan, unit, stats)}
+  <div class="container">
+    ${renderRaceProjectionSection(stats, unit, state.paceFormat)}
+    ${(!plan.planKind && daysToRace>=0 && daysToRace<=14) ? `<button class="btn btn-primary btn-block" data-act="open-pacing-sheet" style="margin-bottom:16px;">${ICONS.flag} Race-day pacing sheet</button>` : ''}
+  </div>
+  <div class="card strip">
+    <button data-act="open-stat-detail" data-stat="mileage-delta"><div class="v" style="color:${deltaColor};">${stats.mileageStatusLabel==='on plan' ? 'on plan' : fmtDist(Math.abs(stats.mileageDeltaKm),unit,0)}</div><div class="l">${stats.mileageStatusLabel==='on plan' ? 'miles vs plan' : stats.mileageStatusLabel}</div></button>
+    <button data-act="open-stat-detail" data-stat="adherence"><div class="v">${stats.adherence}%</div><div class="l">adherence</div></button>
+    ${stats.strengthPlannedTotal>0 ? `<button data-act="open-stat-detail" data-stat="strength"><div class="v">${stats.strengthCompletedToDate}<span style="color:var(--muted);">/${stats.strengthPlannedToDate}</span></div><div class="l">strength done</div></button>` : ''}
+  </div>
+  <div class="container">
+    <button class="card" data-act="open-achievements" style="display:flex; align-items:center; gap:12px; padding:14px 16px; width:100%; text-align:left; margin-bottom:16px;">
+      <div style="width:40px; height:40px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; flex-shrink:0;"><div style="width:22px; height:22px;">${ICONS.summitBadge}</div></div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:700; font-size:14.5px;">Milestones &amp; badges</div>
+        <div style="font-size:12.5px; color:var(--muted);">${earnedAchievements} of ${ACHIEVEMENTS.length} earned</div>
+      </div>
+      <div style="color:var(--muted); display:inline-flex; width:18px; height:18px;">${ICONS.chevron}</div>
+    </button>
+  </div>
   `;
 }
 
@@ -3953,6 +3952,12 @@ function renderStatDetailModal(statKey){
       fmtDist(s.loggedKmToDate,unit,1), 'logged to date'
     ) + statResultHtml(fmtDist(Math.abs(s.mileageDeltaKm),unit,1), s.mileageStatusLabel, resultColor);
     footnote = "Compares through yesterday until you log a run today — the moment you do, today's own planned distance and logged distance both count too, so it's always an apples-to-apples comparison.";
+  } else if(statKey==='strength'){
+    title = 'Strength sessions';
+    const pct = s.strengthPlannedToDate>0 ? Math.round(100*s.strengthCompletedToDate/s.strengthPlannedToDate) : 0;
+    content = statCompareRowHtml(s.strengthCompletedToDate, 'marked done', s.strengthPlannedToDate, 'scheduled so far')
+      + statResultHtml(`${pct}%`, 'of strength sessions done', 'var(--done)');
+    footnote = `${s.strengthPlannedTotal} strength sessions in the whole plan. Counted separately from plan adherence, which only tracks runs.`;
   } else if(statKey==='race-projection' || (statKey && statKey.startsWith('general-projection-'))){
     const p = statKey==='race-projection' ? s.raceProjection : s.generalProjections.find(x=>statKey===`general-projection-${x.key}`);
     title = statKey==='race-projection' ? 'Projected race performance' : `Projected ${p.label} performance`;
@@ -5085,6 +5090,7 @@ function onClick(e){
     state.modal={type:'day-detail', weekIndex:found.weekIndex, dayIndex:found.dayIndex};
     render(); return;
   }
+  if(act==='set-progress-view'){ state.progressView = el.dataset.view; render(); pageScrollTo(0); return; }
   if(act==='open-stat-detail'){
     state.modal={type:'stat-detail', stat: el.dataset.stat};
     render(); return;

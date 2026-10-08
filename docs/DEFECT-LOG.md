@@ -292,6 +292,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 117. **Motion was incidental.** *Fix (owner-approved three moments):* figures that change count to their new value over half a second (the Now projection, this week's logged miles, total logged), a just-logged day card settles into green while its tick pops in once, and sheets ease in over 200 ms with a slight scale instead of sliding 28 px. All three honour reduced-motion. *Note:* requestAnimationFrame does not fire inside the desktop preview pane, so the count-up was verified by trace (right keys and values, one render) rather than by eye.
 
+118. **The Progress tab was ten blocks deep** (trail, Peek bar, projection, what moved it, four tiles, strength card, milestones, mileage chart, pace tracker, recent runs). *Fix:* an Overview / History switch. Overview answers "where am I": trail (Peek the Peak as a small control in its title row), projection with what moved it, one three-figure strip (miles vs plan, adherence, strength done; each opens its sheet, strength got one), milestones. History answers "what did I do": then-vs-now, total logged and share-of-plan tiles, the weekly chart, the pace tracker, recent runs. The overview fits about a screen and a half.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
