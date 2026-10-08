@@ -5204,7 +5204,10 @@ function onClick(e){
     state.strengthShort = list; Store.setStrengthShort(list);
     const wi = state.plan.weeks.findIndex(w=>w.days.some(d=>d.date===date));
     if(wi>=0){ const w = state.plan.weeks[wi]; refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); Store.setPlan(state.plan); }
-    if(state.modal) state.modal.strengthOpen = true; // the section stays open across the re-render
+    if(state.modal) state.modal.strengthOpen = true;
+    // Swap only the strength section inside the open sheet: no page rebuild, no flash, no scroll jump.
+    const live = document.getElementById('strength-details');
+    if(live && state.modal){ const tmp = document.createElement('div'); tmp.innerHTML = renderModal(); const fresh = tmp.querySelector('#strength-details'); if(fresh){ live.innerHTML = fresh.innerHTML; live.open = true; return; } }
     rerenderSheet(); return;
   }
   if(act==='toggle-strength-done'){
