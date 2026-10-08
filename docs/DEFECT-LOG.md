@@ -252,6 +252,20 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 98. **"Swap with another day" could not cross a week boundary** (changing week cancelled the swap). *Fix:* the swap survives a week change; the target can be any day in any week except race day; the confirmation previews both weeks' warnings and adds its own for a session landing within two days of the race or crossing phases.
 
+## Round 12 — visual pass toward 10/10 (2026-10-08)
+
+99. **Contrast.** Cards sat barely above the page and 12px grey hints missed 4.5:1 on the raised surfaces. *Fix:* both palettes rebuilt; every text/background pair is checked by script (scratch contrast.js) at 4.5:1 or better; hints 12.5px; day descriptions use ink-soft. The forced-dark block was also missing the hill colours.
+
+100. **The accent meant six things** (today, action, Now, done, trail marker, positive change). *Fix:* a separate `--done` green for completed and positive states (logged cards, checks, strength done, logged bars, adherence, faster deltas, scan done); the accent keeps today, action and selection. Coach-note, notes and checkpoint callouts went neutral.
+
+101. **Workout palette.** Progression amber and race-pace yellow were near-identical, as were long-run lavender and strength purple. *Fix:* long run is teal, race pace is pink (`--z-racepace`), race day keeps gold, hills are brown; cool for easy, warm for hard.
+
+102. **Peek the Peak carried the only gradient in the app.** *Fix:* a standard button with the accent peak icon.
+
+103. **Badge pile-up on day cards** (type, Strength, Hilly, Treadmill, Not logged). *Fix:* the type pill and a short strength badge with an icon stay; hilly and treadmill are icon-only; not-logged is a hollow ring where the tick would sit.
+
+104. **No way to choose light mode on a phone set to dark.** *Fix:* Settings → Appearance (System / Light / Dark), applied before first paint, with the theme-color metas following the effective theme. *Caveat:* iOS fixes a home-screen app's status-bar text colour at install time, so the light theme may need the app re-added to the home screen to get dark status text.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

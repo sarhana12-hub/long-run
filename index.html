@@ -27,21 +27,28 @@
 <link rel="apple-touch-startup-image" media="screen and (device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1242x2208.png">
 <link rel="apple-touch-startup-image" media="screen and (device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icons/splash/640x1136.png">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<script>try{const t=JSON.parse(localStorage.getItem('lr_theme'));if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <style>
+/* Every text/background pair below holds at least 4.5:1 (checked by script); cards sit one
+   clear step above the page; --done is the only colour that means "completed", --accent
+   means today, action and selection, and each workout family has its own hue: cool for
+   easy and long, warm for hard, with hills brown, race pace pink and race day gold. */
 :root{
   color-scheme: light dark;
-  --bg:#F3F5F0; --surface:#FFFFFF; --surface-2:#EAEEE4; --raised:#FFFFFF;
-  --ink:#121A16; --ink-soft:#45524B; --muted:#6C776F; --line:#DBE3D8; --line-soft:#E8EDE3;
-  --accent:#C3F53A; --accent-ink:#122006; --accent-soft:#E9FAC0; --accent-strong:#9FCE22;
-  --z-easy:#29708C; --z-easy-bg:#E0EEF3;
-  --z-long:#4A4E9E; --z-long-bg:#E7E7F6;
-  --z-tempo:#945810; --z-tempo-bg:#F8E9D3;
-  --z-intervals:#B33C28; --z-intervals-bg:#F8E1DA;
-  --z-strength:#6F5D83; --z-strength-bg:#ECE6F2;
-  --z-rest:#646B66; --z-rest-bg:#EBEFE8;
-  --z-race:#806408; --z-race-bg:#F6EBC9;
-  --z-hill:#A04C1B; --z-hill-bg:#F5E2D2;
+  --bg:#F2F4EE; --surface:#FFFFFF; --surface-2:#E9EDE3; --raised:#FFFFFF;
+  --ink:#111915; --ink-soft:#3E4A43; --muted:#5C6861; --line:#D3DBD0; --line-soft:#E4E9E0;
+  --accent:#C3F53A; --accent-ink:#122006; --accent-soft:#EAF9C6; --accent-strong:#4A7203;
+  --done:#1F7A3E; --done-bg:#DDF3E4; --done-ink:#FFFFFF;
+  --z-easy:#27647E; --z-easy-bg:#DEEDF3;
+  --z-long:#176E63; --z-long-bg:#D9EFEA;
+  --z-tempo:#8F5306; --z-tempo-bg:#F8E8CF;
+  --z-intervals:#B0282A; --z-intervals-bg:#F9DEDC;
+  --z-hill:#7A4A1C; --z-hill-bg:#EFE3D5;
+  --z-racepace:#A12D68; --z-racepace-bg:#F8DEEA;
+  --z-race:#7D6205; --z-race-bg:#F6EBC7;
+  --z-strength:#65527C; --z-strength-bg:#ECE5F3;
+  --z-rest:#5E665F; --z-rest-bg:#EAEEE7;
   --shadow: 0 1px 2px rgba(18,26,22,.06), 0 8px 24px -12px rgba(18,26,22,.18);
   --radius: 16px;
   --font-display:'Bricolage Grotesque','Arial Black',sans-serif;
@@ -50,33 +57,40 @@
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#101511; --surface:#1A211C; --surface-2:#212922; --raised:#232B25;
-    --ink:#EAEFE9; --ink-soft:#C2CCC4; --muted:#8B9790; --line:#2B342D; --line-soft:#242C26;
-    --accent:#D4FA4D; --accent-ink:#0E1704; --accent-soft:#2C3712; --accent-strong:#BFEA36;
-    --z-easy:#74C3E3; --z-easy-bg:#1B2E38;
-    --z-long:#9B9FEF; --z-long-bg:#25274A;
-    --z-tempo:#F0AC55; --z-tempo-bg:#3B2A14;
-    --z-intervals:#F1836A; --z-intervals-bg:#3C231D;
-    --z-strength:#C2A9D8; --z-strength-bg:#2E2638;
-    --z-rest:#8B968D; --z-rest-bg:#20261F;
-    --z-race:#E9C860; --z-race-bg:#3A2F0F;
-    --z-hill:#E8935C; --z-hill-bg:#3A2416;
-    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
+    --bg:#0E1310; --surface:#1A221C; --surface-2:#242D26; --raised:#2A342C;
+    --ink:#ECF1EB; --ink-soft:#C6D0C8; --muted:#9AA69D; --line:#313B33; --line-soft:#283129;
+    --accent:#D4FA4D; --accent-ink:#0E1704; --accent-soft:#2A3612; --accent-strong:#C9EF3F;
+    --done:#6BD898; --done-bg:#17301F; --done-ink:#06180C;
+    --z-easy:#7CC6E6; --z-easy-bg:#17303A;
+    --z-long:#62D6C3; --z-long-bg:#133230;
+    --z-tempo:#F2B05A; --z-tempo-bg:#3A2912;
+    --z-intervals:#F3837A; --z-intervals-bg:#3C1E1C;
+    --z-hill:#DCAA78; --z-hill-bg:#342416;
+    --z-racepace:#F39AC2; --z-racepace-bg:#3B1F2D;
+    --z-race:#ECCB62; --z-race-bg:#392E0E;
+    --z-strength:#C6ADDC; --z-strength-bg:#2D2537;
+    --z-rest:#93A096; --z-rest-bg:#1F261F;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
   }
 }
 :root[data-theme="dark"]{
-  --bg:#101511; --surface:#1A211C; --surface-2:#212922; --raised:#232B25;
-  --ink:#EAEFE9; --ink-soft:#C2CCC4; --muted:#8B9790; --line:#2B342D; --line-soft:#242C26;
-  --accent:#D4FA4D; --accent-ink:#0E1704; --accent-soft:#2C3712; --accent-strong:#BFEA36;
-  --z-easy:#74C3E3; --z-easy-bg:#1B2E38;
-  --z-long:#9B9FEF; --z-long-bg:#25274A;
-  --z-tempo:#F0AC55; --z-tempo-bg:#3B2A14;
-  --z-intervals:#F1836A; --z-intervals-bg:#3C231D;
-  --z-strength:#C2A9D8; --z-strength-bg:#2E2638;
-  --z-rest:#8B968D; --z-rest-bg:#20261F;
-  --z-race:#E9C860; --z-race-bg:#3A2F0F;
-  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
+  --bg:#0E1310; --surface:#1A221C; --surface-2:#242D26; --raised:#2A342C;
+  --ink:#ECF1EB; --ink-soft:#C6D0C8; --muted:#9AA69D; --line:#313B33; --line-soft:#283129;
+  --accent:#D4FA4D; --accent-ink:#0E1704; --accent-soft:#2A3612; --accent-strong:#C9EF3F;
+  --done:#6BD898; --done-bg:#17301F; --done-ink:#06180C;
+  --z-easy:#7CC6E6; --z-easy-bg:#17303A;
+  --z-long:#62D6C3; --z-long-bg:#133230;
+  --z-tempo:#F2B05A; --z-tempo-bg:#3A2912;
+  --z-intervals:#F3837A; --z-intervals-bg:#3C1E1C;
+  --z-hill:#DCAA78; --z-hill-bg:#342416;
+  --z-racepace:#F39AC2; --z-racepace-bg:#3B1F2D;
+  --z-race:#ECCB62; --z-race-bg:#392E0E;
+  --z-strength:#C6ADDC; --z-strength-bg:#2D2537;
+  --z-rest:#93A096; --z-rest-bg:#1F261F;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
 }
+:root[data-theme="light"]{ color-scheme: light; }
+:root[data-theme="dark"]{ color-scheme: dark; }
 
 *{box-sizing:border-box;}
 html,body{margin:0; padding:0;}
@@ -161,12 +175,13 @@ input.input[type="date"]::-webkit-calendar-picker-indicator{ cursor:pointer; opa
 input.input[type="date"]{ -webkit-appearance:none; appearance:none; display:block; width:100%; min-width:0; max-width:100%; text-align:left; }
 input.input[type="date"]::-webkit-date-and-time-value{ text-align:left; min-height:1.3em; }
 @media (prefers-color-scheme: dark){
-  input.input[type="date"]::-webkit-calendar-picker-indicator{ filter:invert(1); }
+  :root:not([data-theme="light"]) input.input[type="date"]::-webkit-calendar-picker-indicator{ filter:invert(1); }
 }
+:root[data-theme="dark"] input.input[type="date"]::-webkit-calendar-picker-indicator{ filter:invert(1); }
 .field{margin-bottom:16px;}
 .row{display:flex; gap:10px;}
 .row > *{flex:1;}
-.hint{font-size:12px; color:var(--muted); margin-top:6px; line-height:1.4;}
+.hint{font-size:12.5px; color:var(--muted); margin-top:6px; line-height:1.45;}
 .section-title{font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:22px 2px 10px;}
 .pill{display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:999px; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em;}
 .chip-select{display:flex; flex-wrap:wrap; gap:8px;}
@@ -207,20 +222,24 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .day-card{display:flex; align-items:center; gap:12px; padding:13px 14px; position:relative; width:100%; text-align:left; border:1px solid var(--line);}
 .day-card.move-target{outline:2px dashed var(--accent-strong); outline-offset:2px;}
 .day-card.move-source{outline:2px solid var(--accent-strong);}
-.day-card.logged{background:var(--accent-soft); border-color:var(--accent-strong);}
+.day-card.logged{background:var(--done-bg); border-color:var(--done);}
 .day-date{width:38px; flex:none; text-align:center;}
 .day-date .dow{font-size:10.5px; font-weight:700; color:var(--muted); text-transform:uppercase;}
 .day-date .dom{font-family:var(--font-mono); font-weight:700; font-size:17px;}
 .day-main{flex:1; min-width:0;}
 .day-top{display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;}
 .day-title{font-weight:700; font-size:14.5px;}
-.day-desc{font-size:12.5px; color:var(--muted); line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+.day-desc{font-size:13px; color:var(--ink-soft); line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
 .day-side{flex:none; text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:5px;}
 .day-dist{font-family:var(--font-mono); font-weight:700; font-size:15px;}
 .day-pace{font-family:var(--font-mono); font-size:11px; color:var(--muted);}
-.day-check{width:19px; height:19px; border-radius:50%; background:var(--accent-strong); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; flex:none;}
+.day-check{width:19px; height:19px; border-radius:50%; background:var(--done); color:var(--done-ink); display:flex; align-items:center; justify-content:center; flex:none;}
 .day-check svg{width:11px; height:11px;}
-.strength-badge{font-size:10px; font-weight:700; color:var(--z-strength); background:var(--z-strength-bg); border-radius:6px; padding:2px 6px;}
+.strength-badge{display:inline-flex; align-items:center; gap:4px; height:20px; font-size:10.5px; font-weight:700; color:var(--z-strength); background:var(--z-strength-bg); border-radius:6px; padding:0 6px; line-height:1;}
+.strength-badge svg{width:11px; height:11px; flex:none;}
+.ibadge{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:6px; font-size:11px; line-height:1;}
+.ibadge svg{width:12px; height:12px;}
+.day-ring{width:19px; height:19px; border-radius:50%; border:2px solid var(--line); flex:none;}
 .day-card{border-left:4px solid var(--card-edge, var(--line));}
 .day-card.today{border-color:var(--accent-strong); border-left-color:var(--card-edge, var(--accent-strong));}
 .pill .pill-ico{display:inline-flex; width:11px; height:11px;}
@@ -234,7 +253,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .today-card ul{margin:0 0 10px; padding-left:18px; font-size:13.5px; line-height:1.45; color:var(--ink-soft);}
 .today-card .row .btn{padding:11px 10px;}
 /* coach's notes callout */
-.notes-callout{margin:0 18px 14px; border:1px solid var(--accent-strong); background:var(--accent-soft); border-radius:14px; padding:0 14px;}
+.notes-callout{margin:0 18px 14px; border:1px solid var(--line); background:var(--surface-2); border-radius:14px; padding:0 14px;}
 .notes-callout summary{list-style:none; display:flex; align-items:center; gap:8px; padding:12px 0; font-weight:700; font-size:13.5px; cursor:pointer; -webkit-tap-highlight-color:transparent;}
 .notes-callout summary::-webkit-details-marker{display:none;}
 .notes-callout summary .count{margin-left:auto; font-family:var(--font-mono); font-size:12px; color:var(--muted);}
@@ -247,7 +266,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 /* strength rows */
 .sx-row{display:flex; align-items:flex-start; gap:10px; padding:9px 0; border-bottom:1px solid var(--line-soft);}
 .sx-row:last-child{border-bottom:none;}
-.sx-row input[type=checkbox]{width:22px; height:22px; flex:none; margin:2px 0 0; accent-color:var(--accent-strong);}
+.sx-row input[type=checkbox]{width:22px; height:22px; flex:none; margin:2px 0 0; accent-color:var(--done);}
 .sx-row details{flex:1; min-width:0;}
 .sx-row summary{list-style:none; display:flex; align-items:baseline; justify-content:space-between; gap:10px; cursor:pointer; -webkit-tap-highlight-color:transparent;}
 .sx-row summary::-webkit-details-marker{display:none;}
@@ -270,9 +289,9 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .impact-row{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid var(--line-soft); cursor:pointer;}
 .impact-row:last-child{border-bottom:none;}
 .impact-row .lbl{font-weight:700; font-size:13.5px;}
-.impact-row .sub{font-size:12px; color:var(--muted); margin-top:2px; line-height:1.35;}
+.impact-row .sub{font-size:12.5px; color:var(--muted); margin-top:2px; line-height:1.35;}
 .impact-d{font-family:var(--font-mono); font-weight:800; font-size:15px; flex:none;}
-.impact-d.up{color:var(--accent-strong);}
+.impact-d.up{color:var(--done);}
 .impact-d.down{color:var(--z-tempo);}
 /* exercise library */
 .sx-art{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0;}
@@ -284,7 +303,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .sx-info b{color:var(--ink);}
 .sx-info ul{margin:2px 0 6px; padding-left:16px;}
 .sx-info li{margin-bottom:2px;}
-.sx-link{display:inline-flex; align-items:center; gap:6px; margin-top:4px; font-size:12.5px; font-weight:700; color:var(--accent-strong); text-decoration:none;}
+.sx-link{display:inline-flex; align-items:center; gap:6px; margin-top:4px; font-size:12.5px; font-weight:700; color:var(--ink-soft); text-decoration:underline; text-underline-offset:2px;}
 .lib-row{padding:10px 0; border-bottom:1px solid var(--line-soft);}
 .lib-row:last-child{border-bottom:none;}
 .lib-row summary{list-style:none; display:flex; justify-content:space-between; align-items:center; gap:10px; cursor:pointer; -webkit-tap-highlight-color:transparent; font-weight:700; font-size:14px;}
@@ -374,7 +393,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
    unlabeled color — the chart only ever means to show two series: planned and logged. */
 .bar-track{width:100%; max-width:26px; height:130px; border-radius:6px; background:var(--surface); display:flex; align-items:flex-end; overflow:hidden; position:relative;}
 .bar-planned{width:100%; background:var(--line); border-radius:6px 6px 0 0;}
-.bar-actual{position:absolute; bottom:0; left:0; width:100%; background:var(--accent-strong); border-radius:6px 6px 0 0;}
+.bar-actual{position:absolute; bottom:0; left:0; width:100%; background:var(--done); border-radius:6px 6px 0 0;}
 .chart-col .wl{font-size:9.5px; color:var(--muted); font-weight:700;}
 .legend{display:flex; gap:16px; padding:10px 4px 14px; font-size:11.5px; color:var(--muted);}
 .legend span{display:inline-flex; align-items:center; gap:5px;}
@@ -399,7 +418,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .settings-row{display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:1px solid var(--line-soft); gap:12px;}
 .settings-row:last-child{border-bottom:none;}
 .settings-row .lbl{font-weight:700; font-size:14px;}
-.settings-row .sub{font-size:12px; color:var(--muted); margin-top:2px;}
+.settings-row .sub{font-size:12.5px; color:var(--muted); margin-top:2px;}
 
 .split-row{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line-soft);}
 .split-row:last-child{border-bottom:none;}
@@ -407,8 +426,8 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .split-row .split-d{flex:1; font-weight:700; font-size:13.5px;}
 .split-row .split-p{font-size:12px; color:var(--muted); margin-top:1px;}
 .split-row .split-t{font-weight:800; flex:none;}
-.split-row.checkpoint{background:var(--accent-soft); margin:0 -16px; padding:10px 16px; border-bottom-color:transparent; border-radius:10px;}
-.split-cue{font-size:12px; color:var(--ink-soft); margin:-4px -16px 4px; padding:0 16px 10px; background:var(--accent-soft); border-radius:0 0 10px 10px;}
+.split-row.checkpoint{background:var(--surface-2); margin:0 -16px; padding:10px 16px; border-bottom-color:transparent; border-radius:10px;}
+.split-cue{font-size:12px; color:var(--ink-soft); margin:-4px -16px 4px; padding:0 16px 10px; background:var(--surface-2); border-radius:0 0 10px 10px;}
 @media print{
   body *{ visibility:hidden; }
   .pacing-print, .pacing-print *{ visibility:visible; }
@@ -460,7 +479,7 @@ const TYPE_META = {
   overunder:{label:'Over/Unders', bg:'--z-tempo-bg', fg:'--z-tempo'},
   progression:{label:'Progression Run', bg:'--z-tempo-bg', fg:'--z-tempo'},
   cruise:{label:'Cruise Intervals', bg:'--z-tempo-bg', fg:'--z-tempo'},
-  racepace:{label:'Race Pace', bg:'--z-race-bg', fg:'--z-race'},
+  racepace:{label:'Race Pace', bg:'--z-racepace-bg', fg:'--z-racepace'},
   race:{label:'Race Day', bg:'--z-race-bg', fg:'--z-race'},
 };
 // Plain-language training purpose + target effort per workout type, shown in the
@@ -564,10 +583,10 @@ let _fitnessMemo = {key:null, value:null};
 // they never show as missed or not logged.
 function strengthBadgeHtml(day){
   if(!day.strength) return '';
-  const label = `Strength${day.strengthFocus==='upper' ? ' (upper/core)' : ''}`;
+  const label = day.strengthFocus==='upper' ? 'Upper' : 'Strength';
   return state.strengthDone.includes(day.date)
-    ? `<span class="strength-badge" style="color:var(--accent-strong); background:var(--accent-soft);">${ICONS.check} ${label}</span>`
-    : `<span class="strength-badge">+ ${label}</span>`;
+    ? `<span class="strength-badge" style="color:var(--done); background:var(--done-bg);" title="Strength done">${ICONS.check} ${label}</span>`
+    : `<span class="strength-badge">${ICONS.dumbbell} ${label}</span>`;
 }
 function beforeTrackingStart(day){ const t = state.setup && state.setup.trackingStartDate; return !!t && parseDate(day.date) < parseDate(t); }
 function fitnessFor(plan, logs){
@@ -840,6 +859,8 @@ const Store = {
 
   getName(){ return this._get('lr_name', ''); },
   setName(name){ this._set('lr_name', name); },
+  getTheme(){ const t = this._get('lr_theme', 'system'); return (t==='light'||t==='dark') ? t : 'system'; },
+  setTheme(t){ this._set('lr_theme', t); },
   getPaceFormat(){ return this._get('lr_pace_format', 'pace'); },
   setPaceFormat(fmt){ this._set('lr_pace_format', fmt); },
   getSetup(){ return this._get('lr_setup', null); },
@@ -952,6 +973,16 @@ const state = {
 };
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Applies the chosen appearance: a forced light/dark sets data-theme on <html>, "system"
+// clears it so the prefers-color-scheme rules decide. The theme-color metas follow the
+// effective theme so the browser chrome (and, in a home-screen app, the status bar area)
+// matches the page instead of the system setting.
+function applyTheme(){
+  const pref = state.theme || 'system';
+  if(pref==='system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = pref;
+  const dark = pref==='dark' || (pref==='system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m=>{ m.setAttribute('content', dark ? '#0E1310' : '#F2F4EE'); });
+}
 function showToast(msg, undo, ms){ state.toast = msg; state.toastUndo = undo || null; render(); setTimeout(()=>{ state.toast=null; state.toastUndo=null; render(); }, ms||2200); }
 // Closes whatever sheet is open. A projection note that was held back while a milestone
 // screen was up shows the moment that screen closes.
@@ -993,6 +1024,8 @@ function boot(){
   }
   state.name = Store.getName();
   state.paceFormat = Store.getPaceFormat();
+  state.theme = Store.getTheme(); applyTheme();
+  if(window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
   const setup = Store.getSetup();
   let plan = Store.getPlan();
   state.logs = Store.getLogs();
@@ -2207,6 +2240,7 @@ function renderPlanTab(week, plan){
     const isMoveSrc = state.moveFrom && state.moveFrom.weekIndex===state.currentWeekIndex && state.moveFrom.dayIndex===di;
     const isMoveTarget = state.moveFrom && !isMoveSrc && day.type!=='race'; // race day never trades
     const dt = parseDate(day.date);
+    const notLogged = day.km>0 && day.type!=='race' && !match && dt < todayDate() && !beforeTrackingStart(day);
     return `
     <button class="card day-card ${match?'logged':''} ${isToday?'today':''} ${isMoveSrc?'move-source':''} ${isMoveTarget?'move-target':''}" data-act="${isMoveTarget ? 'move-target' : 'open-day'}" data-i="${di}" style="${day.type!=='rest'?`--card-edge:var(${meta.fg});`:''}">
       <div class="day-date"><div class="dow">${DOW_LABELS[day.dow]}</div><div class="dom mono">${dt.getDate()}</div></div>
@@ -2214,14 +2248,13 @@ function renderPlanTab(week, plan){
         <div class="day-top">
           ${dayPill(day)}
           ${strengthBadgeHtml(day)}
-          ${day.terrain==='hilly'?`<span class="strength-badge" style="color:var(--z-hill); background:var(--z-hill-bg);">⛰ Hilly</span>`:''}
-          ${day.treadmill?`<span class="strength-badge" style="color:var(--z-easy); background:var(--z-easy-bg);">Treadmill</span>`:''}
-          ${(day.km>0 && day.type!=='race' && !match && parseDate(day.date) < todayDate() && !beforeTrackingStart(day)) ? `<span class="strength-badge" style="color:var(--muted); background:var(--surface-2);">Not logged</span>` : ''}
+          ${day.terrain==='hilly'?`<span class="ibadge" style="color:var(--z-hill); background:var(--z-hill-bg);" title="Hilly" aria-label="Hilly">⛰</span>`:''}
+          ${day.treadmill?`<span class="ibadge" style="color:var(--z-easy); background:var(--z-easy-bg);" title="Treadmill" aria-label="Treadmill">${ICONS.treadmill}</span>`:''}
         </div>
         <div class="day-desc">${esc(daySummaryText(day, weekPaces, unit, cardFmt))}</div>
       </div>
       <div class="day-side">
-        ${match?`<div class="day-check">${ICONS.check}</div>`:''}
+        ${match?`<div class="day-check">${ICONS.check}</div>`:(notLogged?`<div class="day-ring" title="Not logged"></div>`:'')}
         ${day.km>0?`<div class="day-dist mono">${fmtDist(day.km,unit)}</div>`:''}
       </div>
     </button>`;
@@ -2248,7 +2281,7 @@ function renderPlanTab(week, plan){
     <summary>${ICONS.route} Coach's notes on this plan <span class="count">${plan.warnings.length}</span></summary>
     <ul>${plan.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul>
   </details>` : ''}
-  ${(()=>{ const note = computeCoachNote(plan, week, unit); return note ? `<div class="card" style="padding:14px 16px; margin:0 18px 16px; background:var(--accent-soft); border-color:var(--accent-strong); display:flex; gap:10px; align-items:flex-start;">
+  ${(()=>{ const note = computeCoachNote(plan, week, unit); return note ? `<div class="card" style="padding:14px 16px; margin:0 18px 16px; background:var(--surface-2); border-color:var(--line); display:flex; gap:10px; align-items:flex-start;">
     <div style="width:16px; height:16px; flex-shrink:0; margin-top:1px; color:var(--accent-ink);">${ICONS.route}</div>
     <span style="font-size:13px; line-height:1.4; color:var(--ink);">${esc(note)}</span>
   </div>` : ''; })()}
@@ -2765,7 +2798,7 @@ function achievementProgressHtml(key){
   if(!p || p.target<=0) return '';
   const pct = clamp(Math.round(p.current/p.target*100), 0, 98);
   return `<div style="margin-top:6px;">
-    <div style="height:4px; border-radius:2px; background:var(--surface-2); overflow:hidden;"><div style="height:100%; width:${pct}%; background:var(--accent);"></div></div>
+    <div style="height:4px; border-radius:2px; background:var(--surface-2); overflow:hidden;"><div style="height:100%; width:${pct}%; background:var(--done);"></div></div>
     <div class="hint" style="margin-top:4px;">${Math.min(p.current,p.target)} of ${p.target} ${p.unitLabel}</div>
   </div>`;
 }
@@ -3130,7 +3163,7 @@ function renderTrainingTrail(plan, unit, stats){
         <animate attributeName="opacity" values="0.6;0;0.6" dur="2.4s" repeatCount="indefinite"/>
       </circle>
       <circle cx="${hx}" cy="${hy}" r="5" fill="${markerColor}" stroke="var(--surface)" stroke-width="2"/>
-      <text x="${hx}" y="${deltaY}" text-anchor="${deltaAnchor}" style="font-size:9px; font-weight:700; font-family:var(--font-body); fill:${markerColor};">${deltaLabel}</text>
+      <text x="${hx}" y="${deltaY}" text-anchor="${deltaAnchor}" style="font-size:9px; font-weight:700; font-family:var(--font-body); fill:${markerRingColor};">${deltaLabel}</text>
     </svg>
     <div class="hint" style="margin-top:6px;">${esc(label)} — steeper sections are bigger weeks, colored by phase. You're ${paceNote} on real logged miles. Tap to jump to this week.</div>
     ${legendHtml}
@@ -3311,7 +3344,7 @@ function renderProgressTab(){
     const plannedPct = clamp((w.targetKm/maxKm)*100,2,100);
     const actualPct = clamp((actual/maxKm)*100,0,100);
     return `<div class="chart-col">
-      <div class="bar-label mono"><span style="color:var(--accent-strong);">${Math.round(kmToUnit(actual,unit))}</span><span style="color:var(--muted);">/${Math.round(kmToUnit(w.targetKm,unit))}${unit}</span></div>
+      <div class="bar-label mono"><span style="color:var(--done);">${Math.round(kmToUnit(actual,unit))}</span><span style="color:var(--muted);">/${Math.round(kmToUnit(w.targetKm,unit))}${unit}</span></div>
       <div class="bar-track">
         <div class="bar-planned" style="height:${plannedPct}%"></div>
         <div class="bar-actual" style="height:${actualPct}%"></div>
@@ -3341,8 +3374,8 @@ function renderProgressTab(){
   </div>
   ${renderTrainingTrail(plan, unit, stats)}
   <div class="container">
-    <button class="btn btn-block" data-act="open-peek-the-peak" style="margin-bottom:20px; background:linear-gradient(135deg, #1a2a44, #3a2a52); color:#fff; border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
-      <span style="width:18px; height:18px;">${ICONS.peak}</span> Peek the Peak
+    <button class="btn btn-block" data-act="open-peek-the-peak" style="margin-bottom:20px; padding:13px 16px;">
+      <span style="width:18px; height:18px; color:var(--accent-strong);">${ICONS.peak}</span> Peek the Peak
     </button>
     ${renderRaceProjectionSection(stats, unit, state.paceFormat)}
     ${(!plan.planKind && daysToRace>=0 && daysToRace<=14) ? `<button class="btn btn-primary btn-block" data-act="open-pacing-sheet" style="margin-bottom:16px;">${ICONS.flag} Race-day pacing sheet</button>` : ''}
@@ -3364,7 +3397,7 @@ function renderProgressTab(){
         <span class="mono" style="font-size:24px; font-weight:700;">${stats.strengthCompletedToDate}<span style="color:var(--muted);"> / ${stats.strengthPlannedToDate}</span></span>
         <span style="font-size:12.5px; color:var(--muted);">${stats.strengthPlannedToDate===0 ? 'none scheduled yet' : 'done so far'}</span>
       </div>
-      <div style="height:6px; border-radius:3px; background:var(--surface-2); overflow:hidden;"><div style="height:100%; width:${stats.strengthPlannedToDate>0 ? Math.round(100*stats.strengthCompletedToDate/stats.strengthPlannedToDate) : 0}%; background:var(--accent-strong);"></div></div>
+      <div style="height:6px; border-radius:3px; background:var(--surface-2); overflow:hidden;"><div style="height:100%; width:${stats.strengthPlannedToDate>0 ? Math.round(100*stats.strengthCompletedToDate/stats.strengthPlannedToDate) : 0}%; background:var(--done);"></div></div>
       <div class="hint" style="margin-top:8px;">Counted separately from plan adherence, which only tracks runs.</div>
     </div>
   </div>` : ''}
@@ -3382,7 +3415,7 @@ function renderProgressTab(){
   <div class="section-title" style="padding:0 20px;">Weekly mileage — planned vs. actual</div>
   <div class="card chart-card">
     <div class="chart-rows">${bars}</div>
-    <div class="legend"><span><i style="background:var(--line)"></i>Planned</span><span><i style="background:var(--accent-strong)"></i>Logged</span></div>
+    <div class="legend"><span><i style="background:var(--line)"></i>Planned</span><span><i style="background:var(--done)"></i>Logged</span></div>
   </div>
   <div class="section-title" style="padding:0 20px;">Pace tracker</div>
   <div class="card" style="padding:6px 16px 14px; margin:0 18px 24px;">
@@ -3439,7 +3472,7 @@ const PACE_ON_TARGET_SEC_PER_KM = 2;
 function paceRunColor(run){
   const deltaSecPerKm = run.actualPaceSecPerKm - run.plannedPaceSecPerKm;
   if(Math.abs(deltaSecPerKm)<PACE_ON_TARGET_SEC_PER_KM) return 'var(--muted)';
-  return deltaSecPerKm>=0 ? 'var(--z-tempo)' : 'var(--accent-strong)';
+  return deltaSecPerKm>=0 ? 'var(--z-tempo)' : 'var(--done)';
 }
 // Same math/formatting as paceDeltaLine (see below, actual-vs-that-day's-target), but
 // comparing two actual runs against each other instead - used by the then-vs-now header
@@ -3469,8 +3502,8 @@ function paceThenVsNowHtml(allRuns, unit, fmt){
   if(allRuns.length<2) return '';
   const first = allRuns[0], last = allRuns[allRuns.length-1];
   const gain = paceGainLine(first.actualPaceSecPerKm, last.actualPaceSecPerKm, unit, fmt);
-  const color = gain.direction==='steady' ? 'var(--muted)' : (gain.direction==='faster' ? 'var(--accent-strong)' : 'var(--z-tempo)');
-  const bg = gain.direction==='steady' ? 'var(--surface-2)' : (gain.direction==='faster' ? 'var(--accent-soft)' : 'var(--z-tempo-bg)');
+  const color = gain.direction==='steady' ? 'var(--muted)' : (gain.direction==='faster' ? 'var(--done)' : 'var(--z-tempo)');
+  const bg = gain.direction==='steady' ? 'var(--surface-2)' : (gain.direction==='faster' ? 'var(--done-bg)' : 'var(--z-tempo-bg)');
   const arrow = `<svg class="tn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`;
   const dateLabel = d => { const dt = parseDate(d); return `${dt.getMonth()+1}/${dt.getDate()}`; };
   return `
@@ -3544,6 +3577,9 @@ function renderSettingsTab(){
       <div class="settings-row"><div><div class="lbl">${esc(state.name)}</div><div class="sub">This plan lives only on this device</div></div></div>
       <div class="settings-row"><div class="lbl">Units</div>
         <div class="chip-select"><button class="chip ${unit==='mi'?'active':''}" data-act="set-unit" data-u="mi">Miles</button><button class="chip ${unit==='km'?'active':''}" data-act="set-unit" data-u="km">Kilometers</button></div>
+      </div>
+      <div class="settings-row"><div class="lbl">Appearance</div>
+        <div class="chip-select">${[['system','System'],['light','Light'],['dark','Dark']].map(([k,l])=>`<button class="chip ${(state.theme||'system')===k?'active':''}" data-act="set-theme" data-t="${k}">${l}</button>`).join('')}</div>
       </div>
       <div class="settings-row"><div class="lbl">Pace display</div>
         <div class="chip-select"><button class="chip ${fmt==='pace'?'active':''}" data-act="set-pace-format" data-f="pace">Pace</button><button class="chip ${fmt==='speed'?'active':''}" data-act="set-pace-format" data-f="speed">Speed (${speedUnitLabel})</button></div>
@@ -3815,18 +3851,18 @@ function renderStatDetailModal(statKey){
     content = statCompareRowHtml(
       fmtDist(s.planScopedLoggedKm,unit,1), 'logged',
       fmtDist(s.totalPlanTrainingKm,unit,0), 'total plan training'
-    ) + statResultHtml(`${s.pctPlanMilesLogged}%`, 'of training miles logged', 'var(--accent-strong)');
+    ) + statResultHtml(`${s.pctPlanMilesLogged}%`, 'of training miles logged', 'var(--done)');
     footnote = "Race day itself isn't counted — that's the event, not training.";
   } else if(statKey==='adherence'){
     title = 'Plan adherence';
     content = statCompareRowHtml(
       s.completedPlannedRuns, 'days with a run completed',
       s.plannedRunDatesToDateCount, 'days with a run scheduled'
-    ) + statResultHtml(`${s.adherence}%`, 'plan adherence', 'var(--accent-strong)');
+    ) + statResultHtml(`${s.adherence}%`, 'plan adherence', 'var(--done)');
     footnote = "Counts through yesterday until you log something today — once you do, today counts too, both what was scheduled and what you ran.";
   } else if(statKey==='mileage-delta'){
     title = s.mileageStatusLabel==='behind plan' ? 'Behind plan' : s.mileageStatusLabel==='ahead of plan' ? 'Ahead of plan' : 'On plan';
-    const resultColor = s.mileageStatusLabel==='behind plan' ? 'var(--z-tempo)' : (s.mileageStatusLabel==='ahead of plan' ? 'var(--accent-strong)' : 'var(--muted)');
+    const resultColor = s.mileageStatusLabel==='behind plan' ? 'var(--z-tempo)' : (s.mileageStatusLabel==='ahead of plan' ? 'var(--done)' : 'var(--muted)');
     content = statCompareRowHtml(
       fmtDist(s.plannedToDateKm,unit,1), 'planned to date',
       fmtDist(s.loggedKmToDate,unit,1), 'logged to date'
@@ -3839,7 +3875,7 @@ function renderStatDetailModal(statKey){
     const deltaSec = Math.round(p.start.sec - p.current.sec); // positive = faster now
     const deltaLine = Math.abs(deltaSec) < 5
       ? `<div class="hint" style="text-align:center; margin-top:12px;">No change yet. It moves as you log quality sessions and races.</div>`
-      : `<div style="text-align:center; margin-top:12px;"><span class="mono" style="font-weight:800; font-size:24px; color:${deltaSec>0 ? 'var(--accent-strong)' : 'var(--z-tempo)'};">${secToClock(Math.abs(deltaSec))}</span><span style="font-weight:700; font-size:14px; margin-left:6px;">${deltaSec>0 ? 'faster' : 'slower'} than at the start</span></div>`;
+      : `<div style="text-align:center; margin-top:12px;"><span class="mono" style="font-weight:800; font-size:24px; color:${deltaSec>0 ? 'var(--done)' : 'var(--z-tempo)'};">${secToClock(Math.abs(deltaSec))}</span><span style="font-weight:700; font-size:14px; margin-left:6px;">${deltaSec>0 ? 'faster' : 'slower'} than at the start</span></div>`;
     content = `<div class="card" style="padding:4px 14px; margin-bottom:4px;">${projectionRowsHtml(p, unit, state.paceFormat)}</div>`
       + deltaLine
       + (p.goalCheck ? `<div class="hint" style="text-align:center; margin-top:8px; color:${p.goalCheck.status==='beyond' ? 'var(--z-tempo)' : 'var(--ink)'};">${esc(goalCheckText(p.goalCheck, p.goal))}</div>` : '')
@@ -4182,7 +4218,7 @@ function scanBlockHtml(scan){
   const status = scan && scan.status;
   const body = status==='loading' ? `<div class="hint">Loading the text reader (first time only)…</div>`
     : status==='reading' ? `<div class="hint">Reading the screenshot… ${scan.progress!=null ? Math.round(scan.progress*100)+'%' : ''}</div>`
-    : status==='done' ? `<div class="hint" style="color:var(--accent-strong);">${esc(scan.summary)}</div>${scan.notes && scan.notes.length ? `<div class="hint">${scan.notes.map(esc).join(' ')}</div>` : ''}${scan.splits && scan.splits.length ? `<button class="btn btn-sm" data-act="remove-splits" style="margin-top:6px;">Remove splits</button>` : ''}<details style="margin-top:4px;"><summary class="hint" style="cursor:pointer;">What was read</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(scan.raw||'')}</pre></details>`
+    : status==='done' ? `<div class="hint" style="color:var(--done);">${esc(scan.summary)}</div>${scan.notes && scan.notes.length ? `<div class="hint">${scan.notes.map(esc).join(' ')}</div>` : ''}${scan.splits && scan.splits.length ? `<button class="btn btn-sm" data-act="remove-splits" style="margin-top:6px;">Remove splits</button>` : ''}<details style="margin-top:4px;"><summary class="hint" style="cursor:pointer;">What was read</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(scan.raw||'')}</pre></details>`
     : status==='error' ? `<div class="hint" style="color:var(--z-tempo);">${esc(scan.error||'Could not read that screenshot.')}</div>`
     : `<div class="hint">Apple Fitness: open the run, tap Splits and screenshot that page. One picture is enough. The summary screen of any app (Apple, Strava, Garmin, Nike) works too. Copy the screenshot and tap Paste, or choose it from your photos. The numbers are read on your phone and filled in below; every field can be changed before you save.</div>`;
   return `<div class="card" style="padding:12px 14px; margin-bottom:14px; background:var(--surface-2);">
@@ -4474,7 +4510,7 @@ function renderDayDetail(){
         <div class="field-label" style="margin-bottom:6px;">Optional extras — only if you have time</div>
         <div style="opacity:.85; margin-bottom:12px;">${strengthRowsHtml(day.strengthOptional, day.date, day.strengthHowTo, true)}</div>` : ''}
         <div class="hint" style="margin:0 0 12px;">Built for the gym equipment ticked in Settings.</div>
-        ${day.strength ? `<button class="btn btn-block" data-act="toggle-strength-done" data-date="${day.date}" style="margin-bottom:0; ${isStrengthDone?'color:var(--accent-strong); border-color:var(--accent-strong);':''}">${isStrengthDone?`${ICONS.check} Strength completed`:'Mark strength completed'}</button>` : ''}
+        ${day.strength ? `<button class="btn btn-block" data-act="toggle-strength-done" data-date="${day.date}" style="margin-bottom:0; ${isStrengthDone?'color:var(--done); border-color:var(--done);':''}">${isStrengthDone?`${ICONS.check} Strength completed`:'Mark strength completed'}</button>` : ''}
       </div>
     </details>` : ''}
     <button class="btn btn-primary btn-block" data-act="open-log-for-day" style="padding:13px; margin-top:6px;">${ICONS.plus} Log ${matchedLogs.length?'another':'a'} run</button>
@@ -5101,6 +5137,9 @@ function onClick(e){
     state.setup.units = u;
     Store.setSetup(state.setup);
     render(); return;
+  }
+  if(act==='set-theme'){
+    state.theme = el.dataset.t; Store.setTheme(state.theme); applyTheme(); render(); return;
   }
   if(act==='set-pace-format'){
     const f = el.dataset.f;
