@@ -312,6 +312,10 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 127. **The "How to read your plan" card filled the top of the Plan screen on first open** (owner). *Fix:* never shown inline; the guide is behind the ? in the top bar only.
 
+128. **Light mode read as grey** once easy days lost their colour (owner). *Fix, light palette only:* warmer paper (#F6F5F0), lighter greys for pills and lines, session tints a step more saturated (all still 4.5:1 or better), and a pale lime wash on the today card and today row. Dark is unchanged.
+
+129. **The grey dumbbell beside the distance was too easy to miss on strength days** (owner). *Fix:* a short grey badge in the pill row again, "Strength" or "Upper" with the icon, green with a tick once done. Purple stays off the screen.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

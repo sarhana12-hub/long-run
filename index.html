@@ -53,17 +53,18 @@
    easy and long, warm for hard, with hills brown, race pace pink and race day gold. */
 :root{
   color-scheme: light dark;
-  --bg:#F2F4EE; --surface:#FFFFFF; --surface-2:#E9EDE3; --raised:#FFFFFF;
-  --ink:#111915; --ink-soft:#3E4A43; --muted:#5C6861; --line:#D3DBD0; --line-soft:#E4E9E0;
+  --bg:#F6F5F0; --surface:#FFFFFF; --surface-2:#EFEFE9; --raised:#FFFFFF;
+  --ink:#111915; --ink-soft:#3E4A43; --muted:#5C6861; --line:#DDDDD4; --line-soft:#ECECE5;
+  --today-bg:#F3FBD9;
   --accent:#C3F53A; --accent-ink:#122006; --accent-soft:#EAF9C6; --accent-strong:#4A7203;
   --done:#1F7A3E; --done-bg:#DDF3E4; --done-ink:#FFFFFF;
   --z-easy:#27647E; --z-easy-bg:#DEEDF3;
-  --z-long:#176E63; --z-long-bg:#D9EFEA;
-  --z-tempo:#8F5306; --z-tempo-bg:#F8E8CF;
-  --z-intervals:#B0282A; --z-intervals-bg:#F9DEDC;
-  --z-hill:#7A4A1C; --z-hill-bg:#EFE3D5;
-  --z-racepace:#A12D68; --z-racepace-bg:#F8DEEA;
-  --z-race:#7D6205; --z-race-bg:#F6EBC7;
+  --z-long:#176E63; --z-long-bg:#CFEFE7;
+  --z-tempo:#8F5306; --z-tempo-bg:#FBE3BE;
+  --z-intervals:#B0282A; --z-intervals-bg:#FAD9D5;
+  --z-hill:#7A4A1C; --z-hill-bg:#F0DEC9;
+  --z-racepace:#A12D68; --z-racepace-bg:#F9D8E6;
+  --z-race:#7D6205; --z-race-bg:#F8E7B8;
   --z-strength:#65527C; --z-strength-bg:#ECE5F3;
   --z-rest:#5E665F; --z-rest-bg:#EAEEE7;
   --shadow: 0 1px 2px rgba(18,26,22,.06), 0 8px 24px -12px rgba(18,26,22,.18);
@@ -77,6 +78,7 @@
     --bg:#0E1310; --surface:#1A221C; --surface-2:#242D26; --raised:#2A342C;
     --ink:#ECF1EB; --ink-soft:#C6D0C8; --muted:#9AA69D; --line:#313B33; --line-soft:#283129;
     --accent:#D4FA4D; --accent-ink:#0E1704; --accent-soft:#2A3612; --accent-strong:#C9EF3F;
+    --today-bg:var(--surface);
     --done:#6BD898; --done-bg:#17301F; --done-ink:#06180C;
     --z-easy:#7CC6E6; --z-easy-bg:#17303A;
     --z-long:#62D6C3; --z-long-bg:#133230;
@@ -94,6 +96,7 @@
   --bg:#0E1310; --surface:#1A221C; --surface-2:#242D26; --raised:#2A342C;
   --ink:#ECF1EB; --ink-soft:#C6D0C8; --muted:#9AA69D; --line:#313B33; --line-soft:#283129;
   --accent:#D4FA4D; --accent-ink:#0E1704; --accent-soft:#2A3612; --accent-strong:#C9EF3F;
+  --today-bg:var(--surface);
   --done:#6BD898; --done-bg:#17301F; --done-ink:#06180C;
   --z-easy:#7CC6E6; --z-easy-bg:#17303A;
   --z-long:#62D6C3; --z-long-bg:#133230;
@@ -261,11 +264,11 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .day-sx{width:18px; height:18px; color:var(--muted); display:inline-flex;}
 .day-sx svg{width:18px; height:18px;}
 .day-sx.done{color:var(--done);}
-.day-card.today{border-color:var(--accent-strong);}
+.day-card.today{border-color:var(--accent-strong); background:var(--today-bg);}
 .pill .pill-ico{display:inline-flex; width:11px; height:11px;}
 .pill .pill-ico svg{width:11px; height:11px;}
 /* today card */
-.today-card{margin:0 18px 14px; padding:14px 16px; border-color:var(--accent-strong);}
+.today-card{margin:0 18px 14px; padding:14px 16px; border-color:var(--accent-strong); background:var(--today-bg);}
 .today-card .tc-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;}
 .today-card .tc-label{font-size:11.5px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-strong);}
 .today-card .tc-date{font-size:12.5px; color:var(--muted); font-weight:600;}
@@ -2316,6 +2319,7 @@ function renderPlanTab(week, plan){
       <div class="day-main">
         <div class="day-top">
           ${dayPill(day)}
+          ${strengthBadgeHtml(day)}
           ${day.terrain==='hilly'?`<span class="ibadge" style="color:var(--muted); background:var(--surface-2);" title="Hilly" aria-label="Hilly">${ICONS.mountain}</span>`:''}
           ${day.treadmill?`<span class="ibadge" style="color:var(--muted); background:var(--surface-2);" title="Treadmill" aria-label="Treadmill">${ICONS.treadmill}</span>`:''}
         </div>
@@ -2324,7 +2328,6 @@ function renderPlanTab(week, plan){
       <div class="day-side">
         ${match?`<div class="day-check">${ICONS.check}</div>`:(notLogged?`<div class="day-ring" title="Not logged"></div>`:'')}
         ${day.km>0?`<div class="day-dist mono">${fmtDist(day.km,unit)}</div>`:''}
-        ${day.strength?`<div class="day-sx ${state.strengthDone.includes(day.date)?'done':''}" title="${state.strengthDone.includes(day.date)?'Strength done':(day.strengthFocus==='upper'?'Upper body and core':'Strength')}">${ICONS.dumbbell}</div>`:''}
       </div>
     </button>`;
   }).join('');
