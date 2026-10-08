@@ -75,6 +75,8 @@ async function encryptPayload(sub, plaintext) {
 }
 
 // Sends one notification. Returns 'ok', 'gone' (subscription dead: delete it) or 'error'.
+// The last push service response is kept in LAST_PUSH for the test action to report.
+let LAST_PUSH = null;
 async function sendPush(env, sub, payload) {
   try {
     const body = await encryptPayload(sub, JSON.stringify(payload));
@@ -89,9 +91,10 @@ async function sendPush(env, sub, payload) {
       },
       body,
     });
+    LAST_PUSH = { status: res.status, text: (await res.text()).slice(0, 300) };
     if (res.status === 404 || res.status === 410) return 'gone';
     return res.ok ? 'ok' : 'error';
-  } catch (e) { return 'error'; }
+  } catch (e) { LAST_PUSH = { status: 0, text: String(e && e.message || e) }; return 'error'; }
 }
 
 // ---------- local time for a phone ----------
@@ -135,7 +138,7 @@ export default {
       const rec = body.endpoint ? await env.PEAK_PUSH.get(await sha256hex(body.endpoint), 'json') : null;
       if (!rec) return json({ error: 'Not registered' }, 404);
       const r = await sendPush(env, rec.sub, { title: 'Peak', body: 'Reminders are on. This is what a morning will look like.', url: './' });
-      return json({ ok: r === 'ok', result: r });
+      return json({ ok: r === 'ok', result: r, status: LAST_PUSH && LAST_PUSH.status, detail: LAST_PUSH && LAST_PUSH.text });
     }
 
     // ---- Strava relay (unchanged) ----

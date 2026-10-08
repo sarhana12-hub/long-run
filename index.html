@@ -5300,7 +5300,7 @@ function onClick(e){
   if(act==='reminders-on'){ enableReminders(); return; }
   if(act==='reminders-off'){ disableReminders(); return; }
   if(act==='reminders-test'){
-    (async()=>{ try{ const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if(!sub){ showToast('Turn reminders on first'); return; } await syncPush(sub); const r = await pushApi({action:'test', endpoint: sub.endpoint}); showToast(r && r.ok ? 'Test sent' : 'The server could not send: ' + ((r && (r.error||r.result)) || 'unknown'), null, 4000); }catch(e){ showToast('Could not send a test', null, 3000); } })();
+    (async()=>{ try{ const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if(!sub){ showToast('Turn reminders on first'); return; } await syncPush(sub); const r = await pushApi({action:'test', endpoint: sub.endpoint}); showToast(r && r.ok ? 'Test sent' : 'Could not send: ' + ((r && (r.error || ((r.status||'')+' '+(r.detail||r.result||'')))) || 'unknown'), null, 8000); }catch(e){ showToast('Could not send a test', null, 3000); } })();
     return;
   }
   if(act==='copy-app-link'){
