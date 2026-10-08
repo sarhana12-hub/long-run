@@ -304,6 +304,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 123. **A system-grey strip about 62 pt tall under the tab bar on the owner's phone, on every tab** (present in every phone screenshot of the session). *Diagnosis:* a display line added to Settings reported standalone, screen 402×874, window 402×812, top inset 62, bottom inset 34: iOS 26 shortened the page by the status-bar height while keeping it anchored at the top, under the black-translucent status-bar style. *Fix:* status-bar style default (the status bar takes its colour from theme-color); read at install time, so the app must be re-added to the home screen. Copy link also got a copy icon in place of a map pin.
 
+124. **The tab bar was a square-cornered band the full width of the screen** (owner: too big, wasted space, square against a rounded screen). *Fix:* a floating rounded bar with a 14 px side margin and a 10 px margin above the home indicator, translucent with a backdrop blur so content scrolls beneath it; the floating Log button and toasts moved up to clear it. Desktop keeps the top bar.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
