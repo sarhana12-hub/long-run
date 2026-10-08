@@ -337,6 +337,8 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .settings-details summary::-webkit-details-marker{display:none;}
 .settings-details summary .chev{color:var(--muted); transition:transform .15s ease; flex:none;}
 .settings-details[open] summary .chev{transform:rotate(90deg);}
+.settings-details summary .lbl{font-weight:700; font-size:14px;}
+.settings-details summary .sub{font-size:12.5px; color:var(--muted); margin-top:2px;}
 /* desktop: wider column, tabs on top */
 @media (min-width:900px){
   #app{max-width:680px; padding-top:56px;}
@@ -3843,13 +3845,17 @@ function renderSettingsTab(){
   const cw = getWeekPaces(state.plan, currentWeek, state.logs);
   const fit = fitnessFor(state.plan, state.logs);
   const speedUnitLabel = unit==='mi' ? 'mph' : 'km/h';
+  const general = isGeneralPlan(s);
+  const row = (lbl, sub, right) => `<div class="settings-row"><div style="min-width:0;"><div class="lbl">${lbl}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>${right || ''}</div>`;
+  const btn = (act, label, extra) => `<button class="btn btn-sm ${extra||''}" data-act="${act}" style="white-space:nowrap; flex:none;">${label}</button>`;
+  const recentRace = recentRaceLabel(s, unit); const runsPerWeekVal = s.runsPerWeek || runsPerWeekFor(s.currentWeeklyKm); const restDaysVal = 7-runsPerWeekVal;
   return `
   <div class="container" style="padding-top:14px;">
     <h2 style="font-size:20px; margin-bottom:16px;">Settings</h2>
 
     <div class="section-title" style="margin-top:0;">Profile</div>
     <div class="card" style="padding:6px 16px;">
-      <div class="settings-row"><div><div class="lbl">${esc(state.name)}</div><div class="sub">This plan lives only on this device</div></div></div>
+      ${row(esc(state.name), 'Everything lives on this device')}
       <div class="settings-row"><div class="lbl">Units</div>
         <div class="chip-select"><button class="chip ${unit==='mi'?'active':''}" data-act="set-unit" data-u="mi">Miles</button><button class="chip ${unit==='km'?'active':''}" data-act="set-unit" data-u="km">Kilometers</button></div>
       </div>
@@ -3861,101 +3867,60 @@ function renderSettingsTab(){
       </div>
     </div>
 
-    <div class="section-title">${isGeneralPlan(s) ? 'Plan' : 'Race'}</div>
+    <div class="section-title">Your plan</div>
     <div class="card" style="padding:6px 16px;">
-      ${isGeneralPlan(s)
-        ? `<div class="settings-row"><div><div class="lbl">${esc(planLabel(s))}</div><div class="sub">${s.weeks} week${s.weeks===1?'':'s'} total</div></div></div>`
-        : `<div class="settings-row"><div><div class="lbl">${esc(planLabel(s))}</div><div class="sub">${niceDateFull(parseDate(s.raceDate))}</div></div></div>`}
-      ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Course profile</div><div class="sub">${s.hillsMode==='hilly'?'Hilly':'Flat / rolling'}</div></div></div>` : ''}
-      ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Base phase</div><div class="sub">${s.skipBase?'Skipped — straight to speed work':'Build up gradually'}</div></div></div>` : ''}
-      ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Race approach</div><div class="sub">${s.taperMode==='none'?'Train through — no taper':s.taperMode==='light'?'Light taper':'Full taper'}</div></div></div>` : ''}
-      ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Build pace</div><div class="sub">${s.buildPace==='faster' ? 'Faster — about 10% a week with cutbacks' : "Steady — a mile per weekly run, held a few weeks"}</div></div></div>` : ''}
-      <div class="settings-row"><div><div class="lbl">Weekly mileage used to build plan</div><div class="sub">${fmtDist(s.currentWeeklyKm,unit,1)}/week${state.plan.peakWeeklyKm ? ` → peaks at ${fmtDist(state.plan.peakWeeklyKm,unit,0)}/week${state.plan.peakLongKm ? `, long run up to ${fmtDist(state.plan.peakLongKm,unit,0)}` : ''}` : ''}</div></div></div>
-      ${state.plan.prediction ? `<div class="settings-row"><div><div class="lbl">Projected finish from your recent result</div><div class="sub">${secToClock(state.plan.prediction.lowSec)}–${secToClock(state.plan.prediction.highSec)} · ${esc(state.plan.prediction.basis)}</div></div></div>` : ''}
-      ${state.plan.warnings && state.plan.warnings.length ? `<div class="settings-row"><div><div class="lbl">Coach's notes</div><div class="sub">${state.plan.warnings.map(w=>esc(w)).join('<br><br>')}</div></div></div>` : ''}
-      <div class="settings-row"><div><div class="lbl">This week's paces</div><div class="sub">Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)}${isGeneralPlan(s) ? '' : ` · Goal race pace ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}`}</div></div></div>
-      <div class="hint" style="padding:0 0 12px;">${fit && fit.nowVdot!=null ? `Paces follow your fitness number (${fit.nowVdot}), which moves with logged races and quality sessions.` : 'Paces follow your current fitness.'}${isGeneralPlan(s) ? '' : ' They step up slowly through build and peak, then hold through the taper.'}</div>
-      ${!isGeneralPlan(s) && s.hillsMode==='hilly' && (s.strengthPerWeek||0)<2 ? `<div class="hint" style="padding:0 0 12px; color:var(--z-tempo);">Hilly course — most coaches recommend at least 2 strength sessions/week for the eccentric demand of climbs and descents. You're currently set to ${s.strengthPerWeek||0}.</div>` : ''}
-    </div>
-    ${!isGeneralPlan(s) ? `<button class="btn btn-block" data-act="open-pacing-sheet" style="margin:-4px 0 20px;">${ICONS.flag} Race-day pacing sheet</button>` : ''}
-
-    <details class="card settings-details" style="padding:0 16px; margin-top:22px;">
-      <summary><span><div class="lbl" style="font-weight:700; font-size:14.5px;">Your starting inputs</div><div class="sub" style="font-size:12.5px; color:var(--muted); margin-top:2px;">What you entered when this plan was built</div></span><span class="chev">${ICONS.chevron}</span></summary>
-      ${(()=>{ const recentRace = recentRaceLabel(s, unit); const runsPerWeekVal = s.runsPerWeek || runsPerWeekFor(s.currentWeeklyKm); const restDaysVal = 7-runsPerWeekVal; return `
-      <div class="settings-row"><div><div class="lbl">Recent race</div><div class="sub">${recentRace ? esc(recentRace) : 'Not provided'}${s.recent2DistanceKm && s.recent2TimeSec ? ` · also ${esc((RACE_PRESETS.slice(0,5).find(r=>Math.abs(r.km-s.recent2DistanceKm)<0.05)||{label:fmtDist(s.recent2DistanceKm,unit)}).label)} in ${secToClock(s.recent2TimeSec)}` : ''}</div></div></div>
-      <div class="settings-row"><div><div class="lbl">Longest recent run</div><div class="sub">${s.longestRecentRunKm ? fmtDist(s.longestRecentRunKm,unit,1) : 'Not provided — estimated from weekly mileage'}</div></div></div>
-      ${!isGeneralPlan(s) ? `<div class="settings-row"><div><div class="lbl">Goal time</div><div class="sub">${s.goalTimeSec ? secToClock(s.goalTimeSec) : 'None set — paces follow your fitness'}</div></div></div>` : ''}
-      <div class="settings-row"><div><div class="lbl">Long run day</div><div class="sub">${DOW_LABELS[s.longDow]}</div></div></div>
-      <div class="settings-row"><div><div class="lbl">Week starts on</div><div class="sub">${(s.weekStartDow||0)===1?'Monday':'Sunday'}</div></div></div>
-      ${s.trackingStartDate ? `<div class="settings-row"><div><div class="lbl">Tracking progress from</div><div class="sub">${niceDate(parseDate(s.trackingStartDate))} — earlier days aren't counted against you</div></div></div>` : ''}
-      <div class="settings-row"><div><div class="lbl">Running days per week</div><div class="sub">${runsPerWeekVal} (${restDaysVal} rest day${restDaysVal===1?'':'s'})</div></div></div>
-      ${!isGeneralPlan(s) ? `
-      <div class="settings-row"><div><div class="lbl">Long run emphasis</div><div class="sub">${emphasisLabel(s.longRunEmphasis)}</div></div></div>
-      <div class="settings-row"><div><div class="lbl">Speed work emphasis</div><div class="sub">${emphasisLabel(s.speedEmphasis)}</div></div></div>
-      <div class="settings-row"><div><div class="lbl">Strength days per week</div><div class="sub">${strengthCountLabel(s.strengthPerWeek)}</div></div></div>
-      <div class="settings-row"><div><div class="lbl">Max long run</div><div class="sub">${s.maxLongRunKm?fmtDist(s.maxLongRunKm,unit,1):'No cap'}</div></div></div>
-      <div class="settings-row"><div><div class="lbl">Max weekly mileage</div><div class="sub">${s.maxWeeklyKm?fmtDist(s.maxWeeklyKm,unit,1):'No cap'}</div></div></div>
-      ` : (s.planKind==='distance' ? `
-      <div class="settings-row"><div><div class="lbl">Distance goal</div><div class="sub">${s.distanceGoalMetric==='weekly'?'Weekly mileage':'Longest run'}: ${fmtDist(s.distanceGoalCurrentKm,unit,1)} → ${fmtDist(s.distanceGoalTargetKm,unit,1)}</div></div></div>
-      ` : '')}
-      <div class="hint" style="padding:0 0 12px;">To change any of it, use Change plan below.</div>
-      `; })()}
-    </details>
-
-    <details class="card settings-details" id="equip-details" style="padding:0 16px; margin-top:10px;">
-      <summary><span><div class="lbl" style="font-weight:700; font-size:14.5px;">Gym equipment</div><div class="sub" style="font-size:12.5px; color:var(--muted); margin-top:2px;">${esc(equipmentSummary(Array.isArray(s.equipment) ? s.equipment : DEFAULT_EQUIPMENT))}</div></span><span class="chev">${ICONS.chevron}</span></summary>
-      <div class="hint" style="padding:0 0 4px;">Strength sessions are built from what's ticked here. Change it and every session from this week on is rebuilt around it — runs and logged workouts are untouched.</div>
-      <div style="padding-bottom:14px;"><div style="display:flex; gap:8px; margin-bottom:10px;"><button class="btn btn-sm" data-act="equipment-none">Bodyweight only</button><button class="btn btn-sm" data-act="equipment-all">Everything</button></div>${equipmentChipsHtml(Array.isArray(s.equipment) ? s.equipment : DEFAULT_EQUIPMENT, 'toggle-equipment')}</div>
-    </details>
-
-    <div class="section-title">Exercise library</div>
-    <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
-      <div class="hint">Every exercise the plan can prescribe, with set-up, form points, a drawing and a reference page.</div>
-      <button class="btn btn-block" data-act="open-library">${ICONS.dumbbell} Browse the library</button>
+      ${row(esc(planLabel(s)), general ? `${s.weeks} week${s.weeks===1?'':'s'}` : niceDateFull(parseDate(s.raceDate)), btn('open-switch-plan', 'Change plan'))}
+      ${row('Mileage', `${fmtDist(s.currentWeeklyKm,unit,0)}/week${state.plan.peakWeeklyKm ? ` → peaks at ${fmtDist(state.plan.peakWeeklyKm,unit,0)}${state.plan.peakLongKm ? `, long run up to ${fmtDist(state.plan.peakLongKm,unit,0)}` : ''}` : ''}`)}
+      ${row("This week's paces", `Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)}${general ? '' : ` · Race ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}`}${fit && fit.nowVdot!=null ? ` · fitness ${fit.nowVdot}` : ''}`)}
+      ${general ? '' : row('Race-day pacing sheet', 'Mile by mile, with checkpoints', btn('open-pacing-sheet', 'Open'))}
+      ${row('Calendar', 'Every planned day as an all-day event', btn('export-ics', 'Add (.ics)'))}
+      <details class="settings-details">
+        <summary><span><div class="lbl" style="font-size:14px;">How this plan was built</div><div class="sub">${general ? 'Inputs and settings' : `${s.hillsMode==='hilly'?'Hilly':'Flat'} · ${s.skipBase?'no base':'base first'} · ${s.taperMode==='none'?'train through':s.taperMode==='light'?'light taper':'full taper'} · ${s.buildPace==='faster'?'faster build':'steady build'}`}</div></span><span class="chev">${ICONS.chevron}</span></summary>
+        <div style="padding-bottom:10px;">
+          ${general ? '' : row('Course', s.hillsMode==='hilly'?'Hilly: hill repeats, rolling long runs, extra leg strength':'Flat or rolling')}
+          ${general ? '' : row('Base phase', s.skipBase?'Skipped, straight to speed work':'Easy weeks with strides first')}
+          ${general ? '' : row('Race approach', s.taperMode==='none'?'Train through, no taper':s.taperMode==='light'?'Light taper':'Full taper')}
+          ${general ? '' : row('Build pace', s.buildPace==='faster' ? 'Faster: about 10% a week with cutbacks' : 'Steady: a mile per weekly run, held a few weeks')}
+          ${row('Recent race', recentRace ? esc(recentRace) + (s.recent2DistanceKm && s.recent2TimeSec ? ` · also ${esc((RACE_PRESETS.slice(0,5).find(r=>Math.abs(r.km-s.recent2DistanceKm)<0.05)||{label:fmtDist(s.recent2DistanceKm,unit)}).label)} in ${secToClock(s.recent2TimeSec)}` : '') : 'Not provided')}
+          ${row('Longest recent run', s.longestRecentRunKm ? fmtDist(s.longestRecentRunKm,unit,1) : 'Estimated from weekly mileage')}
+          ${general ? '' : row('Goal time', s.goalTimeSec ? secToClock(s.goalTimeSec) : 'None set')}
+          ${row('Week', `${runsPerWeekVal} run days, ${restDaysVal} rest · long run ${DOW_LABELS[s.longDow]} · week starts ${(s.weekStartDow||0)===1?'Monday':'Sunday'}`)}
+          ${general ? (s.planKind==='distance' ? row('Distance goal', `${s.distanceGoalMetric==='weekly'?'Weekly mileage':'Longest run'}: ${fmtDist(s.distanceGoalCurrentKm,unit,1)} → ${fmtDist(s.distanceGoalTargetKm,unit,1)}`) : '') : row('Emphasis', `Long run ${emphasisLabel(s.longRunEmphasis).toLowerCase()} · speed work ${emphasisLabel(s.speedEmphasis).toLowerCase()} · strength ${strengthCountLabel(s.strengthPerWeek).toLowerCase().replace(' · ', ': ')}`)}
+          ${(!general && (s.maxLongRunKm || s.maxWeeklyKm)) ? row('Caps', `${s.maxLongRunKm?'Long run '+fmtDist(s.maxLongRunKm,unit,1):''}${s.maxLongRunKm&&s.maxWeeklyKm?' · ':''}${s.maxWeeklyKm?'Week '+fmtDist(s.maxWeeklyKm,unit,1):''}`) : ''}
+          ${s.trackingStartDate ? row('Tracking from', `${niceDate(parseDate(s.trackingStartDate))}; earlier days are not counted against you`) : ''}
+          ${state.plan.prediction ? row('Projected finish at the start', `${secToClock(state.plan.prediction.lowSec)}–${secToClock(state.plan.prediction.highSec)} · ${esc(state.plan.prediction.basis)}`) : ''}
+          ${state.plan.warnings && state.plan.warnings.length ? row("Coach's notes", state.plan.warnings.map(w=>esc(w)).join('<br><br>')) : ''}
+          ${!general && s.hillsMode==='hilly' && (s.strengthPerWeek||0)<2 ? `<div class="hint" style="color:var(--z-tempo); padding:4px 0 6px;">Hilly course with ${s.strengthPerWeek||0} strength days: two a week is the usual advice for climbs and descents.</div>` : ''}
+          <div class="hint" style="padding:4px 0 6px;">Paces follow your fitness number, which moves with logged races and quality sessions. To change any input, use Change plan.</div>
+        </div>
+      </details>
     </div>
 
-    <div class="section-title">Strava</div>
-    <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
-      ${state.stravaAuth ? `
-        <div class="settings-row"><div><div class="lbl">Connected</div><div class="sub">Import a run's distance and time instead of typing them in.</div></div></div>
-        <button class="btn btn-block" data-act="disconnect-strava">Disconnect</button>
-      ` : `
-        <div class="hint">Import runs from Strava instead of typing them in.</div>
-        <button class="btn btn-primary btn-block" data-act="connect-strava">Connect to Strava</button>
-      `}
-    </div>
-
-    <div class="section-title">Plan controls</div>
-    <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
-      <div class="hint">Switch plan type or update its inputs. Logged runs are always kept.</div>
-      <button class="btn btn-block" data-act="open-switch-plan">Change plan</button>
-      <div class="hint" style="margin-top:4px;">Every planned day as an all-day calendar event. Re-export after changes.</div>
-      <button class="btn btn-block" data-act="export-ics">${ICONS.calendarCheck} Add to calendar (.ics)</button>
+    <div class="section-title">Strength</div>
+    <div class="card" style="padding:6px 16px;">
+      <details class="settings-details" id="equip-details">
+        <summary><span><div class="lbl" style="font-size:14px;">Gym equipment</div><div class="sub">${esc(equipmentSummary(Array.isArray(s.equipment) ? s.equipment : DEFAULT_EQUIPMENT))}</div></span><span class="chev">${ICONS.chevron}</span></summary>
+        <div class="hint" style="padding:0 0 4px;">Sessions are built from what is ticked. Changing it rebuilds every session from this week on; runs and logs are untouched.</div>
+        <div style="padding-bottom:14px;"><div style="display:flex; gap:8px; margin-bottom:10px;"><button class="btn btn-sm" data-act="equipment-none">Bodyweight only</button><button class="btn btn-sm" data-act="equipment-all">Everything</button></div>${equipmentChipsHtml(Array.isArray(s.equipment) ? s.equipment : DEFAULT_EQUIPMENT, 'toggle-equipment')}</div>
+      </details>
+      ${row('Exercise library', 'Every lift the plan can prescribe, with how-to and drawings', btn('open-library', 'Browse'))}
     </div>
 
     <div class="section-title">Reminders</div>
-    <div class="card" style="padding:14px 16px; margin-bottom:16px;">
-      <div class="settings-row" style="padding-top:0;"><div><div class="lbl">Reminders</div><div class="sub">${state.push && state.push.enabled ? 'On · one line per notification, local time' : 'Today\'s workout in the morning, tomorrow\'s in the evening'}</div></div>
-        <button class="btn btn-sm ${state.push && state.push.enabled ? '' : 'btn-primary'}" data-act="${state.push && state.push.enabled ? 'reminders-off' : 'reminders-on'}" style="white-space:nowrap;">${state.push && state.push.enabled ? 'Turn off' : 'Turn on'}</button></div>
-      ${[['morning','Morning','Today\'s workout'],['evening','Evening','Tomorrow\'s workout']].map(([k,label,sub])=>`
+    <div class="card" style="padding:6px 16px;">
+      ${row('Notifications', state.push && state.push.enabled ? 'On' : "Today's workout in the morning, tomorrow's in the evening", btn(state.push && state.push.enabled ? 'reminders-off' : 'reminders-on', state.push && state.push.enabled ? 'Turn off' : 'Turn on', state.push && state.push.enabled ? '' : 'btn-primary'))}
+      ${[['morning','Morning',"Today's workout"],['evening','Evening',"Tomorrow's workout"]].map(([k,label,sub])=>`
       <div class="settings-row" style="${state.push && state.push.enabled ? '' : 'opacity:.6;'}"><div><div class="lbl">${label}</div><div class="sub">${sub}</div></div>
         <div style="display:flex; align-items:center; gap:8px;"><button class="chip ${state.push[k+'On'] ? 'active' : ''}" data-act="push-toggle" data-which="${k}" style="padding:6px 12px;">${state.push[k+'On'] ? 'On' : 'Off'}</button><input class="input" type="time" id="push-${k}-time" value="${esc(state.push[k+'Time'] || (k==='morning' ? '07:00' : '20:00'))}" style="width:auto; padding:8px 10px; ${state.push[k+'On'] ? '' : 'opacity:.5;'}"></div></div>`).join('')}
-      ${state.push && state.push.enabled ? `<div class="row" style="margin-top:10px;"><button class="btn btn-block" data-act="reminders-test">Send a test</button></div>` : ''}
-      ${pushSupported() ? '' : `<div class="hint" style="margin-top:8px;">On iPhone, reminders need Peak added to the home screen with "Open as Web App" on, and iOS 16.4 or later.</div>`}
+      ${state.push && state.push.enabled ? row('Test', 'One notification now', btn('reminders-test', 'Send')) : ''}
+      ${pushSupported() ? '' : `<div class="hint" style="padding:0 0 12px;">On iPhone, reminders need Peak on the home screen with "Open as Web App" on, and iOS 16.4 or later.</div>`}
     </div>
-    <div class="section-title">App link</div>
-    <div class="card" style="padding:14px 16px; margin-bottom:16px;">
-      <div class="mono" style="font-size:13.5px; word-break:break-all;">${esc(APP_URL)}</div>
-      <div class="hint" style="margin:6px 0 12px;">To put Peak back on your home screen: open this link in Safari, tap Share, then Add to Home Screen.</div>
-      <div class="row"><button class="btn btn-block" data-act="copy-app-link">${ICONS.copy} Copy link</button>${(navigator.share ? `<button class="btn btn-block" data-act="share-app-link">Share…</button>` : '')}</div>
-    </div>
-    <div class="section-title">Backup</div>
-    <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
-      <div class="hint">Save your inputs and logged runs to a file. Import rebuilds the plan and restores the runs.</div>
-      <div class="row">
-        <button class="btn btn-block" data-act="export-data">Export data</button>
-        <button class="btn btn-block" data-act="import-data">Import data</button>
-      </div>
+
+    <div class="section-title">Connections and data</div>
+    <div class="card" style="padding:6px 16px;">
+      ${state.stravaAuth ? row('Strava', 'Connected: import runs instead of typing them', btn('disconnect-strava', 'Disconnect')) : row('Strava', 'Import runs instead of typing them', btn('connect-strava', 'Connect', 'btn-primary'))}
+      ${row('Backup', 'Your inputs and logged runs, as a file', `<div style="display:flex; gap:8px; flex:none;">${btn('export-data', 'Export')}${btn('import-data', 'Import')}</div>`)}
+      ${row('App link', `<span class="mono" style="word-break:break-all;">${esc(APP_URL)}</span><br>Open in Safari, Share, Add to Home Screen to reinstall`, `<div style="display:flex; gap:8px; flex:none;">${btn('copy-app-link', 'Copy')}${navigator.share ? btn('share-app-link', 'Share') : ''}</div>`)}
       <input type="file" id="import-file-input" accept="application/json,.json" style="display:none;">
     </div>
 

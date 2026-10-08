@@ -334,6 +334,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 137. **Typing "25" for a 200 m rep was read as 25 minutes** (owner). *Cause:* the typing formatter left one or two bare digits alone and the parser read a bare number as minutes. *Fix:* digits are seconds first everywhere: the field shows 0:25 as you type, and the parser reads digit-only input right to left (25 → 0:25, 330 → 3:30, 4530 → 45:30, 12345 → 1:23:45); colon input is unchanged. *Guard:* tests/projection.js 9.
 
+138. **Settings had become the drawer everything was dropped into**: fourteen headed blocks in the order they were added, each with its own explanatory paragraph (owner). *Fix:* five groups. Profile (name, units, appearance, pace). Your plan (the race and Change plan, mileage, this week's paces, pacing sheet, calendar export, and a folded "How this plan was built" holding every input, the projection at the start and the coach's notes). Strength (gym equipment folded, exercise library). Reminders. Connections and data (Strava, backup, app link) as rows with their action beside them. Danger zone. Half the scroll length, no paragraphs.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
