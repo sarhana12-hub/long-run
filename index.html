@@ -2800,7 +2800,7 @@ function achievementProgressHtml(key){
   const pct = clamp(Math.round(p.current/p.target*100), 0, 98);
   return `<div style="margin-top:6px;">
     <div style="height:4px; border-radius:2px; background:var(--surface-2); overflow:hidden;"><div style="height:100%; width:${pct}%; background:var(--done);"></div></div>
-    <div class="hint" style="margin-top:4px;">${Math.min(p.current,p.target)} of ${p.target} ${p.unitLabel}</div>
+    <div class="hint" style="margin-top:4px;">${p.unitLabel==='%' ? `${Math.min(p.current,p.target)}% of ${p.target}%` : `${Math.min(p.current,p.target)} of ${p.target} ${p.unitLabel}`}</div>
   </div>`;
 }
 
@@ -3646,7 +3646,7 @@ function renderSettingsTab(){
       ${state.plan.prediction ? `<div class="settings-row"><div><div class="lbl">Projected finish from your recent result</div><div class="sub">${secToClock(state.plan.prediction.lowSec)}–${secToClock(state.plan.prediction.highSec)} · ${esc(state.plan.prediction.basis)}</div></div></div>` : ''}
       ${state.plan.warnings && state.plan.warnings.length ? `<div class="settings-row"><div><div class="lbl">Coach's notes</div><div class="sub">${state.plan.warnings.map(w=>esc(w)).join('<br><br>')}</div></div></div>` : ''}
       <div class="settings-row"><div><div class="lbl">This week's paces</div><div class="sub">Easy ${paceOrSpeedStr(cw.easyPerKm,unit,fmt)} · Tempo ${paceOrSpeedStr(cw.tempoPerKm,unit,fmt)}${isGeneralPlan(s) ? '' : ` · Goal race pace ${paceOrSpeedStr(cw.racePerKm,unit,fmt)}`}</div></div></div>
-      <div class="hint" style="padding:0 0 12px;">${isGeneralPlan(s) ? 'Training paces are calibrated to your current fitness.' : 'Training paces follow your current fitness and step up slowly through the build and peak phases (about one fitness point per six weeks of quality work), then hold through the taper.'}${fit && fit.nowVdot!=null ? ` They follow your fitness number (${fit.nowVdot}), which moves with logged races and quality sessions — see Progress.` : ''}</div>
+      <div class="hint" style="padding:0 0 12px;">${fit && fit.nowVdot!=null ? `Paces follow your fitness number (${fit.nowVdot}), which moves with logged races and quality sessions.` : 'Paces follow your current fitness.'}${isGeneralPlan(s) ? '' : ' They step up slowly through build and peak, then hold through the taper.'}</div>
       ${!isGeneralPlan(s) && s.hillsMode==='hilly' && (s.strengthPerWeek||0)<2 ? `<div class="hint" style="padding:0 0 12px; color:var(--z-tempo);">Hilly course — most coaches recommend at least 2 strength sessions/week for the eccentric demand of climbs and descents. You're currently set to ${s.strengthPerWeek||0}.</div>` : ''}
     </div>
     ${!isGeneralPlan(s) ? `<button class="btn btn-block" data-act="open-pacing-sheet" style="margin:-4px 0 20px;">${ICONS.flag} Race-day pacing sheet</button>` : ''}
@@ -3682,7 +3682,7 @@ function renderSettingsTab(){
 
     <div class="section-title">Exercise library</div>
     <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
-      <div class="hint">Every strength exercise the plan can prescribe: what it is, how to set up, the movement, the form points, a drawing of the start and finish, and a reference page at ACE Fitness.</div>
+      <div class="hint">Every exercise the plan can prescribe, with set-up, form points, a drawing and a reference page.</div>
       <button class="btn btn-block" data-act="open-library">${ICONS.dumbbell} Browse the library</button>
     </div>
 
@@ -3692,22 +3692,22 @@ function renderSettingsTab(){
         <div class="settings-row"><div><div class="lbl">Connected</div><div class="sub">Import a run's distance and time instead of typing them in.</div></div></div>
         <button class="btn btn-block" data-act="disconnect-strava">Disconnect</button>
       ` : `
-        <div class="hint">Connect your Strava account to import a run instead of typing it in — you can always enter runs manually too.</div>
+        <div class="hint">Import runs from Strava instead of typing them in.</div>
         <button class="btn btn-primary btn-block" data-act="connect-strava">Connect to Strava</button>
       `}
     </div>
 
     <div class="section-title">Plan controls</div>
     <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
-      <div class="hint">Change your plan type or update its inputs — race or general, any of the four fitness plans. Your logged runs are always kept, no matter what you switch to.</div>
+      <div class="hint">Switch plan type or update its inputs. Logged runs are always kept.</div>
       <button class="btn btn-block" data-act="open-switch-plan">Change plan</button>
-      <div class="hint" style="margin-top:4px;">Put every planned day in your phone's calendar as an all-day event. Re-export after any change to the plan.</div>
+      <div class="hint" style="margin-top:4px;">Every planned day as an all-day calendar event. Re-export after changes.</div>
       <button class="btn btn-block" data-act="export-ics">${ICONS.calendarCheck} Add to calendar (.ics)</button>
     </div>
 
     <div class="section-title">Backup</div>
     <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
-      <div class="hint">Save a copy of your plan inputs and logged runs, in case an app update ever means starting fresh on this device. Import restores them — your plan is rebuilt from the same inputs, and your logged runs come back with it.</div>
+      <div class="hint">Save your inputs and logged runs to a file. Import rebuilds the plan and restores the runs.</div>
       <div class="row">
         <button class="btn btn-block" data-act="export-data">Export data</button>
         <button class="btn btn-block" data-act="import-data">Import data</button>
@@ -4110,7 +4110,7 @@ function renderPacingSheet(strategy, courseKey){
     const isLast = s.i===sheet.splits.length-1;
     const distLabel = isLast && Math.abs(s.cumDist-Math.round(s.cumDist))>0.02 ? s.cumDist.toFixed(1) : Math.round(s.cumDist);
     const paceLine = splitIsHilly
-      ? `${paceOrSpeedStr(s.splitPaceSecPerKm,unit,fmt)} avg pace — go by effort, not this number`
+      ? `by effort · ${paceOrSpeedStr(s.splitPaceSecPerKm,unit,fmt)} average`
       : `${paceOrSpeedStr(s.splitPaceSecPerKm,unit,fmt)} this ${unit==='mi'?'mile':'km'}`;
     const cueHtml = cp ? `<div class="split-cue">${cp.label?`<div style="font-weight:800; color:var(--ink); margin-bottom:2px;">${esc(cp.label)}</div>`:''}${esc(cp.cue)}</div>` : '';
     return `<div class="split-row ${cp?'checkpoint':''}">
@@ -4123,11 +4123,11 @@ function renderPacingSheet(strategy, courseKey){
   }).join('');
   const finishSec = sheet.splits[sheet.splits.length-1].cumSec;
   const strategyNote = isHillyStrategy
-    ? "Uses your average goal pace as a time budget, but a fixed per-mile pace isn't real advice on a hilly course — target effort instead: slower on the climbs, faster on the descents, same exertion throughout. Use the cumulative time on the right to check yourself against the clock, not the pace on the left."
+    ? "Your average pace is a time budget, not a target: slower up, faster down, the same effort throughout. Check the time on the right against the clock."
     : strategy==='negative'
-      ? "Starts about 3% slower than goal pace and eases to about 3% faster by the finish — same average time, run smarter instead of just holding on."
-      : "Holds your goal pace the entire way. A reasonable baseline, but most coaches recommend Negative split as the smarter default — most people's real attempt at even pace quietly fades anyway.";
-  const courseBannerText = sheet.course ? sheet.course.elevationNote : (sheet.isHilly ? "Hilly course — a single fixed pace was never going to be great advice here. \"Run by effort\" below is the recommended choice; Even/Negative pace are still there as a flat-course reference if you want one." : null);
+      ? "Starts about 3% slower than goal pace and finishes about 3% faster. Same time, better run."
+      : "Holds goal pace the whole way. A fair baseline; a negative split is the smarter default, since even pace usually fades.";
+  const courseBannerText = sheet.course ? sheet.course.elevationNote : (sheet.isHilly ? "Hilly course: run by effort. Even and negative splits are flat-course references." : null);
   const coursePicker = setup.raceKey==='marathon' ? `
       <div class="field" style="margin-bottom:14px;">
         <label class="field-label">Running one of these?</label>

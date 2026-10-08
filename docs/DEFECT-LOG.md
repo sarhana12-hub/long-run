@@ -282,6 +282,12 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 112. **Log sheet hints were paragraphs.** The screenshot guidance ran five sentences; the rep-time hint two. *Fix:* one line each.
 
+113. **Settings blurbs were paragraphs** (the paces note ran two sentences with a parenthesis; backup, plan controls and the library each two or three). *Fix:* one line each.
+
+114. **Gallery progress read "0 of 50 %".** *Fix:* percent targets read "0% of 50%".
+
+115. **Pacing sheet repeated "avg pace — go by effort, not this number" on every mile row**, under a three-sentence banner and a three-sentence explainer. *Fix:* banner and explainer are one sentence each; rows read "by effort · 7:34/mi average". Even and negative-split notes shortened too.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
