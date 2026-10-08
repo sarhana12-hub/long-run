@@ -43,7 +43,9 @@ async function sha256hex(s) { const d = await crypto.subtle.digest('SHA-256', te
 async function vapidAuthHeader(env, endpoint) {
   const aud = new URL(endpoint).origin;
   const header = b64u.encode(te.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
-  const claims = b64u.encode(te.encode(JSON.stringify({ aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: env.VAPID_SUBJECT })));
+  // Apple requires the subject to be a mailto: or https: URL; a bare address is normalised.
+  const subject = /^(mailto:|https?:)/i.test(env.VAPID_SUBJECT || '') ? env.VAPID_SUBJECT : 'mailto:' + (env.VAPID_SUBJECT || 'a.elsarhan@gmail.com');
+  const claims = b64u.encode(te.encode(JSON.stringify({ aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: subject })));
   const pub = b64u.decode(env.VAPID_PUBLIC_KEY); // raw 65 bytes: 0x04 | x | y
   const jwk = { kty: 'EC', crv: 'P-256', x: b64u.encode(pub.slice(1, 33)), y: b64u.encode(pub.slice(33, 65)), d: env.VAPID_PRIVATE_KEY };
   const key = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
