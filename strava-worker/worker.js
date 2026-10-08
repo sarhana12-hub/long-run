@@ -133,11 +133,16 @@ export default {
       if (!env.PEAK_PUSH) return json({ error: 'Reminders are not set up on the server' }, 503);
       const sub = body.subscription;
       if (!sub || !sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) return json({ error: 'Missing subscription' }, 400);
-      const minutes = Number(body.minutes); const tz = String(body.tz || 'UTC');
-      if (!(minutes >= 0 && minutes < 1440)) return json({ error: 'Bad time' }, 400);
+      const tz = String(body.tz || 'UTC');
+      // Two optional reminders: morning (today's workout) and evening (tomorrow's preview),
+      // each a minute-of-day or null. An older app that sends 'minutes' means a morning one.
+      const asMinutes = v => (v == null || v === '') ? null : (Number(v) >= 0 && Number(v) < 1440 ? Number(v) : NaN);
+      const morning = asMinutes(body.morning != null ? body.morning : body.minutes), evening = asMinutes(body.evening);
+      if (Number.isNaN(morning) || Number.isNaN(evening)) return json({ error: 'Bad time' }, 400);
       const key = await sha256hex(sub.endpoint);
       const existing = await env.PEAK_PUSH.get(key, 'json');
-      const record = { sub, minutes, tz, plan: body.plan || (existing && existing.plan) || {}, name: body.name || '', lastSent: existing ? existing.lastSent : null, updatedAt: Date.now() };
+      const record = { sub, tz, morning, evening, plan: body.plan || (existing && existing.plan) || {}, name: body.name || '',
+        lastMorning: existing ? (existing.lastMorning || existing.lastSent || null) : null, lastEvening: existing ? (existing.lastEvening || null) : null, updatedAt: Date.now() };
       await env.PEAK_PUSH.put(key, JSON.stringify(record));
       return json({ ok: true });
     }
@@ -151,7 +156,7 @@ export default {
       if (!env.PEAK_PUSH) return json({ error: 'Reminders are not set up on the server' }, 503);
       const rec = body.endpoint ? await env.PEAK_PUSH.get(await sha256hex(body.endpoint), 'json') : null;
       if (!rec) return json({ error: 'Not registered' }, 404);
-      const r = await sendPush(env, rec.sub, { title: 'Reminders are on', body: 'This is what a morning will look like: one line with the day's workout.', url: './' });
+      const r = await sendPush(env, rec.sub, { title: 'Reminders are on', body: "This is what a morning will look like: one line with the day's workout.", url: './' });
       return json({ ok: r === 'ok', result: r, status: LAST_PUSH && LAST_PUSH.status, detail: LAST_PUSH && LAST_PUSH.text });
     }
 
@@ -177,16 +182,24 @@ export default {
         const rec = await env.PEAK_PUSH.get(k.name, 'json');
         if (!rec || !rec.sub) continue;
         let now; try { now = localNow(rec.tz || 'UTC'); } catch (e) { now = localNow('UTC'); }
-        if (rec.lastSent === now.date) continue;
-        const due = now.minutes >= rec.minutes && now.minutes - rec.minutes < SEND_WINDOW_MIN;
-        if (!due) continue;
-        const line = rec.plan && rec.plan.days ? rec.plan.days[now.date] : null;
-        if (line) {
-          const r = await sendPush(env, rec.sub, { title: rec.name ? `${rec.name}, today` : 'Today', body: line, url: './' });
-          if (r === 'gone') { await env.PEAK_PUSH.delete(k.name); continue; }
+        // older records: a single 'minutes' was a morning reminder
+        if (rec.morning === undefined && rec.minutes != null) { rec.morning = rec.minutes; rec.lastMorning = rec.lastSent || null; }
+        const days = (rec.plan && rec.plan.days) || {};
+        const due = at => at != null && now.minutes >= at && now.minutes - at < SEND_WINDOW_MIN;
+        let changed = false, gone = false;
+        if (rec.morning != null && rec.lastMorning !== now.date && due(rec.morning)) {
+          const line = days[now.date];
+          if (line) { const r = await sendPush(env, rec.sub, { title: rec.name ? `${rec.name}, today` : 'Today', body: line, url: './' }); if (r === 'gone') gone = true; }
+          rec.lastMorning = now.date; changed = true; // a day with nothing to say is still a day done
         }
-        rec.lastSent = now.date; // a day with nothing to say is still a day done
-        await env.PEAK_PUSH.put(k.name, JSON.stringify(rec));
+        if (!gone && rec.evening != null && rec.lastEvening !== now.date && due(rec.evening)) {
+          const tomorrow = new Date(new Date(now.date + 'T00:00:00Z').getTime() + 86400000).toISOString().slice(0, 10);
+          const line = days[tomorrow];
+          if (line) { const r = await sendPush(env, rec.sub, { title: 'Tomorrow', body: line, url: './' }); if (r === 'gone') gone = true; }
+          rec.lastEvening = now.date; changed = true;
+        }
+        if (gone) { await env.PEAK_PUSH.delete(k.name); continue; }
+        if (changed) await env.PEAK_PUSH.put(k.name, JSON.stringify(rec));
       }
       cursor = page.list_complete ? null : page.cursor;
     } while (cursor);

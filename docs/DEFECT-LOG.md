@@ -330,6 +330,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 135. **The app never reached out.** *Fix:* morning reminders by Web Push through the Cloudflare Worker (strava-worker/worker.js now carries subscribe/unsubscribe/test and a 15-minute schedule; Web Push encryption and VAPID done with WebCrypto, no dependencies). Settings → Reminders: turn on (iOS permission prompt, subscription registered with the chosen local time, timezone and a one-line-per-day plan summary), pick the time, send a test. The summary is re-sent on every plan change and once a day on open. Rest days without strength send nothing. One-time server setup is in strava-worker/PUSH-SETUP.md; the keys live in an ignored local file. *Verified end to end on the owner's phone the same day* after one setup slip (the subject secret pasted without 'mailto:', which Apple rejects as BadJwtToken; the Worker now normalises it and a selfcheck action signs and verifies with its own keys).
 
+136. **One reminder a day only.** *Fix (owner request):* two independent reminders, each with its own on/off and local time: morning with today's workout, evening with tomorrow's. The Worker keeps a last-sent date per reminder; older records with a single time are read as a morning one.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

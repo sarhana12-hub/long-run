@@ -48,11 +48,12 @@ server" appears, step 2 or 3 is incomplete.
 
 ## How it works, for reference
 
-- The phone sends the Worker its push subscription, the local time it chose, its timezone,
+- The phone sends the Worker its push subscription, the local times it chose (a morning one for today's workout, an evening one previewing tomorrow, either or both), its timezone,
   and a summary of the plan: one line per day (workout, distance, strength). It re-sends the
   summary whenever the plan changes.
-- Every 15 minutes the Worker looks at each phone's local time and sends that day's line
-  once the chosen time has passed, at most once a day. Rest days with no strength send nothing.
+- Every 15 minutes the Worker looks at each phone's local time and sends the day's line once
+  the morning time has passed and tomorrow's line once the evening time has passed, each at
+  most once a day. Rest days with no strength send nothing.
 - Nothing else is stored: no name beyond what the runner chose to show, no logs, no account.
 - Turning reminders off deletes the phone's record.
 - iPhone needs iOS 16.4 or later and the app installed on the home screen with

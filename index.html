@@ -929,7 +929,7 @@ const Store = {
   getStrengthShort(){ return this._get('lr_strength_short', []); },
   getCheckins(){ return this._get('lr_checkins', {}); },
   getStrengthLoads(){ return this._get('lr_strength_loads', {}); },
-  getPush(){ return this._get('lr_push', {enabled:false, time:'07:00', syncedAt:0}); },
+  getPush(){ const p = this._get('lr_push', {}); return {enabled:false, morningOn:true, morningTime: p.time || '07:00', eveningOn:false, eveningTime:'20:00', syncedAt:0, ...p}; },
   setPush(v){ this._set('lr_push', v); },
   setStrengthLoads(v){ this._set('lr_strength_loads', v); },
   setCheckins(v){ this._set('lr_checkins', v); },
@@ -1087,8 +1087,8 @@ async function syncPush(sub){
   try{
     const reg = await navigator.serviceWorker.ready;
     sub = sub || await reg.pushManager.getSubscription(); if(!sub) return;
-    const [h,m] = String(state.push.time||'07:00').split(':').map(Number);
-    const res = await pushApi({action:'subscribe', subscription: sub.toJSON(), minutes: h*60+m, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, plan: pushPlanSummary(), name: state.name||''});
+    const mins = t => { const [h,m] = String(t||'07:00').split(':').map(Number); return h*60+m; };
+    const res = await pushApi({action:'subscribe', subscription: sub.toJSON(), morning: state.push.morningOn ? mins(state.push.morningTime) : null, evening: state.push.eveningOn ? mins(state.push.eveningTime) : null, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, plan: pushPlanSummary(), name: state.name||''});
     if(res && res.ok){ state.push = {...state.push, syncedAt: Date.now(), endpoint: sub.endpoint}; Store.setPush(state.push); }
   }catch(e){ /* offline: the next plan change or open tries again */ }
 }
@@ -3934,10 +3934,11 @@ function renderSettingsTab(){
 
     <div class="section-title">Reminders</div>
     <div class="card" style="padding:14px 16px; margin-bottom:16px;">
-      <div class="settings-row" style="padding-top:0;"><div><div class="lbl">Morning reminder</div><div class="sub">${state.push && state.push.enabled ? 'On · one line with the day\'s workout' : 'One notification a day with the workout'}</div></div>
+      <div class="settings-row" style="padding-top:0;"><div><div class="lbl">Reminders</div><div class="sub">${state.push && state.push.enabled ? 'On · one line per notification, local time' : 'Today\'s workout in the morning, tomorrow\'s in the evening'}</div></div>
         <button class="btn btn-sm ${state.push && state.push.enabled ? '' : 'btn-primary'}" data-act="${state.push && state.push.enabled ? 'reminders-off' : 'reminders-on'}">${state.push && state.push.enabled ? 'Turn off' : 'Turn on'}</button></div>
-      <div class="settings-row" style="${state.push && state.push.enabled ? '' : 'opacity:.6;'}"><div><div class="lbl">Time</div><div class="sub">Local time, every day the plan has something</div></div>
-        <input class="input" type="time" id="push-time" value="${esc((state.push && state.push.time) || '07:00')}" style="width:auto; padding:8px 10px;"></div>
+      ${[['morning','Morning','Today\'s workout'],['evening','Evening','Tomorrow\'s workout']].map(([k,label,sub])=>`
+      <div class="settings-row" style="${state.push && state.push.enabled ? '' : 'opacity:.6;'}"><div><div class="lbl">${label}</div><div class="sub">${sub}</div></div>
+        <div style="display:flex; align-items:center; gap:8px;"><button class="chip ${state.push[k+'On'] ? 'active' : ''}" data-act="push-toggle" data-which="${k}" style="padding:6px 12px;">${state.push[k+'On'] ? 'On' : 'Off'}</button><input class="input" type="time" id="push-${k}-time" value="${esc(state.push[k+'Time'] || (k==='morning' ? '07:00' : '20:00'))}" style="width:auto; padding:8px 10px; ${state.push[k+'On'] ? '' : 'opacity:.5;'}"></div></div>`).join('')}
       ${state.push && state.push.enabled ? `<div class="row" style="margin-top:10px;"><button class="btn btn-block" data-act="reminders-test">Send a test</button></div>` : ''}
       ${pushSupported() ? '' : `<div class="hint" style="margin-top:8px;">On iPhone, reminders need Peak added to the home screen with "Open as Web App" on, and iOS 16.4 or later.</div>`}
     </div>
@@ -5296,7 +5297,8 @@ function onClick(e){
     state.modal={type:'day-detail', weekIndex:found.weekIndex, dayIndex:found.dayIndex};
     render(); return;
   }
-  if(act==='reminders-on'){ enableReminders(); return; }
+  if(act==='push-toggle'){ const k = el.dataset.which; state.push = {...state.push, [k+'On']: !state.push[k+'On']}; Store.setPush(state.push); schedulePushSync(); render(); return; }
+  if(act==='reminders-on'){ if(!state.push.morningOn && !state.push.eveningOn) state.push = {...state.push, morningOn:true}; enableReminders(); return; }
   if(act==='reminders-off'){ disableReminders(); return; }
   if(act==='reminders-test'){
     (async()=>{ try{ const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if(!sub){ showToast('Turn reminders on first'); return; } await syncPush(sub); const r = await pushApi({action:'test', endpoint: sub.endpoint}); showToast(r && r.ok ? 'Test sent' : 'Could not send: ' + ((r && (r.error || ((r.status||'')+' '+(r.detail||r.result||'')))) || 'unknown'), null, 8000); }catch(e){ showToast('Could not send a test', null, 3000); } })();
@@ -5657,7 +5659,7 @@ function onChange(e){
     state.modal.strava.confirm.date = e.target.value;
     render(); return;
   }
-  if(e.target.id==='push-time'){ state.push = {...(state.push||{}), time: e.target.value || '07:00'}; Store.setPush(state.push); schedulePushSync(); return; }
+  if(e.target.id==='push-morning-time' || e.target.id==='push-evening-time'){ const k = e.target.id==='push-morning-time' ? 'morningTime' : 'eveningTime'; state.push = {...(state.push||{}), [k]: e.target.value || (k==='morningTime' ? '07:00' : '20:00')}; Store.setPush(state.push); schedulePushSync(); return; }
   if(e.target.dataset && e.target.dataset.act==='set-strength-load'){
     const name = e.target.dataset.name, date = e.target.dataset.date, v = Number(e.target.value);
     const loads = {...(state.strengthLoads||{})}; const hist = (loads[name]||[]).filter(h=>h.date!==date);
