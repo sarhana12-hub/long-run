@@ -270,6 +270,14 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 106. **Peek the Peak was a zigzag silhouette with the runner on an invisible route.** *Fix (owner chose a redraw):* layered ridges with atmospheric depth, a curved peak with a lit and a shaded face and a snow line, a visible dashed switchback trail the runner follows by arc length, phase markers (Build / Peak / Taper) placed on the trail at the plan's mileage fractions, stars, moon and treeline; the overshoot staircase is unchanged.
 
+107. **Onboarding hints were paragraphs** (the running-days hint alone was four sentences; the caps hint explained race-week mileage). *Fix:* every hint is one line of plain English; a duplicate "Current fitness" section title went; labels shortened ("Longest recent run", "Most recent race", "Another race, different distance").
+
+108. **A brand-new plan read "0:10 faster than at the start" on day one with nothing logged.** *Cause:* "now" was rounded to a tenth of a VDOT before being turned into a time; "at the start" was not. *Fix:* race times use the unrounded fitness, so day one equals the start exactly. *Guard:* tests/projection.js 1 (now equals start) and 8 (impacts judged on the run's own date).
+
+109. **A new runner's Progress tab was a wall of zeros**: two "No logged … yet" rows, an empty-list line, a tracker legend explaining lines that did not exist. *Fix:* the pace tracker only appears once a long or tempo run is logged; the recent-runs card carries a proper empty state with an icon, one sentence and a Log a run button that opens the log sheet from the Progress tab.
+
+110. **Mixed iconography**: a ⛰ emoji on hilly days and a text arrow in the then-vs-now row among line icons. *Fix:* both are SVG line icons in the same set (mountain, arrowRight).
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

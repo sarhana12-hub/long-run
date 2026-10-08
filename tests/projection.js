@@ -135,7 +135,7 @@ console.log('8. which runs moved the projection (projectionImpacts)');
   check('newest first', imp.length<2 || imp[0].date>=imp[1].date);
   check('easy runs are not listed', !imp.some(x=>x.type==='easy'));
   // the list reconciles with the headline: with-and-without each run, in order, lands on the live number
-  const live = g.fitnessProjections(plan, logs, today, km, 0);
+  const live = g.fitnessProjections(plan, logs, g.parseDate(t.day.date), km, 0); // impacts are judged on the run's own date
   const last = imp[0];
   check('the latest row ends on the live "now" time', last && Math.abs(last.nowSec - live.now.sec) < 1, last && `${last.nowSec} vs ${live.now.sec}`);
   // a race resets the anchor and is listed with that reason

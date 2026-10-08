@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 22; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 23; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -2032,8 +2032,9 @@ function projectFitness(plan, logs, today, opts){
   const decay = Math.min(FITNESS.decayCap, Math.max(0, lowDays-FITNESS.lowWindowDays)/7*FITNESS.decayPerWeek);
   out.lowDays = lowDays; out.decay = round1(decay);
 
-  out.nowVdot = round1(anchorVdot + earned + adjust - decay);
-  out.potentialVdot = round1(out.nowVdot + remaining);
+  const nowExact = anchorVdot + earned + adjust - decay;
+  out.nowVdot = round1(nowExact); out.potentialVdot = round1(nowExact + remaining);
+  out.nowVdotExact = nowExact; out.potentialVdotExact = nowExact + remaining; // race times use these, so day one reads exactly as the start
   const strength = anchorKind==='race' ? 1 : Math.min(1, sumW/2);
   out.nowBand = Math.round((1-strength)*FITNESS.noEvidenceBand*10)/10;
 
@@ -2059,9 +2060,9 @@ function fitnessProjections(plan, logs, today, km, goalSec, opts){
     return {vdot: round1(vdot), sec: mid.sec, lowSec: Math.min(mid.lowSec, fast.lowSec), highSec: Math.max(mid.highSec, slow.highSec), paceSecPerKm: mid.sec/km};
   };
   const start = at(f.startVdot, 0, a.weeklyKm);
-  const now = at(f.nowVdot, f.nowBand, f.recentWeeklyKm!=null ? f.recentWeeklyKm : a.weeklyKm);
+  const now = at(f.nowVdotExact!=null ? f.nowVdotExact : f.nowVdot, f.nowBand, f.recentWeeklyKm!=null ? f.recentWeeklyKm : a.weeklyKm);
   const peakKm = Math.max(plan.peakWeeklyKm||0, a.weeklyKm||0) || a.weeklyKm;
-  const potential = at(f.potentialVdot, f.potentialBand, peakKm);
+  const potential = at(f.potentialVdotExact!=null ? f.potentialVdotExact : f.potentialVdot, f.potentialBand, peakKm);
   let goal = null;
   if(goalSec>0){
     const status = goalSec>=potential.sec ? 'inside' : goalSec>=potential.lowSec ? 'edge' : 'beyond';
