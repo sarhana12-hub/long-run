@@ -332,6 +332,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 136. **One reminder a day only.** *Fix (owner request):* two independent reminders, each with its own on/off and local time: morning with today's workout, evening with tomorrow's. The Worker keeps a last-sent date per reminder; older records with a single time are read as a morning one.
 
+137. **Typing "25" for a 200 m rep was read as 25 minutes** (owner). *Cause:* the typing formatter left one or two bare digits alone and the parser read a bare number as minutes. *Fix:* digits are seconds first everywhere: the field shows 0:25 as you type, and the parser reads digit-only input right to left (25 → 0:25, 330 → 3:30, 4530 → 45:30, 12345 → 1:23:45); colon input is unchanged. *Guard:* tests/projection.js 9.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

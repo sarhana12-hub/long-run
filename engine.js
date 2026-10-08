@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 25; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 26; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -63,9 +63,12 @@ function interp(anchors, x){
 }
 function parseDurationToSec(str){
   if(!str) return null;
-  const parts = String(str).trim().split(':').map(s=>Number(s));
+  const raw = String(str).trim();
+  // Digits with no colon read right to left, seconds first: 25 -> 0:25, 330 -> 3:30, 4530 -> 45:30, 12345 -> 1:23:45.
+  if(/^\d+$/.test(raw)){ const s = Number(raw.slice(-2)), m = Number(raw.slice(-4,-2)||0), h = Number(raw.slice(0,-4)||0); return h*3600+m*60+s; }
+  const parts = raw.split(':').map(s=>Number(s));
   if(!parts.length || parts.some(n=>isNaN(n))) return null;
-  if(parts.length===1) return parts[0]*60;
+  if(parts.length===1) return null;
   if(parts.length===2) return parts[0]*60+parts[1];
   if(parts.length===3) return parts[0]*3600+parts[1]*60+parts[2];
   return null;

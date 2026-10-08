@@ -146,5 +146,12 @@ console.log('8. which runs moved the projection (projectionImpacts)');
   check('nothing logged, nothing listed', g.projectionImpacts(plan, [], today, km).length===0);
 }
 
+console.log('9. typed times read seconds first');
+{
+  const P = g.parseDurationToSec;
+  check('25 is 25 s', P('25')===25); check('330 is 3:30', P('330')===210); check('4530 is 45:30', P('4530')===2730); check('12345 is 1:23:45', P('12345')===5025);
+  check('3:45 still works', P('3:45')===225); check('1:02:03 still works', P('1:02:03')===3723); check('blank is null', P('')===null); check('letters are null', P('abc')===null);
+}
+
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall projection checks passed');
 process.exit(failures ? 1 : 0);

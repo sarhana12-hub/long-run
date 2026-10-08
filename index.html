@@ -1788,7 +1788,8 @@ function renderOnboardStep1(d){
 // "34500" becomes "3:45:00" without anyone having to type ':' themselves.
 function formatDurationDigits(raw){
   const digits = String(raw).replace(/\D/g,'').slice(0,6);
-  if(digits.length<=2) return digits;
+  if(!digits.length) return '';
+  if(digits.length<=2) return '0:'+digits.padStart(2,'0'); // seconds first: 25 is 0:25
   if(digits.length<=4){
     const mmLen = digits.length-2;
     return digits.slice(0,mmLen)+':'+digits.slice(mmLen);
