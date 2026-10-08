@@ -1049,11 +1049,11 @@ NOTE: 35 mi/week is low for a marathon. The plan builds what it safely can, but 
        · Very easy, short recovery jog at easy pace (10:18/mi) — slower than feels necessary
   Mo Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
-  Tu Hill Repeats      4.8 mi  7 hill reps · warm-up & cool-down included
+  Tu Cruise Intervals  5.7 mi  3 × 1600m at threshold pace (8:19/mi) · warm-up & cool-down included
        · Warm up 1.2 mi easy (10:18/mi)
-       · 7 hill reps — 60–90s strong uphill effort (about 5K effort: 7:43/mi on the flat, slower uphill, so go by breathing; tall posture, quick steps), jog back down to recover
+       · Cruise intervals — 3 × 1600m at threshold pace (8:19/mi), 60–90s easy jog (10:18/mi) between
        · Cool down 0.9 mi easy (10:18/mi)
-  We Medium-Long Run  12.7 mi  Medium-long, conversational (10:18/mi) · + hill strides · rolling hills
+  We Medium-Long Run  11.8 mi  Medium-long, conversational (10:18/mi) · + hill strides · rolling hills
        · Medium-long aerobic run at easy pace (10:18/mi), conversational throughout
        · Finish with hill strides — 6 × 10s hard effort uphill, walk back down to recover, about 0.1 mi of the total above
        · Course: rolling hills — run by effort, not pace
@@ -2488,7 +2488,7 @@ peak 29 mi/wk, long up to 8 mi; weeks 8
   Su Long Run          7.3 mi  Relaxed aerobic (10:43/mi)
        · Steady, relaxed aerobic effort at long-run pace (10:43/mi) — conversational start, settle into rhythm
        · Rolling terrain if you have it
-  Mo Easy Run          5.3 mi  Conversational (10:43/mi)
+  Mo Easy Run          5.0 mi  Conversational (10:43/mi)
        · Conversational, easy effort (10:43/mi)
   Tu Cruise Intervals  4.8 mi  3 × 1200m at threshold pace (8:40/mi) · warm-up & cool-down included  [+lower/after run 40min: 3×20 Pogo hops; 4×5 Back squat; 3×6/leg Bulgarian split squat; 3×12 Kettlebell swing; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×30–40m Suitcase carry each hand]
        · Warm up 1.2 mi easy (10:43/mi)
@@ -2496,10 +2496,8 @@ peak 29 mi/wk, long up to 8 mi; weeks 8
        · Cool down 0.9 mi easy (10:43/mi)
   We Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
-  Th Cruise Intervals  4.0 mi  3 × 800m at threshold pace (8:40/mi) · warm-up & cool-down included
-       · Warm up 1.2 mi easy (10:43/mi)
-       · Cruise intervals — 3 × 800m at threshold pace (8:40/mi), 60–90s easy jog (10:43/mi) between
-       · Cool down 0.9 mi easy (10:43/mi)
+  Th Progression Run   4.3 mi  Easy start (10:43/mi), tempo finish (8:40/mi)
+       · Progression — start easy at 10:43/mi, gradually quicken so the final third sits at tempo effort (8:40/mi)
   Fr Easy Run          5.6 mi  Conversational (10:43/mi) · + strides  [+lower 40min: 3×5 Squat jumps; 4×5 Leg press; 3×6/leg Bulgarian split squat; 3×8/leg Single-leg Romanian deadlift; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×15 Mini-band side steps each way]
        · Conversational, easy effort (10:43/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above

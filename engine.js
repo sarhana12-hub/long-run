@@ -1098,7 +1098,7 @@ const ROTATIONS = {
   II:  { short:['hills','reps','hills','reps'], long:['hills','reps','hills','tempo'] },
   III: { short:['intervals','tempo','intervals','cruise'], long:['intervals','cruise','intervals','tempo'] },
   IV:  { short:['racepace','tempo','intervals','cruise'], long:['tempo','racepace','cruise','overunder','racepace','tempo'] },
-  IIHilly:  { short:['hills','reps','hills','hills'], long:['hills','tempo','hills','hills'] },
+  IIHilly:  { short:['hills','reps','hills','reps'], long:['hills','tempo','hills','cruise'] },
   IIIHilly: { short:['intervals','hills','intervals','cruise'], long:['intervals','hills','cruise','tempo'] },
   IVHilly:  { short:['racepace','tempo','intervals','cruise'], long:['tempo','racepace','hills','cruise','racepace','overunder'] },
   secondaryII: { short:['hills','fartlek','hills','progression'], long:['fartlek','hills','progression','hills'] },
@@ -1648,7 +1648,7 @@ function generateSpeedPlan(setup, dayOneOverride){
     const type = rot[w%rot.length];
     const s = sizeQuality(type, '10k', inCycle>=2?'peak':'build', inCycle/3, isCutback?0.8:1, weeklyKm, longKm, 10, paces);
     const quality = [{dow:qDows[0], type, ...s}];
-    if(nQ>=2 && !isCutback){ const t2 = ['hills','fartlek','cruise','progression'][w%4]; const s2 = sizeQuality(t2, '10k', 'build', 0.5, 0.65, weeklyKm, longKm, 10, paces); quality.push({dow:qDows[1], type:t2, secondary:true, ...s2}); }
+    if(nQ>=2 && !isCutback){ let t2 = ['hills','fartlek','cruise','progression'][w%4]; if(t2===type) t2 = ['hills','fartlek','cruise','progression'][(w+1)%4]; const s2 = sizeQuality(t2, '10k', 'build', 0.5, 0.65, weeklyKm, longKm, 10, paces); quality.push({dow:qDows[1], type:t2, secondary:true, ...s2}); }
     let longKmAdj = Math.max(longKm, round1(Math.min(Math.max(...quality.map(q=>q.km))+0.6, kmForMinutes(150, paces.longPerKm))));
     const qTotal = quality.reduce((a,q)=>a+q.km,0), easyDays = Math.max(1, runs-1-quality.length);
     let beginnerStructure = false;
