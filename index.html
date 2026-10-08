@@ -10,6 +10,8 @@
 <meta name="theme-color" content="#0E1310" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#0E1310">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<!-- iOS turns numbers and dates into blue tappable links in a home-screen app unless told not to. -->
+<meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Peak">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -106,6 +108,7 @@
 :root[data-theme="dark"]{ color-scheme: dark; }
 
 *{box-sizing:border-box;}
+a[x-apple-data-detectors]{color:inherit !important; text-decoration:none !important; font:inherit !important;}
 html,body{margin:0; padding:0;}
 /* html carries the page color too, so iOS rubber-band overscroll in a home-screen app shows
    the app's own background rather than white/black; text-size-adjust stops Safari inflating

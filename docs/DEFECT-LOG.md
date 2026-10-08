@@ -300,6 +300,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 121. **No way to find the app's address from inside the app** (needed to reinstall it on the home screen). *Fix:* Settings → App link shows the address with Copy link (toast confirms; if the clipboard is refused the toast shows the address itself) and a Share button where the share sheet exists, plus the reinstall steps.
 
+122. **Day numbers and distances rendered blue on the phone** (owner screenshot). *Cause:* iOS data detectors in a home-screen app wrap numbers and dates in tappable links, styled with the default link blue. *Fix:* a format-detection meta switches telephone, date, address and email detection off, and a CSS rule neutralises any detector link that still appears.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
