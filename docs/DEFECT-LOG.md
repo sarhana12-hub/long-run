@@ -294,6 +294,12 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 118. **The Progress tab was ten blocks deep** (trail, Peek bar, projection, what moved it, four tiles, strength card, milestones, mileage chart, pace tracker, recent runs). *Fix:* an Overview / History switch. Overview answers "where am I": trail (Peek the Peak as a small control in its title row), projection with what moved it, one three-figure strip (miles vs plan, adherence, strength done; each opens its sheet, strength got one), milestones. History answers "what did I do": then-vs-now, total logged and share-of-plan tiles, the weekly chart, the pace tracker, recent runs. The overview fits about a screen and a half.
 
+119. **The icon was a flat mark on a flat colour.** *Fix:* the generator paints a diagonal lime gradient (lighter at the top), a faint highlight band, and a soft shadow under the mark; the launch-image tile uses the same surface. No corners or borders are baked in, since iOS applies its own mask.
+
+120. **No haptics.** Safari on iPhone has no vibration API. *Fix:* a hidden native switch (iOS 17.4+) is toggled inside the tap for the moments that deserve one: a run logged, strength marked done, a missed session moved or two days swapped, a milestone earned. Feature-detected, silent elsewhere, unverifiable from the desktop preview.
+
+121. **No way to find the app's address from inside the app** (needed to reinstall it on the home screen). *Fix:* Settings → App link shows the address with Copy link (toast confirms; if the clipboard is refused the toast shows the address itself) and a Share button where the share sheet exists, plus the reinstall steps.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

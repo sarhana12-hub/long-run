@@ -8,7 +8,7 @@ const fs = require('fs'); const path = require('path'); const zlib = require('zl
 const ROOT = path.join(__dirname, '..');
 
 // Brand colours (index.html :root): lime accent, ink on it, page backgrounds.
-const LIME = [0xC3,0xF5,0x3A], INK = [0x12,0x20,0x06], BG_DARK = [0x0E,0x13,0x10], BG_LIGHT = [0xF2,0xF4,0xEE];
+const LIME = [0xC3,0xF5,0x3A], LIME_TOP = [0xD4,0xFB,0x5E], LIME_BOTTOM = [0xB0,0xE6,0x27], WHITE = [255,255,255], INK = [0x12,0x20,0x06], BG_DARK = [0x0E,0x13,0x10], BG_LIGHT = [0xF2,0xF4,0xEE];
 
 // The mark in its 24-unit box (icons/peak-mark.svg): a ridge line, a flagpole and a flag.
 const RIDGE = [[3,19],[9,10],[11,13],[15,6],[21,19]];
@@ -26,6 +26,18 @@ function markCoverage(x,y){
   if(inTri(x,y, FLAG[0],FLAG[1],FLAG[2]) || polyDist(x,y,FLAG.concat([FLAG[0]]))<=half) return 1;
   return 0;
 }
+// Distance outside the mark in viewBox units (0 inside), for the soft shadow.
+function markDist(x,y){
+  const half = STROKE/2;
+  let d = Math.min(polyDist(x,y,RIDGE), polyDist(x,y,POLE), polyDist(x,y,FLAG.concat([FLAG[0]]))) - half;
+  if(inTri(x,y, FLAG[0],FLAG[1],FLAG[2])) d = Math.min(d, 0);
+  return Math.max(0, d);
+}
+const clamp01 = v => Math.max(0, Math.min(1, v));
+// The lime surface: a diagonal gradient, lighter at the top, with a faint highlight band.
+function surface(x,y, w,h){ let c = mix(LIME_TOP, LIME_BOTTOM, clamp01((y/h)*0.85 + (x/w)*0.15)); return mix(c, WHITE, 0.09*clamp01(1 - y/(h*0.38))); }
+// The mark with a soft shadow beneath it, so it sits on the surface rather than printed on it.
+function markOn(base, u,v, s){ if(markCoverage(u,v)) return INK; const d = markDist(u, v - 0.9); const a = 0.26*clamp01(1 - d/(1.6)); return a>0 ? mix(base, INK, a) : base; }
 function roundRectDist(px,py, cx,cy, half, r){ const qx=Math.abs(px-cx)-half+r, qy=Math.abs(py-cy)-half+r; return Math.sqrt(Math.max(qx,0)**2+Math.max(qy,0)**2) + Math.min(Math.max(qx,qy),0) - r; }
 
 // paint(x,y) returns [r,g,b] for a sample point; SS×SS supersampling per pixel.
@@ -53,13 +65,13 @@ const mix = (a,b,t)=>[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t
 // The icon: full-bleed lime, the mark filling 58% of the side (inside the maskable safe zone).
 function iconPaint(size){
   const box = size*0.58, ox = (size-box)/2, oy = (size-box)/2 + size*0.01; const s = box/24;
-  return (x,y)=> markCoverage((x-ox)/s, (y-oy)/s) ? INK : LIME;
+  return (x,y)=> markOn(surface(x,y,size,size), (x-ox)/s, (y-oy)/s, s);
 }
 // The launch image: page background with a rounded lime tile holding the mark, centred.
 function splashPaint(w,h, bg){
   const tile = Math.round(Math.min(w,h)*0.27), half = tile/2, r = tile*0.22, cx = w/2, cy = h/2;
   const box = tile*0.58, ox = cx-box/2, oy = cy-box/2 + tile*0.01, s = box/24;
-  return (x,y)=>{ const d = roundRectDist(x,y,cx,cy,half,r); if(d>0.5) return bg; const c = markCoverage((x-ox)/s,(y-oy)/s) ? INK : LIME; return d>-0.5 ? mix(c, bg, d+0.5) : c; };
+  return (x,y)=>{ const d = roundRectDist(x,y,cx,cy,half,r); if(d>0.5) return bg; const c = markOn(surface(x-(cx-half), y-(cy-half), tile, tile), (x-ox)/s, (y-oy)/s, s); return d>-0.5 ? mix(c, bg, d+0.5) : c; };
 }
 
 function write(rel, w, h, paint, SS){ const out = path.join(ROOT, rel); fs.mkdirSync(path.dirname(out), {recursive:true}); fs.writeFileSync(out, png(w,h, raster(w,h,paint,SS))); console.log('wrote', rel, w+'x'+h); }

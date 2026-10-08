@@ -464,6 +464,8 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 <body>
 <div class="status-scrim"></div>
 <div id="app"></div>
+<!-- Safari on iPhone has no vibration API; toggling a native switch inside a user gesture produces the system haptic (iOS 17.4+). Off-screen, never display:none. -->
+<input type="checkbox" switch id="haptic-switch" aria-hidden="true" tabindex="-1" style="position:fixed; left:-40px; top:0; width:1px; height:1px; opacity:0; pointer-events:none;">
 
 <script src="engine.js"></script>
 <script src="library.js"></script>
@@ -482,6 +484,7 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 const STRAVA_CLIENT_ID = '278972';
 const STRAVA_WORKER_URL = 'https://peakstravarelay.a-elsarhan.workers.dev';
 const STRAVA_REDIRECT_URI = 'https://sarhana12-hub.github.io/long-run/';
+const APP_URL = 'https://sarhana12-hub.github.io/long-run/';
 const STRAVA_SCOPE = 'activity:read_all';
 const DOW_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const RACE_PRESETS = [
@@ -1029,6 +1032,9 @@ function runCountUps(){
     requestAnimationFrame(step);
   });
 }
+// One system tap for a moment that deserves it: a run logged, strength marked done, a day
+// moved or swapped, a milestone earned. Must run synchronously inside the tap that caused it.
+function haptic(){ try{ const el = document.getElementById('haptic-switch'); if(el) el.click(); }catch(e){} }
 function showToast(msg, undo, ms){ state.toast = msg; state.toastUndo = undo || null; render(); setTimeout(()=>{ state.toast=null; state.toastUndo=null; render(); }, ms||2200); }
 // Closes whatever sheet is open. A projection note that was held back while a milestone
 // screen was up shows the moment that screen closes.
@@ -2459,6 +2465,7 @@ function commitLogEntry(logData){
   state.logs = [item, ...state.logs];
   state.modal = null;
   state.justLogged = item.date; setTimeout(()=>{ if(state.justLogged===item.date) state.justLogged = null; }, 1500);
+  haptic();
   const note = projectionChangeMessage(before, projectionSnapshot(), item);
   const fired = evaluateAndTriggerAchievements(item);
   // No inline Undo when an achievement fires - that flow already lands on its own
@@ -2868,6 +2875,7 @@ function evaluateAndTriggerAchievements(newLog){
     earned.push({def, message: result.message});
   }
   if(!earned.length) return false;
+  haptic();
   const top = earned[0];
   state.modal = {type:'milestone', data:{
     hero: top.def.tier==='summit' ? ICONS[top.def.hero] : null,
@@ -3742,6 +3750,12 @@ function renderSettingsTab(){
       <button class="btn btn-block" data-act="export-ics">${ICONS.calendarCheck} Add to calendar (.ics)</button>
     </div>
 
+    <div class="section-title">App link</div>
+    <div class="card" style="padding:14px 16px; margin-bottom:16px;">
+      <div class="mono" style="font-size:13.5px; word-break:break-all;">${esc(APP_URL)}</div>
+      <div class="hint" style="margin:6px 0 12px;">To put Peak back on your home screen: open this link in Safari, tap Share, then Add to Home Screen.</div>
+      <div class="row"><button class="btn btn-block" data-act="copy-app-link">${ICONS.pin} Copy link</button>${(navigator.share ? `<button class="btn btn-block" data-act="share-app-link">Share…</button>` : '')}</div>
+    </div>
     <div class="section-title">Backup</div>
     <div class="card" style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
       <div class="hint">Save your inputs and logged runs to a file. Import rebuilds the plan and restores the runs.</div>
@@ -5090,6 +5104,13 @@ function onClick(e){
     state.modal={type:'day-detail', weekIndex:found.weekIndex, dayIndex:found.dayIndex};
     render(); return;
   }
+  if(act==='copy-app-link'){
+    const done = () => showToast('Link copied');
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(APP_URL).then(done, ()=>showToast(APP_URL, null, 6000)); }
+    else { showToast(APP_URL, null, 6000); }
+    return;
+  }
+  if(act==='share-app-link'){ if(navigator.share) navigator.share({title:'Peak', url:APP_URL}).catch(()=>{}); return; }
   if(act==='set-progress-view'){ state.progressView = el.dataset.view; render(); pageScrollTo(0); return; }
   if(act==='open-stat-detail'){
     state.modal={type:'stat-detail', stat: el.dataset.stat};
@@ -5148,6 +5169,7 @@ function onClick(e){
       ? state.strengthDone.filter(d=>d!==date)
       : [...state.strengthDone, date];
     Store.setStrengthDone(state.strengthDone);
+    if(state.strengthDone.includes(date)) haptic();
     // Marking done (not un-marking) can itself earn an achievement (Strength Session
     // Logged, Strength Streak) - checked the same way a logged run is, just with no
     // specific run to pass through. evaluateAndTriggerAchievements sets state.modal to
@@ -5180,6 +5202,7 @@ function onClick(e){
     const {weekIndexA:wa, dayIndexA:a, weekIndexB:wb, dayIndexB:b} = state.modal.data;
     swapDayContents(wa, a, wb, b);
     state.modal = null;
+    haptic();
     showToast('Swapped');
     return;
   }
@@ -5187,6 +5210,7 @@ function onClick(e){
     const wi = Number(el.dataset.wi), di = Number(el.dataset.di), twi = Number(el.dataset.twi), tdi = Number(el.dataset.tdi);
     const label = state.plan.weeks[wi].days[di].label;
     moveMissedSession(wi, di, twi, tdi);
+    haptic();
     state.currentWeekIndex = twi;
     state.modal = {type:'day-detail', weekIndex:twi, dayIndex:tdi};
     render();

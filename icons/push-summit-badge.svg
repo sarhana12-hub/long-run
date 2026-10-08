@@ -1,0 +1,10 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- Push Summit badge — tier 2 achievement icon (tempo/long run beat its planned pace or distance).
+       Pairs with summit-badge.svg (the "Week Complete" tier): same ring + peak, bolt instead of flag
+       so the two are unmistakable at a glance in both light and dark. Drop-in for the ICONS object. -->
+  <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9.5"/>
+    <path d="M7.5 15.5 L12 8.5 L16.5 15.5"/>
+  </g>
+  <path d="M13.6 1.6 L9.8 7.2 L12.1 7.2 L10.6 11.6 L15.2 5 L12.6 5 Z" fill="currentColor"/>
+</svg>
