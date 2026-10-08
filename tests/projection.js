@@ -119,5 +119,32 @@ console.log('7. race-time projections');
   check('goal beyond the range', p3.goal.status==='beyond');
 }
 
+console.log('8. which runs moved the projection (projectionImpacts)');
+{
+  const t = dayOf('tempo'); const paces = t.week.paces; const easy = paces.easyPerKm, tempo = paces.tempoPerKm;
+  const km = plan.raceDistanceKm;
+  const qKm = t.day.km-t.day.warmupKm-t.day.cooldownKm;
+  const fastSec = Math.round((t.day.warmupKm+t.day.cooldownKm)*easy + qKm*tempo*0.96); // tempo portion 4% quicker than prescribed
+  const logs = fullLogsBefore(t.day.date).concat([{id:'t1', date:t.day.date, distanceKm:t.day.km, durationSec:fastSec, createdAt:'2'}]);
+  const today = g.addDays(g.parseDate(t.day.date), 2);
+  const imp = g.projectionImpacts(plan, logs, today, km);
+  const tempoRow = imp.find(x=>x.date===t.day.date);
+  check('the quick tempo is listed', !!tempoRow);
+  check('it made the projection faster', tempoRow && tempoRow.deltaSec<0, tempoRow && String(tempoRow.deltaSec));
+  check('reasons name the session credit and the pace', tempoRow && tempoRow.reasons.includes('session') && tempoRow.reasons.includes('pace-up'), tempoRow && tempoRow.reasons.join(','));
+  check('newest first', imp.length<2 || imp[0].date>=imp[1].date);
+  check('easy runs are not listed', !imp.some(x=>x.type==='easy'));
+  // the list reconciles with the headline: with-and-without each run, in order, lands on the live number
+  const live = g.fitnessProjections(plan, logs, today, km, 0);
+  const last = imp[0];
+  check('the latest row ends on the live "now" time', last && Math.abs(last.nowSec - live.now.sec) < 1, last && `${last.nowSec} vs ${live.now.sec}`);
+  // a race resets the anchor and is listed with that reason
+  const raceDate = g.fmtDate(g.addDays(g.parseDate(t.day.date), 3));
+  const raceLogs = logs.concat([{id:'r1', date:raceDate, distanceKm:10, durationSec:Math.round(10*g.paceSecPerKmFromVdotPct(plan.startVdot+1.5, g.pctMaxForDurationMin(48))), kind:'race', createdAt:'3'}]);
+  const imp2 = g.projectionImpacts(plan, raceLogs, g.addDays(g.parseDate(raceDate),1), km);
+  check('a race is listed as a reset', imp2[0] && imp2[0].type==='race' && imp2[0].reasons.includes('race'), imp2[0] && imp2[0].reasons.join(','));
+  check('nothing logged, nothing listed', g.projectionImpacts(plan, [], today, km).length===0);
+}
+
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall projection checks passed');
 process.exit(failures ? 1 : 0);

@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 20; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 21; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -2070,8 +2070,43 @@ function fitnessProjections(plan, logs, today, km, goalSec, opts){
   return {start, now, potential, goal, fitness: f};
 }
 
+// Which logged runs moved the "now" projection, and by how much. Each run is judged on the
+// day it was logged: the projection with that run against the projection without it, every
+// earlier run in place, evaluated at the run's own date. That is the movement the runner saw
+// when they logged it (later runs and the evidence half-life do not rewrite it). Newest first.
+// reasons: 'race' (reset the anchor), 'session' (banked its share of the scheduled gain),
+// 'pace-up' / 'pace-down' (its pace implied a fitness above / below the number so far),
+// 'volume-up' (lifted the recent volume out of the detraining window).
+function projectionImpacts(plan, logs, today, km, opts){
+  today = today || todayDate(); opts = opts || {};
+  if(!plan || plan.startVdot==null || !plan.weeks || !plan.weeks.length) return [];
+  const sorted = (logs||[]).filter(l=>l && l.distanceKm>0 && l.durationSec>0)
+    .sort((a,b)=> a.date<b.date ? -1 : a.date>b.date ? 1 : String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+  const byDate = {}; plan.weeks.forEach(w=>w.days.forEach(d=>{ byDate[d.date] = d; }));
+  const out = [];
+  sorted.forEach((l, i)=>{
+    const dd = parseDate(l.date); if(dd>today) return;
+    const pb = fitnessProjections(plan, sorted.slice(0,i), dd, km, 0, opts);
+    const pa = fitnessProjections(plan, sorted.slice(0,i+1), dd, km, 0, opts);
+    if(!pb || !pa) return;
+    const deltaSec = Math.round(pa.now.sec - pb.now.sec); // negative = faster
+    const fb = pb.fitness, fa = pa.fitness, reasons = [];
+    if(fa.anchor.kind==='race' && fa.anchor.date===l.date && (fb.anchor.kind!=='race' || fb.anchor.date!==l.date)) reasons.push('race');
+    if(fa.earnedGain > fb.earnedGain+0.001) reasons.push('session');
+    if(fa.workoutAdjust > fb.workoutAdjust+0.04) reasons.push('pace-up');
+    if(fa.workoutAdjust < fb.workoutAdjust-0.04) reasons.push('pace-down');
+    if(fa.decay < fb.decay-0.001) reasons.push('volume-up');
+    if(deltaSec===0 && !reasons.length) return;
+    const day = byDate[l.date] || null;
+    const sample = fa.evidence.find(e=>e.date===l.date) || null;
+    out.push({id:l.id||null, date:l.date, type: l.kind==='race' ? 'race' : (day ? day.type : null), distanceKm:l.distanceKm, durationSec:l.durationSec,
+      repSec:l.repSec||null, repMeters:l.repMeters||null, deltaSec, nowSec: pa.now.sec, beforeSec: pb.now.sec, reasons, impliedVdot: sample ? sample.impliedVdot : null});
+  });
+  return out.reverse();
+}
+
 return {
-  FITNESS, effortPaceSecPerKm, repMetersForDay, projectFitness, fitnessProjections,
+  FITNESS, effortPaceSecPerKm, repMetersForDay, projectFitness, fitnessProjections, projectionImpacts,
   KM_PER_MI, ENGINE_VERSION, pad2, uid, clamp, round1, fmtDate, parseDate, addDays, daysBetween, startOfWeek, todayDate,
   kmToUnit, unitToKm, fmtDist, interp, parseDurationToSec, secToClock, distanceWeeksNeeded, paceStr, speedStr, paceOrSpeedStr, circularDayDist,
   kmForMinutes, minutesForKm,

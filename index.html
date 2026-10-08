@@ -265,6 +265,15 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 .proj-row.now .proj-v{font-size:26px; color:var(--accent-strong);}
 .proj-row .proj-r{grid-column:1 / -1; font-size:12.5px; color:var(--ink-soft);}
 .proj-row.now .proj-r{color:var(--ink); font-weight:600;}
+.section-row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+.info-btn{width:22px; height:22px; border-radius:50%; border:1.5px solid var(--line); background:transparent; color:var(--muted); font:700 12px/1 var(--font-mono); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; flex:none; padding:0; -webkit-tap-highlight-color:transparent;}
+.impact-row{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid var(--line-soft); cursor:pointer;}
+.impact-row:last-child{border-bottom:none;}
+.impact-row .lbl{font-weight:700; font-size:13.5px;}
+.impact-row .sub{font-size:12px; color:var(--muted); margin-top:2px; line-height:1.35;}
+.impact-d{font-family:var(--font-mono); font-weight:800; font-size:15px; flex:none;}
+.impact-d.up{color:var(--accent-strong);}
+.impact-d.down{color:var(--z-tempo);}
 /* exercise library */
 .sx-art{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0;}
 .sx-art.one{grid-template-columns:minmax(0, 200px);}
@@ -383,7 +392,7 @@ a.link-btn{color:var(--ink-soft); font-size:13px; text-decoration:underline; tex
 
 .center-screen{min-height:100dvh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; padding:20px;}
 .banner{margin:8px 18px 0; padding:10px 13px; border-radius:12px; background:var(--z-tempo-bg); color:var(--z-tempo); font-size:12.5px; font-weight:600; display:flex; gap:8px; align-items:flex-start;}
-.toast{position:fixed; bottom:calc(100px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); animation:overlayIn .15s ease-out; max-width:calc(100% - 36px); text-align:center; background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:999px; font-size:13px; font-weight:700; z-index:60; box-shadow:var(--shadow);}
+.toast{position:fixed; bottom:calc(142px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); animation:overlayIn .15s ease-out; width:max-content; max-width:calc(100% - 36px); text-align:center; background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:999px; font-size:13px; font-weight:700; z-index:60; box-shadow:var(--shadow);}
 .dow-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px;}
 .dow-opt{padding:8px 0; text-align:center; border-radius:9px; border:1px solid var(--line); background:var(--surface-2); font-size:11.5px; font-weight:700; color:var(--muted);}
 .dow-opt.sel{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
@@ -943,7 +952,10 @@ const state = {
 };
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function showToast(msg, undo){ state.toast = msg; state.toastUndo = undo || null; render(); setTimeout(()=>{ state.toast=null; state.toastUndo=null; render(); }, 2200); }
+function showToast(msg, undo, ms){ state.toast = msg; state.toastUndo = undo || null; render(); setTimeout(()=>{ state.toast=null; state.toastUndo=null; render(); }, ms||2200); }
+// Closes whatever sheet is open. A projection note that was held back while a milestone
+// screen was up shows the moment that screen closes.
+function closeModal(){ const held = state.modal && state.modal.type==='milestone' ? state.pendingToast : null; state.modal=null; state.moveFrom=null; state.pendingToast=null; if(held) showToast(held.msg, held.undo, held.ms); else render(); }
 // Flashes a message inline next to the "Your name" label (the lexi-badge span) instead of
 // a floating toast — a fixed-position popup kept landing either behind the Dynamic Island
 // or under the keyboard depending on how far up the screen it sat. Bypasses render()
@@ -2321,7 +2333,11 @@ function computeProgressStats(){
     ? PROJECTION_DISTANCES.map(d=>{ const p = fitnessProjections(plan, state.logs, todayDate(), d.km, 0, {trackingStart: state.setup.trackingStartDate}); return { ...d, start:p.start, current:p.now, goal: Math.abs(p.potential.vdot-p.now.vdot)>0.05 ? p.potential : null, fitness:p.fitness }; })
     : null;
 
+  const impactsKm = raceProjection ? plan.raceDistanceKm : 5;
+  const impacts = (plan.startVdot!=null && currentVdot!=null) ? projectionImpacts(plan, state.logs, todayDate(), impactsKm, {trackingStart: state.setup.trackingStartDate}) : [];
+
   return {
+    impacts, impactsKm,
     unit, totalLoggedKm, totalLoggedCount,
     loggedKmToDate, plannedToDateKm, mileageDeltaKm, mileageStatusLabel,
     plannedRunDatesToDateCount: plannedRunDatesToDate.length, completedPlannedRuns, adherence,
@@ -2334,14 +2350,45 @@ function computeProgressStats(){
 // Shared by manual entry and Strava import — both end up with the same log shape, so
 // both should go through the same save + achievement check rather than duplicating it.
 function commitLogEntry(logData){
+  const before = projectionSnapshot();
   const item = Store.addLog(logData);
   state.logs = [item, ...state.logs];
   state.modal = null;
+  const note = projectionChangeMessage(before, projectionSnapshot(), item);
   const fired = evaluateAndTriggerAchievements(item);
   // No inline Undo when an achievement fires - that flow already lands on its own
   // celebration screen instead of this toast, and deleting the run afterward is still
-  // always reachable the normal way (open the day, Remove this log).
-  if(fired) render(); else showToast('Run logged', {logId: item.id});
+  // always reachable the normal way (open the day, Remove this log). A projection note
+  // waits behind the celebration and shows when it closes.
+  if(fired){ if(note) state.pendingToast = {msg:note, undo:null, ms:5500}; render(); }
+  else if(note) showToast(note, {logId: item.id}, 5500);
+  else showToast('Run logged', {logId: item.id});
+}
+// The "now" projection at the plan's own race distance (5K for a general plan), as it
+// stands with the logs currently in state.
+function projectionSnapshot(){
+  const plan = state.plan; if(!plan || plan.startVdot==null || !plan.weeks) return null;
+  const km = isGeneralPlan(state.setup) ? 5 : plan.raceDistanceKm;
+  const p = fitnessProjections(plan, state.logs, todayDate(), km, 0, {trackingStart: state.setup.trackingStartDate});
+  return p ? {km, sec:p.now.sec} : null;
+}
+const PROJECTION_HYPE = [
+  "That's the work paying off.", 'Fitness is moving the right way.', 'Stack a few more like that.',
+  'The plan is doing its job.', 'Strong. Keep building.', 'Every session like that is money in the bank.',
+];
+function hashStr(s){ let h = 0; for(const c of String(s)) h = (h*31 + c.charCodeAt(0))>>>0; return h; }
+// Faster: say by how much, with a word of encouragement. Slower: say so plainly, no
+// catastrophising over one run. Unchanged after a quality session: say that too, so a
+// runner who expected movement is not left guessing. Easy runs say nothing extra.
+function projectionChangeMessage(before, after, item){
+  if(!before || !after) return null;
+  const d = Math.round(after.sec - before.sec); // negative = faster
+  const label = raceLabelKm(after.km), now = secToClock(after.sec);
+  if(d<0) return `${label} projection ${secToClock(-d)} faster — now ${now}. ${PROJECTION_HYPE[hashStr(item.id||item.date) % PROJECTION_HYPE.length]}`;
+  if(d>0) return `${label} projection ${secToClock(d)} slower — now ${now}. One run is one data point; the trend is what counts.`;
+  const found = plannedWorkoutForDate(item.date);
+  const quality = item.kind==='race' || (found && QUALITY_TYPES.includes(found.day.type) && found.day.type!=='long');
+  return quality ? `Run logged. ${label} projection unchanged at ${now}.` : null;
 }
 
 // The full catalog of every earnable achievement - the single source of truth for both
@@ -2764,17 +2811,47 @@ function projectionRowsHtml(p, unit, fmt){
 // existing 4-tile stat pattern; general plans show three fixed reference distances as
 // compact rows instead, since there's no single race to headline. Returns '' for legacy
 // plans saved before the vdot model existed (no startVdot to compare against).
+// One line per logged run that moved the "now" number, newest first, each tappable to
+// its day. Faster is green and negative (time came off), slower is orange and positive.
+function impactReasonText(x){
+  const bits = [];
+  if(x.reasons.includes('race')) bits.push('race result resets the number');
+  if(x.reasons.includes('session')) bits.push('session banked');
+  if(x.reasons.includes('pace-up')) bits.push('pace implied more fitness');
+  if(x.reasons.includes('pace-down')) bits.push('pace implied less fitness');
+  if(x.reasons.includes('volume-up')) bits.push('volume back on plan');
+  return bits.join(' · ');
+}
+function impactRowHtml(x, unit, fmt){
+  const faster = x.deltaSec<0;
+  const label = x.type==='race' ? 'Race' : (TYPE_LABELS[x.type]||'Run');
+  const paceBit = (x.repSec && x.repMeters) ? `${secToClock(x.repSec)} per ${x.repMeters}m` : paceOrSpeedStr(x.durationSec/x.distanceKm, unit, fmt);
+  const reason = impactReasonText(x);
+  return `<div class="impact-row" data-act="open-day-for-log-date" data-date="${x.date}">
+    <div><div class="lbl">${niceDate(parseDate(x.date))} · ${esc(label)}</div><div class="sub">${fmtDist(x.distanceKm,unit,1)} · ${paceBit}${reason ? ' · '+esc(reason) : ''}</div></div>
+    <div class="impact-d ${faster?'up':'down'}">${faster?'−':'+'}${secToClock(Math.abs(x.deltaSec))}</div>
+  </div>`;
+}
+function renderImpactsCard(impacts, unit, fmt, limit, statKey){
+  if(!impacts || !impacts.length) return '';
+  const shown = limit ? impacts.slice(0, limit) : impacts;
+  const more = impacts.length - shown.length;
+  return `<div class="card" style="padding:4px 16px; margin-bottom:16px;">
+    <div class="hint" style="margin:10px 0 2px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;">What moved it</div>
+    ${shown.map(x=>impactRowHtml(x, unit, fmt)).join('')}
+    ${more>0 ? `<div class="hint" style="margin:0 0 10px;"><a data-act="open-stat-detail" data-stat="${statKey}" style="cursor:pointer; text-decoration:underline;">${more} more</a></div>` : ''}
+  </div>`;
+}
 function renderRaceProjectionSection(stats, unit, fmt){
   if(stats.raceProjection){
     const p = stats.raceProjection;
     return `
-    <div class="section-title" style="padding:0; margin-top:0;">Projected race performance</div>
-    <button class="card stat-tile" data-act="open-stat-detail" data-stat="race-projection" style="padding:6px 16px 12px; margin-bottom:16px;">
+    <div class="section-title section-row" style="padding:0; margin-top:0;"><span>Projected race performance</span><button class="info-btn" data-act="open-stat-detail" data-stat="race-projection" aria-label="How this is worked out">i</button></div>
+    <button class="card stat-tile" data-act="open-stat-detail" data-stat="race-projection" style="padding:6px 16px 12px; margin-bottom:${stats.impacts.length ? 10 : 16}px;">
       ${projectionRowsHtml(p, unit, fmt)}
-      <div class="hint" style="margin-top:8px;">${projectionDeltaText(p.start.sec, p.current.sec)}. The range is the reliable part; the headline is its middle.</div>
-      <div class="hint" style="margin-top:4px;">${esc(projectionEvidenceText(p.fitness))}</div>
-      ${p.goalCheck ? `<div class="hint" style="margin-top:4px; color:${p.goalCheck.status==='beyond' ? 'var(--z-tempo)' : 'var(--accent-strong)'};">${esc(goalCheckText(p.goalCheck, p.goal))}</div>` : ''}
-    </button>`;
+      <div class="hint" style="margin-top:8px;">${projectionDeltaText(p.start.sec, p.current.sec)}</div>
+    </button>
+    ${renderImpactsCard(stats.impacts, unit, fmt, 5, 'race-projection')}`;
   }
   if(stats.generalProjections){
     const rows = stats.generalProjections.map(p=>`
@@ -2786,8 +2863,9 @@ function renderRaceProjectionSection(stats, unit, fmt){
         </div>
       </div>`).join('');
     return `
-    <div class="section-title" style="padding:0; margin-top:0;">Projected race performance</div>
-    <div class="card" style="padding:0 16px; margin-bottom:16px;">${rows}</div>`;
+    <div class="section-title section-row" style="padding:0; margin-top:0;"><span>Projected race performance</span><button class="info-btn" data-act="open-stat-detail" data-stat="general-projection-5k" aria-label="How this is worked out">i</button></div>
+    <div class="card" style="padding:0 16px; margin-bottom:${stats.impacts.length ? 10 : 16}px;">${rows}</div>
+    ${renderImpactsCard(stats.impacts, unit, fmt, 5, 'general-projection-5k')}`;
   }
   return '';
 }
@@ -3732,11 +3810,13 @@ function renderStatDetailModal(statKey){
   } else if(statKey==='race-projection' || (statKey && statKey.startsWith('general-projection-'))){
     const p = statKey==='race-projection' ? s.raceProjection : s.generalProjections.find(x=>statKey===`general-projection-${x.key}`);
     title = statKey==='race-projection' ? 'Projected race performance' : `Projected ${p.label} performance`;
+    const impacts = statKey==='race-projection' ? s.impacts : projectionImpacts(state.plan, state.logs, todayDate(), p.km, {trackingStart: state.setup.trackingStartDate});
     content = `<div class="card" style="padding:4px 14px; margin-bottom:14px;">${projectionRowsHtml(p, unit, state.paceFormat)}</div>`
       + statResultHtml(projectionDeltaText(p.start.sec, p.current.sec), 'change since you started', 'var(--accent-strong)')
-      + (p.goalCheck ? `<div class="hint" style="text-align:center; margin-top:10px; color:var(--ink);">${esc(goalCheckText(p.goalCheck, p.goal))}</div>` : '')
-      + `<div class="hint" style="margin-top:14px;">${esc(projectionEvidenceText(p.fitness))}</div>`;
-    footnote = `How it moves: a logged race resets the number. Logged tempo, cruise and interval sessions nudge it — intervals and cruise reps count once you enter the average rep time — and a single session can only move it a fraction. Two weeks of running under half the plan starts a slow decline. "If you complete the plan" adds the fitness the remaining quality weeks are expected to bring, about one point per six weeks. Times come from the same model as setup. The range is the reliable part.`;
+      + (p.goalCheck ? `<div class="hint" style="text-align:center; margin-top:10px; color:${p.goalCheck.status==='beyond' ? 'var(--z-tempo)' : 'var(--ink)'};">${esc(goalCheckText(p.goalCheck, p.goal))}</div>` : '')
+      + `<div class="hint" style="margin-top:14px;">${esc(projectionEvidenceText(p.fitness))} The range is the reliable part; the headline is its middle.</div>`
+      + `<div style="margin-top:14px;">${renderImpactsCard(impacts, unit, state.paceFormat, 0, statKey)}</div>`;
+    footnote = `<strong>What moves it.</strong> A logged race resets the number outright: a race is the truest measure of fitness. Each quality session logged on its planned day banks its share of the gain the plan expects, about one fitness point per six weeks of sessions. Tempo and over/under runs also count as evidence through their pace, and cruise, interval and rep sessions through the average rep time you enter; the last five such runs within six weeks count, and one run can only ever move it a fraction. Hill, fartlek, progression and race-pace sessions bank their share but carry no pace evidence. Easy and long runs don't move it: they are run at a pace that says nothing about your ceiling. They only count against you if two weeks fall under half the planned volume, when the number eases slowly. "If you complete the plan" adds the gain still to come, in full.`;
   }
   return modalShell(title, `${content}${footnote?`<div class="hint" style="text-align:center; margin-top:16px;">${footnote}</div>`:''}`);
 }
@@ -4611,7 +4691,7 @@ function findAct(el){
 
 function onClick(e){
   if(e.target.classList && e.target.classList.contains('overlay')){
-    state.modal=null; render(); return;
+    closeModal(); return;
   }
   const el = findAct(e.target);
   if(!el) return;
@@ -4999,7 +5079,7 @@ function onClick(e){
     state.view='onboarding'; state.onboardDraft = defaultDraft(); state.onboardStep = 1;
     render(); pageScrollTo(0); return;
   }
-  if(act==='close-modal'){ state.modal=null; state.moveFrom=null; render(); return; }
+  if(act==='close-modal'){ closeModal(); return; }
 
   if(act==='export-data'){ exportBackupData(); return; }
   if(act==='import-data'){ document.getElementById('import-file-input').click(); return; }

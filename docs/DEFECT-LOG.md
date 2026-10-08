@@ -240,6 +240,14 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 93. **"Now" projected slower than "At the start" and the trail sat at zero for eight weeks** on a back-dated plan tracked from today. *Cause:* the Progress page called the projection without the tracking start, so the credited weeks were not credited there; the trail and the mileage totals excluded days before the tracking start. *Fix:* the tracking start is passed through; the trail counts the whole plan and the climber starts where the assumed weeks left off; the onboarding hint says those weeks count as done. *Guard:* tests/projection.js 6c.
 
+## Round 11 — Progress tab: projection explained on demand, per-run impact, logging feedback (2026-10-08)
+
+94. **The projection tile carried three lines of explanation** (evidence, range note, goal check) above the numbers a runner actually wants. *Fix:* the tile shows the three times and the change since the start; everything else sits behind an "i" button (and a tap on the tile) in the detail sheet, which now also carries the basis for what moves the number and what does not.
+
+95. **No way to see which runs moved the projection.** *Fix:* `projectionImpacts` (engine) lists every logged run that moved the "now" number, newest first, with the seconds it added or took off and why (race reset, session banked, pace implied more/less fitness, volume back on plan). The Progress tab shows the latest five under the tile; the detail sheet shows them all. Each row opens its day. *Guard:* tests/projection.js 8.
+
+96. **Logging a run said only "Run logged".** *Fix:* the toast now reports the projection move ("10K projection 0:06 faster — now 47:13. Fitness is moving the right way."), plainly for a slower move, and "unchanged" after a quality session that did not move it. Easy runs keep the short toast. A move that lands behind a milestone screen shows when that screen closes. The toast also moved above the floating Log button, which it used to sit behind.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
