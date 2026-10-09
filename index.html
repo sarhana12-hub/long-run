@@ -3859,11 +3859,11 @@ function renderSettingsTab(){
       <div class="settings-row"><div class="lbl">Units</div>
         <div class="chip-select"><button class="chip ${unit==='mi'?'active':''}" data-act="set-unit" data-u="mi">Miles</button><button class="chip ${unit==='km'?'active':''}" data-act="set-unit" data-u="km">Kilometers</button></div>
       </div>
-      <div class="settings-row"><div class="lbl">Appearance</div>
-        <div class="chip-select">${[['system','System'],['light','Light'],['dark','Dark']].map(([k,l])=>`<button class="chip ${(state.theme||'system')===k?'active':''}" data-act="set-theme" data-t="${k}">${l}</button>`).join('')}</div>
-      </div>
       <div class="settings-row"><div class="lbl">Pace display</div>
         <div class="chip-select"><button class="chip ${fmt==='pace'?'active':''}" data-act="set-pace-format" data-f="pace">Pace</button><button class="chip ${fmt==='speed'?'active':''}" data-act="set-pace-format" data-f="speed">Speed (${speedUnitLabel})</button></div>
+      </div>
+      <div class="settings-row"><div class="lbl">Appearance</div>
+        <div class="chip-select">${[['system','System'],['light','Light'],['dark','Dark']].map(([k,l])=>`<button class="chip ${(state.theme||'system')===k?'active':''}" data-act="set-theme" data-t="${k}">${l}</button>`).join('')}</div>
       </div>
     </div>
 
