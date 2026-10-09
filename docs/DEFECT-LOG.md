@@ -354,6 +354,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 147. **Optional extras had no tick box** (owner). *Fix:* extras tick like the main lines and get the weight field when they take a weight; their ticks are stored past index 100 in the same per-day list so they never count toward "Strength session complete", which still needs only the main lines.
 
+148. **The Full upper session told a bodyweight inverted row to go "a little lighter"** (owner screenshot). *Fix:* the second-pull cue checks whether the pull takes a weight (dumbbell, cable, machine, bar); pull-ups and inverted rows get an effort cue plus how to make them easier (a band, or feet closer) instead.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

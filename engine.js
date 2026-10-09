@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 29; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 30; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -752,7 +752,9 @@ function buildUpperStrengthWorkout(variant, avail, full){
     strengthSetLine(pull, 3, 8, 75, '1–2 reps left in the tank, squeeze the shoulder blades'),
     strengthSetLine(push, 3, pushReps, 75, 'same effort'),
   ];
-  if(pull2 && pull2.name!==pull.name) lines.push(strengthSetLine(pull2, 3, 10, 60, 'a little lighter, 2 reps left in the tank'));
+  // 'lighter' only means something on a loaded pull; pull-ups and inverted rows scale by help or lever
+  const loadedPull = ex => /dumbbell|kettlebell|cable|pulldown|seated row|machine|barbell|assisted/i.test(ex.name+' '+(ex.equip||''));
+  if(pull2 && pull2.name!==pull.name) lines.push(strengthSetLine(pull2, 3, 10, 60, loadedPull(pull2) ? 'a little lighter, 2 reps left in the tank' : '2 reps left in the tank; make it easier (a band, or feet closer) if 10 is out of reach'));
   if(push2 && push2.name!==push.name) lines.push(strengthSetLine(push2, 3, isPushUp(push2) ? 15 : 10, 60, 'same effort'));
   lines.push(strengthSetLine(core, 3, core.unit==='hold'?40:10, 30, core.unit==='hold' ? 'hold with a neutral spine' : 'slow and controlled'));
   lines.push(isCarry(core2) && core2.name==='Farmer carry' ? strengthSetLine(core2, sets2, 1, 30, 'one walk per set, tall posture') : coreLine(core2, sets2, 30, 'steady'));
