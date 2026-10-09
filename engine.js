@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 28; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 29; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -733,21 +733,30 @@ function buildLowerStrengthWorkout(tier, weekIndex, weekInBlock, avail){
   lines.push(coreLine(core, 3, 30));
   return lines;
 }
-function buildUpperStrengthWorkout(variant, avail){
+// full: the longer version for a day with no run — a second pull and a second push in a
+// different pattern at higher reps, and three sets on the carry/side slot (about 35 min).
+function buildUpperStrengthWorkout(variant, avail, full){
   avail = avail || equipmentSet();
   const taken = new Set();
   const pull = pickFromPool(UPPER_PULL_POOL, variant+1, avail, taken);
   const push = pickFromPool(UPPER_PUSH_POOL, variant, avail, taken);
+  const pull2 = full ? pickFromPool(UPPER_PULL_POOL, variant+2, avail, taken) : null;
+  const push2 = full ? pickFromPool(UPPER_PUSH_POOL, variant+1, avail, taken) : null;
   const core = pickFromPool(UPPER_CORE_POOL, variant, avail, taken);
   const core2 = pickFromPool(UPPER_CORE2_POOL, variant+2, avail, taken);
-  const pushReps = push.name==='Push-ups' || push.name==='Pike push-ups' ? 12 : 8;
+  const isPushUp = ex => ex.name==='Push-ups' || ex.name==='Pike push-ups';
+  const pushReps = isPushUp(push) ? 12 : 8;
+  const sets2 = full ? 3 : 2;
   // Pull first: upper-back strength holds posture late in a race; the press only balances it.
-  return [
+  const lines = [
     strengthSetLine(pull, 3, 8, 75, '1–2 reps left in the tank, squeeze the shoulder blades'),
     strengthSetLine(push, 3, pushReps, 75, 'same effort'),
-    strengthSetLine(core, 3, core.unit==='hold'?40:10, 30, core.unit==='hold' ? 'hold with a neutral spine' : 'slow and controlled'),
-    isCarry(core2) && core2.name==='Farmer carry' ? strengthSetLine(core2, 2, 1, 30, 'one walk per set, tall posture') : coreLine(core2, 2, 30, 'steady'),
   ];
+  if(pull2 && pull2.name!==pull.name) lines.push(strengthSetLine(pull2, 3, 10, 60, 'a little lighter, 2 reps left in the tank'));
+  if(push2 && push2.name!==push.name) lines.push(strengthSetLine(push2, 3, isPushUp(push2) ? 15 : 10, 60, 'same effort'));
+  lines.push(strengthSetLine(core, 3, core.unit==='hold'?40:10, 30, core.unit==='hold' ? 'hold with a neutral spine' : 'slow and controlled'));
+  lines.push(isCarry(core2) && core2.name==='Farmer carry' ? strengthSetLine(core2, sets2, 1, 30, 'one walk per set, tall posture') : coreLine(core2, sets2, 30, 'steady'));
+  return lines;
 }
 function buildUpperOptional(variant, avail){
   avail = avail || equipmentSet();
@@ -761,7 +770,7 @@ function buildLowerOptional(avail){
   const r = resolveExercise(OPTIONAL_EXTRAS.legExtension, avail);
   return r ? [strengthSetLine(r, 2, 12, 45, 'moderate, slow lowering — easy on the knees')] : [];
 }
-const STRENGTH_TIME_MIN = {heavy:40, short:25, maintain:28, express:20, light:15, upper:22};
+const STRENGTH_TIME_MIN = {heavy:40, short:25, maintain:28, express:20, light:15, upper:22, upperFull:35};
 // Load is set by effort, not by a number the app can't know: "N reps left in the tank"
 // means the set ends N reps before you would fail. These notes tell a runner how to pick a
 // weight the first time and when to add to it.
@@ -862,20 +871,23 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
   const avail = equipmentSet(opts.equipment);
   days.forEach(d=>{
     if(d.type==='rest') Object.assign(d, buildWorkoutMeta(d)); // rest-day text depends on whether strength landed there
-    if(!d.strength){ d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthAfterRun=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
+    if(!d.strength){ d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthAfterRun=false; d.strengthShort=false; d.strengthShortable=false; d.strengthLong=false; d.strengthLongable=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
     const tier = lowerStrengthTierForPhase(phase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace, opts.strengthCutoffDays);
     const variant = weekIndex*2 + (d.strengthOrdinal||0); // two sessions in a week draw different lifts
     _used.length = 0;
     if(d.strengthFocus==='upper' || tier==null){
       d.strengthFocus = 'upper';
-      d.strengthExercises = buildUpperStrengthWorkout(variant, avail); d.strengthTimeMin = STRENGTH_TIME_MIN.upper;
+      const longable = tier!=null && tier!=='light';
+      const long = longable && !!(opts.longDates && opts.longDates.has(d.date));
+      d.strengthLong = long; d.strengthLongable = longable; d.strengthShort = false; d.strengthShortable = false;
+      d.strengthExercises = buildUpperStrengthWorkout(variant, avail, long); d.strengthTimeMin = long ? STRENGTH_TIME_MIN.upperFull : STRENGTH_TIME_MIN.upper;
       d.strengthLoadNote = STRENGTH_LOAD_NOTE.upper;
       const usedSoFar = _used.length; d.strengthOptional = buildUpperOptional(variant, avail); _used.length = usedSoFar; // extras need no how-to
     } else {
       const express = !!d.strengthExpress && tier!=='light';
       const short = !express && (tier==='heavy' || tier==='maintain') && opts.shortDates && opts.shortDates.has(d.date);
       const useTier = express ? 'express' : short ? 'short' : tier;
-      d.strengthShort = !!short; d.strengthShortable = (tier==='heavy' || tier==='maintain') && !express;
+      d.strengthShort = !!short; d.strengthShortable = (tier==='heavy' || tier==='maintain') && !express; d.strengthLong = false; d.strengthLongable = false;
       d.strengthExercises = buildLowerStrengthWorkout(useTier, variant, opts.weekInBlock, avail); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : short ? STRENGTH_TIME_MIN.short : STRENGTH_TIME_MIN[tier];
       d.strengthLoadNote = (_used.filter(x=>!x.bodyweight).length===0) ? STRENGTH_LOAD_NOTE.bodyweight : (STRENGTH_LOAD_NOTE[useTier] || STRENGTH_LOAD_NOTE.heavy);
       const usedSoFar = _used.length; d.strengthOptional = useTier==='heavy' ? buildLowerOptional(avail) : undefined; _used.length = usedSoFar;

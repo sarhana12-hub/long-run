@@ -947,6 +947,8 @@ const Store = {
   // strength attached) has no run to log against.
   getStrengthDone(){ return this._get('lr_strength_done', []); },
   getStrengthShort(){ return this._get('lr_strength_short', []); },
+  getStrengthLong(){ return this._get('lr_strength_long', []); },
+  setStrengthLong(v){ this._set('lr_strength_long', v); },
   getCheckins(){ return this._get('lr_checkins', {}); },
   getStrengthLoads(){ return this._get('lr_strength_loads', {}); },
   getPush(){ const p = this._get('lr_push', {}); return {enabled:false, morningOn:true, morningTime: p.time || '07:00', eveningOn:false, eveningTime:'20:00', syncedAt:0, ...p}; },
@@ -1238,6 +1240,7 @@ function boot(){
   state.logs = Store.getLogs();
   state.strengthDone = Store.getStrengthDone();
   state.strengthShort = Store.getStrengthShort();
+  state.strengthLong = Store.getStrengthLong();
   state.checkins = Store.getCheckins();
   state.strengthLoads = Store.getStrengthLoads();
   state.push = Store.getPush();
@@ -2221,10 +2224,10 @@ function equipmentChipsHtml(selected, act){
     <div class="chip-select">${g.items.map(e=>`<button class="chip ${sel.has(e.id)?'active':''}" data-act="${act}" data-id="${e.id}">${esc(e.label)}</button>`).join('')}</div>`).join('');
 }
 // Options every post-generation strength refresh needs (edits, swaps, equipment changes).
-const STRENGTH_TIME_MIN_PAGE = {full:40, short:25};
+const STRENGTH_TIME_MIN_PAGE = {full:40, short:25, upper:22, upperFull:35};
 function strengthOptsFor(week){
   const mode = (state.setup && state.setup.taperMode) || 'full';
-  return {equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none', shortDates: new Set(state.strengthShort||[])};
+  return {equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none', shortDates: new Set(state.strengthShort||[]), longDates: new Set(state.strengthLong||[])};
 }
 function refreshStrengthFromThisWeek(){
   const plan = state.plan; if(!plan) return;
@@ -4843,6 +4846,7 @@ function renderDayDetail(){
       <summary><span><div class="lbl" style="font-weight:700; font-size:14.5px;">Strength${day.strengthFocus==='upper' ? ' — upper body & core' : ''}</div><div class="sub" style="font-size:12.5px; color:var(--muted); margin-top:2px;">${day.strengthTimeMin ? `About ${day.strengthTimeMin} min` : ''}${day.km>0 ? (day.strengthAfterRun ? ' · after the run, not before it' : ' · after the run') : ''}${isStrengthDone ? ' · done' : ''}</div></span><span class="chev">${ICONS.chevron}</span></summary>
       <div style="padding-bottom:14px;">
         ${day.strengthShortable ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthShort?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-short="0">Full · ${STRENGTH_TIME_MIN_PAGE.full} min</button><button class="chip ${day.strengthShort?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-short="1">Shorter · ${STRENGTH_TIME_MIN_PAGE.short} min</button></div>` : ''}
+        ${day.strengthLongable ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthLong?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-long="0">Standard · ${STRENGTH_TIME_MIN_PAGE.upper} min</button><button class="chip ${day.strengthLong?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-long="1">Full · ${STRENGTH_TIME_MIN_PAGE.upperFull} min</button></div>` : ''}
         ${strengthFocusNote ? `<div class="hint" style="margin:0 0 8px;">${esc(strengthFocusNote)}</div>` : ''}
         ${strengthRowsHtml(day.strengthExercises, day.date, day.strengthHowTo, false)}
         <div class="hint" style="margin:8px 0 12px;">Tap an exercise for the effort, rest and how to do it. Tick each one as you go.</div>
@@ -5417,9 +5421,9 @@ function onClick(e){
     render(); return;
   }
   if(act==='set-strength-length'){
-    const date = el.dataset.date, short = el.dataset.short==='1';
-    const list = (state.strengthShort||[]).filter(d=>d!==date); if(short) list.push(date);
-    state.strengthShort = list; Store.setStrengthShort(list);
+    const date = el.dataset.date;
+    if(el.dataset.long!=null){ const list = (state.strengthLong||[]).filter(d=>d!==date); if(el.dataset.long==='1') list.push(date); state.strengthLong = list; Store.setStrengthLong(list); }
+    else { const short = el.dataset.short==='1'; const list = (state.strengthShort||[]).filter(d=>d!==date); if(short) list.push(date); state.strengthShort = list; Store.setStrengthShort(list); }
     const wi = state.plan.weeks.findIndex(w=>w.days.some(d=>d.date===date));
     if(wi>=0){ const w = state.plan.weeks[wi]; refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); Store.setPlan(state.plan); }
     if(state.modal) state.modal.strengthOpen = true;

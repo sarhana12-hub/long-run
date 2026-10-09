@@ -79,6 +79,20 @@ check('10k, 20 mpw, bodyweight only', {race:'10k', mpw:20, weeks:10, recentSec:2
 check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20, weeks:12, recentSec:23*60+15, runs:5}, (p)=>p.weeks.filter(w=>(w.phase==='build'||w.phase==='peak') && !w.isCutback && !w.days.some(d=>d.type==='race') && !w.days.some(d=>g.QUALITY_TYPES.includes(d.type) && !d.easyVariety && d.type!=='long')).map(w=>`w${w.weekIndex+1} ${w.phase} has no quality session`));
 // 79 distance plan says so when the weeks cannot reach the target
 { const s = {units:'mi', planKind:'distance', weeks:10, currentWeeklyKm:20*MI, recentDistanceKm:5, recentTimeSec:27*60, longDow:0, weekStartDow:0, runsPerWeek:4, strengthPerWeek:1, distanceGoalMetric:'weekly', distanceGoalCurrentKm:20*MI, distanceGoalTargetKm:35*MI, ...g.deriveScheduleFromLongDow(0,1)}; const p = g.generateGeneralPlan(s); const ok = (p.warnings||[]).some(x=>/reaches about/.test(x)) && p.peakWeeklyKm>0; console.log(`\n=== distance 20->35 in 10 weeks === peak ${mi(p.peakWeeklyKm)} mpw`); (p.warnings||[]).forEach(x=>console.log('  note: '+x)); if(!ok){ failures++; console.log('  FAIL: expected a shortfall note and a reported peak'); } else console.log('  ok'); }
+// 144 upper session: standard by default, the full version only when chosen for that day; never in a taper week
+{
+  const mk = () => [{date:'2026-10-09', dow:5, type:'easy', km:8, strength:true, strengthFocus:'upper', strengthFocusPinned:true, daysToRace:40}];
+  const std = mk(); g.refreshStrengthWorkouts(std, 'build', 2, {});
+  const full = mk(); g.refreshStrengthWorkouts(full, 'build', 2, {longDates:new Set(['2026-10-09'])});
+  const taper = mk(); g.refreshStrengthWorkouts(taper, 'taper', 9, {longDates:new Set(['2026-10-09'])});
+  const bad=[];
+  if(!(std[0].strengthLongable && !std[0].strengthLong && std[0].strengthTimeMin===22 && std[0].strengthExercises.length===4)) bad.push('standard upper session is not 4 lines / 22 min by default');
+  if(!(full[0].strengthLong && full[0].strengthTimeMin===35 && full[0].strengthExercises.length===6)) bad.push('full upper session is not 6 lines / 35 min: '+full[0].strengthExercises.length);
+  if(!(full[0].strengthExercises.slice(0,2).join('|')===std[0].strengthExercises.slice(0,2).join('|'))) bad.push('full upper session does not start with the standard pull and push');
+  if(taper[0].strengthLongable || taper[0].strengthLong || taper[0].strengthTimeMin!==22) bad.push('full upper session offered in a taper week');
+  const names = full[0].strengthExercises.map(l=>l.replace(/^\d+×\S+\s+/,'').split(' (')[0]); if(new Set(names).size!==names.length) bad.push('full upper session repeats an exercise: '+names.join(', '));
+  console.log('\n=== upper session standard vs full ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 check('Half, 3 strength/wk, long Saturday', {race:'half', mpw:30, weeks:12, recentSec:23*60, strength:3, longDow:6});
 check('5k, 1 strength, skip base', {race:'5k', mpw:30, weeks:8, recentSec:21*60, strength:1, skipBase:true});
 check('10k, 24 mpw, long Friday (reported: thin cruise session)', {race:'10k', mpw:24, weeks:10, recentSec:23*60, longDow:5}, (p)=>{

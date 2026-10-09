@@ -124,6 +124,7 @@ rule would be.
 | Four-week effort wave (RIR 3 → 2 → 1–2 → back off) | `buildLowerStrengthWorkout` | Standard mesocycle practice (Rønnestad uses 4-week blocks) | Within source | — |
 | Trunk/anti-rotation and carries in the upper session | `buildUpperStrengthWorkout` | Sato & Mokha 2009; Hung 2019 | Sourced | — |
 | Shorter leg session (about 25 min), chosen per day: plyometric, the two lifts that matter (3×5 and 2×6), calves paired with the single-leg lift, one core set; heavy rest stays 2 min (2–3 under a barbell) | `buildLowerStrengthWorkout` ('short') | Rest: NSCA strength guidance (2–5 min for strength loads); the cut is Judgement | Within source for rest; cut is Judgement | Owner request 2026-10-08 |
+| Full upper session (about 35 min), chosen per day: a second pull and a second push in a different pattern at 3×10 with 60 s rest, three sets on the carry/side slot; the standard 22-min session stays the default; not offered inside the race cutoff or in taper weeks | `buildUpperStrengthWorkout` ('full') | — | Judgement (a rest day has room for it; a run day does not) | Owner request 2026-10-09 |
 | Express (20-min) session retired: a hard-day leg session is the full session, done after the run | `buildLowerStrengthWorkout` | — | Owner decision 2026-10-07 | — |
 | Bodyweight fallbacks go single-leg and slow | `STRENGTH_EXERCISES` | Blagrove (load must be high enough to matter) | Within source | — |
 
