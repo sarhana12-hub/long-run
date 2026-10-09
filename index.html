@@ -2479,13 +2479,14 @@ function strengthRowsHtml(lines, date, howTo, optional){
   return lines.map((line,i)=>{
     const p = parseStrengthLine(line);
     const how = p && (howTo||[]).find(h=>p.name.startsWith(h.name));
-    const done = !optional && !!ticks[i];
-    if(!p) return `<div class="sx-row ${done?'done':''}">${optional?'':`<input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${i}" ${done?'checked':''}>`}<div class="sx-name" style="font-weight:600;">${esc(line)}</div></div>`;
+    const ti = optional ? 100+i : i; // extras tick like the main lines; their ticks sit past 100 so they never count toward the session
+    const done = !!ticks[ti];
+    if(!p) return `<div class="sx-row ${done?'done':''}"><input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${ti}" ${done?'checked':''}><div class="sx-name" style="font-weight:600;">${esc(line)}</div></div>`;
     return `<div class="sx-row ${done?'done':''}">
-      ${optional?'':`<input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${i}" ${done?'checked':''} aria-label="Done: ${esc(p.name)}">`}
+      <input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${ti}" ${done?'checked':''} aria-label="Done: ${esc(p.name)}">
       <details>
         <summary><span><span class="sx-name">${esc(p.name)}</span><div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
-        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${(!optional && isLoadable(p.name, p.equip)) ? strengthLoadHtml(p.name, date) : ''}</div>
+        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${isLoadable(p.name, p.equip) ? strengthLoadHtml(p.name, date) : ''}</div>
         ${exerciseLibraryHtml(p.name)}
       </details>
     </div>`;
@@ -5158,7 +5159,7 @@ function onClick(e){
     state.strengthItems = items; Store.setStrengthItems(items);
     const day = findPlanDay(state.plan, date);
     const total = day && day.strengthExercises ? day.strengthExercises.length : 0;
-    const allDone = total>0 && arr.filter(Boolean).length>=total;
+    const allDone = total>0 && arr.slice(0, total).filter(Boolean).length>=total; // extras (index 100+) never count
     if(allDone && !state.strengthDone.includes(date)){
       state.strengthDone = [...state.strengthDone, date]; Store.setStrengthDone(state.strengthDone);
       evaluateAndTriggerAchievements(null);

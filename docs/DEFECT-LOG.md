@@ -352,6 +352,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 146. **The stick-figure exercise drawings were inaccurate** (owner: so bad they hurt more than they helped). *Fix:* removed from the exercise sheets and the library screen; the written set-up, movement, form points, common mistake and the ACE Fitness step-photo link remain. The drawing data stays in library.js unused, so it can come back if better art is made.
 
+147. **Optional extras had no tick box** (owner). *Fix:* extras tick like the main lines and get the weight field when they take a weight; their ticks are stored past index 100 in the same per-day list so they never count toward "Strength session complete", which still needs only the main lines.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
