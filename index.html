@@ -1076,8 +1076,7 @@ function pushPlanSummary(){
   const unit = state.setup.units, fmt = state.paceFormat; const today = todayDate(); const until = addDays(today, 120); const days = {};
   plan.weeks.forEach(w=>{ const paces = getWeekPaces(plan, w, state.logs); w.days.forEach(d=>{
     const dt = parseDate(d.date); if(dt<today || dt>until || d.beforeStart) return;
-    if(!(d.km>0) && !d.strength) return;
-    let line = d.km>0 ? `${TYPE_META[d.type] ? TYPE_META[d.type].label : 'Run'} · ${fmtDist(d.km,unit)}` : 'Rest day';
+    let line = d.km>0 ? `${TYPE_META[d.type] ? TYPE_META[d.type].label : 'Run'} · ${fmtDist(d.km,unit)}` : (d.strength ? 'Rest day' : 'Rest day · full rest, or easy cross-training');
     if(d.km>0 && QUALITY_TYPES.includes(d.type)){ const t = daySummaryText(d, paces, unit, dayFmt(d, fmt)); if(t) line += ' · ' + t; }
     if(d.strength) line += d.km>0 ? ` · strength after the run (${d.strengthTimeMin||40} min)` : ` · strength ${d.strengthFocus==='upper' ? 'upper body' : 'legs'} (${d.strengthTimeMin||40} min)`;
     days[d.date] = line.length>140 ? line.slice(0,137)+'…' : line;
@@ -5267,7 +5266,7 @@ function onClick(e){
   if(act==='reminders-on'){ if(!state.push.morningOn && !state.push.eveningOn) state.push = {...state.push, morningOn:true}; enableReminders(); return; }
   if(act==='reminders-off'){ disableReminders(); return; }
   if(act==='reminders-test'){
-    (async()=>{ try{ const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if(!sub){ showToast('Turn reminders on first'); return; } await syncPush(sub); const r = await pushApi({action:'test', endpoint: sub.endpoint}); showToast(r && r.ok ? 'Test sent' : 'Could not send: ' + ((r && (r.error || ((r.status||'')+' '+(r.detail||r.result||'')))) || 'unknown'), null, 8000); }catch(e){ showToast('Could not send a test', null, 3000); } })();
+    (async()=>{ try{ const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if(!sub){ showToast('Turn reminders on first'); return; } await syncPush(sub); const r = await pushApi({action:'test', endpoint: sub.endpoint}); const fmtMin = m => m==null ? 'off' : (new Date(2000,0,1,Math.floor(m/60),m%60)).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}); const regd = r && r.registered; const ago = regd && regd.lastCron ? Math.round((Date.now()-regd.lastCron)/60000) : null; const info = regd ? ` · server has morning ${fmtMin(regd.morning)}, evening ${fmtMin(regd.evening)}, zone ${regd.tz}, ${regd.planDays} days of plan, schedule last ran ${ago==null ? 'never' : ago+' min ago'}` : ''; showToast((r && r.ok ? 'Test sent' : 'Could not send: ' + ((r && (r.error || ((r.status||'')+' '+(r.detail||r.result||'')))) || 'unknown')) + info, null, 12000); }catch(e){ showToast('Could not send a test', null, 3000); } })();
     return;
   }
   if(act==='copy-app-link'){

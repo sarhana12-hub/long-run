@@ -157,7 +157,9 @@ export default {
       const rec = body.endpoint ? await env.PEAK_PUSH.get(await sha256hex(body.endpoint), 'json') : null;
       if (!rec) return json({ error: 'Not registered' }, 404);
       const r = await sendPush(env, rec.sub, { title: 'Reminders are on', body: "This is what a morning will look like: one line with the day's workout.", url: './' });
-      return json({ ok: r === 'ok', result: r, status: LAST_PUSH && LAST_PUSH.status, detail: LAST_PUSH && LAST_PUSH.text });
+      const lastCron = await env.PEAK_PUSH.get('__cron');
+      return json({ ok: r === 'ok', result: r, status: LAST_PUSH && LAST_PUSH.status, detail: LAST_PUSH && LAST_PUSH.text,
+        registered: { morning: rec.morning != null ? rec.morning : (rec.minutes != null ? rec.minutes : null), evening: rec.evening != null ? rec.evening : null, tz: rec.tz, lastMorning: rec.lastMorning || rec.lastSent || null, lastEvening: rec.lastEvening || null, planDays: Object.keys((rec.plan && rec.plan.days) || {}).length, lastCron: lastCron ? Number(lastCron) : null } });
     }
 
     // ---- Strava relay (unchanged) ----
@@ -175,10 +177,12 @@ export default {
   // has not been sent today, gets its line for the day. Dead subscriptions are removed.
   async scheduled(event, env, ctx) {
     if (!env.PEAK_PUSH) return;
+    await env.PEAK_PUSH.put('__cron', String(Date.now())); // so the app can show when the schedule last ran
     let cursor;
     do {
       const page = await env.PEAK_PUSH.list({ cursor, limit: 200 });
       for (const k of page.keys) {
+        if (k.name === '__cron') continue;
         const rec = await env.PEAK_PUSH.get(k.name, 'json');
         if (!rec || !rec.sub) continue;
         let now; try { now = localNow(rec.tz || 'UTC'); } catch (e) { now = localNow('UTC'); }
