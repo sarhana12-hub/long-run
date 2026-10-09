@@ -2461,6 +2461,12 @@ function exerciseLibraryHtml(name){
 // and once there is one, a plain progression cue (add a little when every set finished
 // with reps to spare: common double-progression practice, judgement).
 const LOADABLE_EQUIP = /barbell|dumbbell|kettlebell|machine|plate|leg press|cable|weighted|vest|weight in/i;
+// Decided by the equipment the variant actually needs, not by the words in its note (a single-arm
+// row says only "one hand and knee on a bench"). The note regex stays as a fallback for older lines.
+const LOAD_EQUIP_IDS = new Set(["barbell","dumbbells","kettlebell","plates","legPress","hackSquat","hamstringCurl","legExtension","calfStanding","calfSeated","hipThrustMachine","smith","chestPress","shoulderPressMachine","seatedRow","latPulldown","assistedPullup","cable","armMachines","vest","sled"]);
+const KNOWN_KEYS = new Set(), LOADABLE_KEYS = new Set();
+(()=>{ const all = Object.assign({}, typeof STRENGTH_EXERCISES!=="undefined" ? STRENGTH_EXERCISES : {}, typeof OPTIONAL_EXTRAS!=="undefined" ? OPTIONAL_EXTRAS : {}); Object.entries(all).forEach(([id, def])=>(def.variants||[]).forEach(v=>{ const key = v.name+"|"+(v.equip||""); KNOWN_KEYS.add(key); if(id!=="invertedRow" && (v.needs||[]).some(eq=>LOAD_EQUIP_IDS.has(eq))) LOADABLE_KEYS.add(key); })); })(); // an inverted row under a Smith bar is still bodyweight
+function isLoadable(name, equip){ const key = name+"|"+(equip||""); return KNOWN_KEYS.has(key) ? LOADABLE_KEYS.has(key) : LOADABLE_EQUIP.test(equip||""); }
 function loadUnit(){ return (state.setup && state.setup.units)==='km' ? 'kg' : 'lb'; }
 function strengthLoadHtml(name, date){
   const hist = (state.strengthLoads && state.strengthLoads[name]) || [];
@@ -2485,7 +2491,7 @@ function strengthRowsHtml(lines, date, howTo, optional){
       ${optional?'':`<input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${i}" ${done?'checked':''} aria-label="Done: ${esc(p.name)}">`}
       <details>
         <summary><span><span class="sx-name">${esc(p.name)}</span><div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
-        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${(!optional && LOADABLE_EQUIP.test(p.equip||'')) ? strengthLoadHtml(p.name, date) : ''}</div>
+        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${(!optional && isLoadable(p.name, p.equip)) ? strengthLoadHtml(p.name, date) : ''}</div>
         ${exerciseLibraryHtml(p.name)}
       </details>
     </div>`;

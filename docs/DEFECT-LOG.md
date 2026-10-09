@@ -348,6 +348,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 144. **The upper-body session was always the 22-minute version**, which fits after an easy run but leaves a rest day short (owner request). *Fix:* a Standard / Full chip on upper days, remembered per day like the leg Full / Shorter choice: Full adds a second pull and a second push in a different pattern at 3×10 with shorter rests and a third set on the carry slot, about 35 min. Standard stays the default; Full is not offered inside the race cutoff or in taper weeks.
 
+145. **Single-arm dumbbell row had no weight field while the bench press did** (owner screenshot). The field was shown when the equipment note mentioned a weight, and the row note only says where to brace. *Fix:* the field is decided by the equipment the variant needs (dumbbells, kettlebell, barbell, plates, machines, cable, vest, sled), with the old note check kept as a fallback; this also catches the dumbbell shoulder press, the kettlebell row and the Smith machine squat.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
