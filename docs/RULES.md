@@ -75,6 +75,7 @@ rule would be.
 | I reps 3–5 min with jog recovery about equal time; R reps 200–400 m with full recovery | `structuredEffort` | Daniels | Sourced | — |
 | Hills 6–10 × 60–90 s | `structuredEffort` | Daniels (hills as R-type work), Pfitzinger | Sourced | — |
 | Session minute budgets ramp through a phase (e.g. T 20→25 short, 20→40 long) | `qualityMinutes` | Daniels ranges | Within source | — |
+| A promised run day outranks the 30-minute easy floor: the plan fixes its run days once (the whole-plan check), and a week never sheds one of those days for the floor; easy runs on promised days may drop to 20 minutes first. Days above the promise still need 30 minutes | `generatePlan` (`easyFloorAt`) | — | Judgement (owner, 2026-10-11: the plan said five run days and gave four) | Keep flagged |
 | The session outranks an extra run day: a session week sheds run days (down to three) before it falls back to the beginner structure | `generatePlan` | Daniels (a quality day plus 30-minute easy runs beats five easy runs) | Within source | — |
 | Floors scale down below 40 km/wk; weeks too small for a session at all use Daniels' beginner structure (easy runs + strides) | `floorMinutesFor`, `generatePlan` | Daniels beginner plans | Within source; the scaling curve is Judgement | — |
 | Quality day shorter than the long run | `sizeQuality` | — | Judgement (owner complaint: tempo as long as the long run) | Keep as an owner decision |

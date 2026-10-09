@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 30; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 31; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -1445,6 +1445,12 @@ function generatePlan(setup, dayOneOverride){
     // whether the week is too small for a session at all (then it takes Daniels' beginner
     // structure: equal ~30-min easy runs with strides).
     const minRun = kmForMinutes(30, paces.easyPerKm);
+    // The plan promised runsPerWeek days (the whole-plan check above). A week never sheds a
+    // promised day for the 30-minute floor: easy runs on promised days may drop to 20 minutes
+    // first (judgement: a short easy run on a day the runner asked to run beats a rest day
+    // they did not ask for). Days above the promise still need 30 minutes.
+    const softRun = kmForMinutes(20, paces.easyPerKm);
+    const easyFloorAt = r => r > runsPerWeek ? minRun*0.9 : softRun;
     const sessionEstKm = vol => QUALITY_WARMUP_KM + QUALITY_COOLDOWN_KM + kmForMinutes(floorMinutesFor('tempo', vol), paces.tempoPerKm);
     const sessionWeek = phase==='taper' || phase==='peak' || (phase==='build' && introducePhase==='build');
     const fixedDays = sessionWeek ? 2 : 1; // long run, plus the session in a session week
@@ -1452,7 +1458,9 @@ function generatePlan(setup, dayOneOverride){
     const easyRoomKm = (vol, long, runs) => easyTotalKm(vol, long) / Math.max(1, runs-fixedDays);
     let heldCutback = false;
     if(w<nTrain && isCutback && !weekHasRace && easyRoomKm(vols[w], longs[w], runsPerWeek) < minRun){ weeklyKm = levels[w]; longKm = w>0 ? longs[w-1] : longs[w]; heldCutback = true; }
-    let runsW = clamp(Math.min(requestedRuns, fixedDays + Math.floor(easyTotalKm(weeklyKm, longKm)/minRun + 0.1)), 3, 7);
+    const countRuns = (easyKm, fixed) => clamp(Math.min(requestedRuns, fixed + Math.floor(easyKm/minRun + 0.1)), 3, 7);
+    const countRunsPromised = (easyKm, fixed) => Math.max(countRuns(easyKm, fixed), Math.min(runsPerWeek, clamp(Math.min(requestedRuns, fixed + Math.floor(easyKm/softRun + 0.1)), 3, 7)));
+    let runsW = countRunsPromised(easyTotalKm(weeklyKm, longKm), fixedDays);
     let beginnerWeek = w<nTrain && !weekHasRace && easyRoomKm(weeklyKm, longKm, 3) < minRun*0.9;
     const applyBeginner = () => { runsW = clamp(Math.min(requestedRuns, Math.floor(weeklyKm/minRun + 0.05)), 3, 7); longKm = round1(Math.max(weeklyKm/runsW*1.06, minRun)); };
     if(beginnerWeek) applyBeginner();
@@ -1475,8 +1483,8 @@ function generatePlan(setup, dayOneOverride){
     // is in it takes that structure instead.
     // The session outranks an extra run day: a week that cannot hold the session on runsW days
     // sheds run days (down to three) before it falls back to the beginner structure.
-    if(sessionWeek && !beginnerWeek && w<nTrain && !weekHasRace){ while(runsW>3 && easyRoomKm(weeklyKm, longKm, runsW) < minRun*0.9) runsW--; }
-    const roomForQuality = !beginnerWeek && easyRoomKm(weeklyKm, longKm, runsW) >= minRun*0.9;
+    if(sessionWeek && !beginnerWeek && w<nTrain && !weekHasRace){ while(runsW>3 && easyRoomKm(weeklyKm, longKm, runsW) < easyFloorAt(runsW)) runsW--; }
+    const roomForQuality = !beginnerWeek && easyRoomKm(weeklyKm, longKm, runsW) >= easyFloorAt(runsW);
     const beginnerNote = () => { if(!warnings.some(x=>/beginner structure/.test(x))) warnings.push(`At ${fmtDist(currentKm,unit,0)}/week the plan follows a beginner structure — easy runs of about 30 minutes with strides, no separate speed session — because a session with its warm-up and cool-down would leave the other runs too short. Structured sessions start once the mileage can carry them.`); };
     if(!roomForQuality && w<nTrain && !weekHasRace && sessionWeek){ beginnerWeek = true; applyBeginner(); beginnerNote(); }
     const wantsQuality = roomForQuality && (phase==='taper' || (phase==='peak') || (phase==='build' && introducePhase==='build'));
@@ -1523,15 +1531,16 @@ function generatePlan(setup, dayOneOverride){
       const easyEach = easyDays ? (weeklyKm - needLong - qTotal)/easyDays : Infinity;
       let fitRuns = runsW;
       const roomOn = r => (weeklyKm - needLong - quality.reduce((a,q)=>a+q.km,0))/Math.max(1, r-1-quality.length);
-      if(w<nTrain && !weekHasRace && easyEach < minRun*0.9){ while(fitRuns>3 && roomOn(fitRuns) < minRun*0.9) fitRuns--; }
-      let fitsOnFewer = fitRuns<runsW && roomOn(fitRuns) >= minRun*0.9;
-      if(w<nTrain && !weekHasRace && easyEach < minRun*0.9 && !fitsOnFewer && quality.length>1){
+      const shortEasy = easyEach < easyFloorAt(runsW);
+      if(w<nTrain && !weekHasRace && shortEasy){ while(fitRuns>3 && roomOn(fitRuns) < easyFloorAt(fitRuns)) fitRuns--; }
+      let fitsOnFewer = fitRuns<runsW && roomOn(fitRuns) >= easyFloorAt(fitRuns);
+      if(w<nTrain && !weekHasRace && shortEasy && !fitsOnFewer && quality.length>1){
         // the second session goes before the first does
         quality.pop(); fitRuns = runsW;
-        while(fitRuns>3 && roomOn(fitRuns) < minRun*0.9) fitRuns--;
-        fitsOnFewer = roomOn(fitRuns) >= minRun*0.9;
+        while(fitRuns>3 && roomOn(fitRuns) < easyFloorAt(fitRuns)) fitRuns--;
+        fitsOnFewer = roomOn(fitRuns) >= easyFloorAt(fitRuns);
       }
-      if(w<nTrain && !weekHasRace && easyEach < minRun*0.9 && !fitsOnFewer){
+      if(w<nTrain && !weekHasRace && shortEasy && !fitsOnFewer){
         // the sized session does not fit even on three days: beginner structure this week
         quality.length = 0; beginnerWeek = true; applyBeginner(); beginnerNote();
       } else if(fitsOnFewer){
@@ -1540,7 +1549,7 @@ function generatePlan(setup, dayOneOverride){
       } else if(longKm < maxQ+0.6){
         longKm = round1(Math.min(needLong, kmForMinutes(longTimeCapMin(raceKm), paces.longPerKm)));
       }
-      if(!beginnerWeek && w<nTrain && !weekHasRace) runsW = clamp(Math.min(requestedRuns, Math.max(runsW, 1 + quality.length + Math.floor((weeklyKm - longKm - qTotal)/minRun + 0.1))), 3, 7);
+      if(!beginnerWeek && w<nTrain && !weekHasRace) runsW = Math.max(runsW, countRunsPromised(weeklyKm - longKm - qTotal, 1 + quality.length));
     }
     // Race-pace finish inside the long run (Pfitzinger's marathon-pace long runs; Daniels runs
     // M pace inside long runs in Phases III-IV): half and marathon, from Daniels Phase III
@@ -1927,7 +1936,7 @@ function validatePlan(plan, setup){
       const easyCeil = interp([[64,60],[97,90]], Math.max(w.levelKm||0, w.plannedKm||tot))*1.12;
       if(d.easyRole!=='aerobic' && min > easyCeil && w.phase!=='taper') v.push(`${wk} easy run ${min.toFixed(0)} min (ceiling ${easyCeil.toFixed(0)})`);
       if(d.easyRole==='aerobic' && d.km > unitToKm(16,'mi')+0.3) v.push(`${wk} medium-long run ${d.km} km (Pfitzinger: 11-16 mi)`);
-      if(d.label!=='Shakeout Jog' && min < ((w.beginnerStructure || w.phase==='recovery') ? 21 : 25) && w.phase!=='taper' && !containsRace && d.daysToRace!=null && d.daysToRace>Math.max(2, plan.taperDays||0)) v.push(`${wk} easy run only ${min.toFixed(0)} min (Daniels: 30 min minimum)`);
+      if(d.label!=='Shakeout Jog' && min < ((w.beginnerStructure || w.phase==='recovery') ? 21 : (w.runsPerWeek <= (plan.runsWeekOne||99) ? 19 : 25)) && w.phase!=='taper' && !containsRace && d.daysToRace!=null && d.daysToRace>Math.max(2, plan.taperDays||0)) v.push(`${wk} easy run only ${min.toFixed(0)} min (Daniels: 30 min minimum)`);
     });
     // hard-day spacing
     const hard = w.days.filter(d=>isLegDemandingDay(d));
