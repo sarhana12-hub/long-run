@@ -340,6 +340,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 140. **A four-week 10K plan with base skipped spent its weeks on 200 m reps and hill repeats and had no tempo run at all** (owner: already at 20 mi/week, chose to skip base, expected to start deep in the plan). *Cause:* skipping base handed the base weeks to Phase II (reps and hills) instead of to the race-specific phases; and in train-through mode the race week was built as a normal two-session week. *Fix:* the Daniels priority table is walked with Phase I removed when base is skipped, so freed weeks go to Phase IV and III first; the second session on a 5K/10K plan favours cruise intervals unless the main session is already threshold work; race week is one sharpener in every taper mode. The owner's plan now reads race pace + cruise, tempo + fartlek, then light reps in race week. *Guard:* existing suite and sweep; ENGINE_VERSION 27 rebuilds saved plans.
 
+141. **Adding a strength session in the day editor always made it a leg session**, and the editor then warned about legs before the long run (owner wanted an upper-body session on a rest day). *Fix:* the editor offers Legs / Upper body & core once the box is ticked, the choice is pinned on the day so rebuilds and swaps keep it, the preview warning sees the choice, and the warning itself no longer fires for legs the day before a plain long run, matching the placement rule.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

@@ -4812,7 +4812,7 @@ function modalEditDay(){
   const recommendedSecPerKm = meta.paceKey ? weekPaces[meta.paceKey] : null;
   const effectiveSecPerKm = draft.paceOverrideSecPerKm!=null ? draft.paceOverrideSecPerKm : recommendedSecPerKm;
   const speedUnitLabel = unit==='mi' ? 'mph' : 'km/h';
-  const previewDays = week.days.map((wd,i)=> i===dayIndex ? {...wd, type:draft.type, strength:draft.strength, label:TYPE_META[draft.type].label} : wd);
+  const previewDays = week.days.map((wd,i)=> i===dayIndex ? {...wd, type:draft.type, strength:draft.strength, strengthFocus: draft.strength ? draft.strengthFocus : null, label:TYPE_META[draft.type].label} : wd);
   const previewWarnings = scheduleWarnings({...week, days:previewDays});
 
   return modalShell(`Edit ${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}`, `
@@ -4833,6 +4833,7 @@ function modalEditDay(){
       <label class="field-label" style="margin:0;">Add strength session</label>
       <input type="checkbox" id="ed-strength" ${draft.strength?'checked':''} style="width:20px; height:20px;">
     </div>
+    ${draft.strength ? `<div class="field"><div class="chip-select"><button class="chip ${draft.strengthFocus!=='upper'?'active':''}" data-act="ed-strength-focus" data-focus="lower">Legs</button><button class="chip ${draft.strengthFocus==='upper'?'active':''}" data-act="ed-strength-focus" data-focus="upper">Upper body & core</button></div></div>` : ''}
     ${STRIDES_ELIGIBLE_TYPES.includes(draft.type) ? `
     <div class="field" style="display:flex; align-items:center; justify-content:space-between;">
       <label class="field-label" style="margin:0;">Add strides</label>
@@ -5316,7 +5317,7 @@ function onClick(e){
     const {weekIndex, dayIndex} = state.modal;
     const day = state.plan.weeks[weekIndex].days[dayIndex];
     state.modal={type:'edit-day', weekIndex, dayIndex, draft:{
-      type: day.type, km: day.km, strength: day.strength, strides: !!day.strides, easyRole: day.easyRole ?? null,
+      type: day.type, km: day.km, strength: day.strength, strengthFocus: day.strengthFocus==='upper' ? 'upper' : 'lower', strides: !!day.strides, easyRole: day.easyRole ?? null,
       paceOverrideSecPerKm: day.paceOverrideSecPerKm ?? null, progressionEasy: !!day.progressionEasy,
       warmupKm: day.warmupKm ?? 0, cooldownKm: day.cooldownKm ?? 0, treadmillHills: !!(day.treadmillHills || day.treadmill),
     }};
@@ -5328,6 +5329,7 @@ function onClick(e){
     state.modal={type:'log-run', data:{date:day.date, dist:'', time:'', notes:'', kind: day.type==='race' ? 'race' : 'run', rep:''}};
     render(); return;
   }
+  if(act==='ed-strength-focus'){ state.modal.draft.strengthFocus = el.dataset.focus; render(); return; }
   if(act==='checkin-ease'){
     const wi = Number(el.dataset.wi), km = Number(el.dataset.km);
     const w = easeWeek(state.plan, wi, km);
@@ -5428,7 +5430,7 @@ function onClick(e){
     // instead of carrying it forward onto a workout it no longer describes.
     const terrainEligible = draft.type==='long' || (draft.type==='easy' && day.easyRole==='aerobic');
     const hillStridesEligible = draft.type==='easy' && day.easyRole==='aerobic' && strides;
-    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0, easyVariety:false, terrain: terrainEligible ? day.terrain : null, hillStrides: hillStridesEligible ? day.hillStrides : false, treadmillHills, treadmill: treadmillHills};
+    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strengthFocus: draft.strength ? draft.strengthFocus : null, strengthFocusPinned: !!draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0, easyVariety:false, terrain: terrainEligible ? day.terrain : null, hillStrides: hillStridesEligible ? day.hillStrides : false, treadmillHills, treadmill: treadmillHills};
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     recomputeStrengthFocus(week.days);

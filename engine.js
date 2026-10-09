@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 27; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 28; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -845,10 +845,11 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex
 function recomputeStrengthFocus(days){
   const n = days.length;
   days.forEach((day,i)=>{
-    if(!day.strength){ day.strengthFocus=null; return; }
+    if(!day.strength){ day.strengthFocus=null; day.strengthFocusPinned=false; return; }
     const next = days[(i+1)%n];
     const beforeHard = isKeySessionDay(next);
-    if(beforeHard || day.type==='long') day.strengthFocus = 'upper';
+    if(day.strengthFocusPinned && (day.strengthFocus==='upper' || day.strengthFocus==='lower')){ /* chosen by hand in the editor */ }
+    else if(beforeHard || day.type==='long') day.strengthFocus = 'upper';
     else if(!day.strengthFocus) day.strengthFocus = 'lower';
     day.strengthExpress = false; day.strengthAfterRun = day.strengthFocus==='lower' && isLegDemandingDay(day);
   });
@@ -919,7 +920,7 @@ function scheduleWarnings(week){
   week.days.filter(d=>d.strength && d.strengthFocus!=='upper').forEach(s=>{
     hardDays.forEach(h=>{
       if(h.id===s.id && h.type==='long') warnings.push(`Heavy strength on top of the Long Run (${DOW[h.dow]}) — move it to the day after, or keep it to upper body/core.`);
-      else if(((h.dow-1+7)%7)===s.dow) warnings.push(`Lower-body strength on ${DOW[s.dow]} falls the day before ${h.label} (${DOW[h.dow]}) — heavy legs the day before a key run blunts the run; swap it to upper body/core or another day.`);
+      else if(((h.dow-1+7)%7)===s.dow && !(h.type==='long' && !((h.racePaceKm||0)>0.5))) warnings.push(`Lower-body strength on ${DOW[s.dow]} falls the day before ${h.label} (${DOW[h.dow]}) — heavy legs the day before a key run blunts the run; swap it to upper body/core or another day.`);
     });
   });
   return warnings;
