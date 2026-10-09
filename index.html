@@ -1190,6 +1190,9 @@ function showToast(msg, undo, ms){ state.toast = msg; state.toastUndo = undo || 
 document.addEventListener('toggle', e=>{ if(e.target && e.target.id==='strength-details' && state.modal) state.modal.strengthOpen = e.target.open; }, true);
 // Re-renders an open sheet in place: same scroll position, no entrance animation.
 function rerenderSheet(){ const sh = document.querySelector('.sheet'); const top = sh ? sh.scrollTop : 0; if(state.modal) state.modal.quiet = true; render(); const sh2 = document.querySelector('.sheet'); if(sh2) sh2.scrollTop = top; }
+// Replaces the open sheet's contents with a fresh render of the same sheet: no page rebuild,
+// no dimmer flash, no entrance animation, scroll position kept.
+function swapSheetContents(){ const sh = document.querySelector('.sheet'); if(!sh || !state.modal){ render(); return; } const top = sh.scrollTop; const tmp = document.createElement('div'); tmp.innerHTML = renderModal(); const fresh = tmp.querySelector('.sheet'); if(!fresh){ render(); return; } sh.innerHTML = fresh.innerHTML; sh.scrollTop = top; }
 function closeModal(){ const held = state.modal && state.modal.type==='milestone' ? state.pendingToast : null; state.modal=null; state.moveFrom=null; state.pendingToast=null; if(held) showToast(held.msg, held.undo, held.ms); else render(); }
 // Flashes a message inline next to the "Your name" label (the lexi-badge span) instead of
 // a floating toast — a fixed-position popup kept landing either behind the Dynamic Island
@@ -5401,7 +5404,7 @@ function onClick(e){
   if(act==='dp-toggle'){ const id = el.dataset.dp; const cal = document.getElementById('cal-'+id); if(!cal) return; if(cal.hidden){ dpRender(id); cal.hidden = false; } else cal.hidden = true; return; }
   if(act==='dp-nav'){ const id = el.dataset.dp; const v = DP_VIEW[id] || {y:todayDate().getFullYear(), m:todayDate().getMonth()}; const nm = new Date(v.y, v.m + Number(el.dataset.dir), 1); DP_VIEW[id] = {y:nm.getFullYear(), m:nm.getMonth()}; dpRender(id); return; }
   if(act==='dp-pick'){ dpSet(el.dataset.dp, el.dataset.date); return; }
-  if(act==='ed-strength-focus'){ state.modal.draft.strengthFocus = el.dataset.focus; render(); return; }
+  if(act==='ed-strength-focus'){ state.modal.draft.strengthFocus = el.dataset.focus; swapSheetContents(); return; }
   if(act==='checkin-ease'){
     const wi = Number(el.dataset.wi), km = Number(el.dataset.km);
     const w = easeWeek(state.plan, wi, km);
@@ -5715,10 +5718,10 @@ function onChange(e){
   if(state.modal && state.modal.type==='edit-day'){
     const draft = state.modal.draft;
     const unit = state.setup.units;
-    if(e.target.id==='ed-type'){ draft.type = e.target.value; render(); return; }
-    if(e.target.id==='ed-km'){ draft.km = unitToKm(Number(e.target.value)||0, unit); render(); return; }
-    if(e.target.id==='ed-strength'){ draft.strength = e.target.checked; render(); return; }
-    if(e.target.id==='ed-strides'){ draft.strides = e.target.checked; render(); return; }
+    if(e.target.id==='ed-type'){ draft.type = e.target.value; swapSheetContents(); return; }
+    if(e.target.id==='ed-km'){ draft.km = unitToKm(Number(e.target.value)||0, unit); swapSheetContents(); return; }
+    if(e.target.id==='ed-strength'){ draft.strength = e.target.checked; swapSheetContents(); return; }
+    if(e.target.id==='ed-strides'){ draft.strides = e.target.checked; swapSheetContents(); return; }
     if(e.target.id==='ed-treadmill-hills'){ draft.treadmillHills = e.target.checked; render(); return; }
     if(e.target.id==='ed-progression-easy'){ draft.progressionEasy = e.target.checked; render(); return; }
     if(e.target.id==='ed-pace'){

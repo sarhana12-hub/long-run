@@ -344,6 +344,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 142. **Date fields opened the stock iOS wheel picker** (owner: hard to use, off brand). *Fix:* an in-app date picker: the field is a button showing the full date; tapping it opens a month grid beneath, in the app's own type and colours, with today ringed, the chosen day in lime, out-of-range days dimmed, month arrows, Today and Clear. Picking a day sets the hidden input with the original id and fires the same events, so every existing handler runs unchanged. Used for race day, training start, the log date and the Strava import date.
 
+143. **Choosing Legs / Upper body & core in the day editor flashed the screen** (same symptom as the Full/Shorter toggle, defect 139 family): the chip handler and the Add strength checkbox rebuilt the whole page, replaying the dimmer fade and the sheet entrance. *Fix:* a shared helper swaps only the open sheet's contents from a fresh render, keeping the sheet element, its scroll position and the dimmer; the workout type, distance and strides controls in the editor use it too.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
