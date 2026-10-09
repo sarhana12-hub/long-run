@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 26; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 27; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -1010,11 +1010,16 @@ function longTimeCapMin(raceKm){ return raceKm>=40 ? 195 : 150; }
 // Beyond 24 weeks the extra weeks extend Phase I (foundation), which is the only extension
 // the method implies; that part is mine.
 const DANIELS_PRIORITY = { I:[1,2,3,13,21,23], II:[10,11,12,18,19,20], III:[7,8,9,14,15,16], IV:[4,5,6,17,22,24] };
-function danielsPhaseWeeks(totalWeeks){
+// Daniels' priority table: with n weeks, the n highest-priority weeks are trained. A runner
+// who skips base already has it, so the same priorities are walked with Phase I removed:
+// the freed weeks go to race-specific (IV) and interval (III) work before reps (II).
+function danielsPhaseWeeks(totalWeeks, skipBase){
   const n = Math.max(1, Math.round(totalWeeks));
+  const order = []; for(let p=1;p<=24;p++){ Object.keys(DANIELS_PRIORITY).forEach(ph=>{ if(DANIELS_PRIORITY[ph].includes(p)) order.push(ph); }); }
+  const usable = skipBase ? order.filter(ph=>ph!=='I') : order;
   const counts = {I:0, II:0, III:0, IV:0};
-  Object.keys(DANIELS_PRIORITY).forEach(ph=>{ counts[ph] = DANIELS_PRIORITY[ph].filter(p=>p<=Math.min(n,24)).length; });
-  if(n>24) counts.I += n-24;
+  usable.slice(0, Math.min(n, usable.length)).forEach(ph=>{ counts[ph]++; });
+  if(n>usable.length) counts[skipBase ? 'IV' : 'I'] += n-usable.length;
   return counts;
 }
 
@@ -1121,7 +1126,7 @@ const ROTATIONS = {
   IIIHilly: { short:['intervals','hills','intervals','cruise'], long:['intervals','hills','cruise','tempo'] },
   IVHilly:  { short:['racepace','tempo','intervals','cruise'], long:['tempo','racepace','hills','cruise','racepace','overunder'] },
   secondaryII: { short:['hills','fartlek','hills','progression'], long:['fartlek','hills','progression','hills'] },
-  secondary: { short:['fartlek','cruise','progression','fartlek'], long:['fartlek','progression','cruise','fartlek'] },
+  secondary: { short:['cruise','fartlek','cruise','progression'], long:['fartlek','progression','cruise','fartlek'] },
 };
 function rotationFor(danielsPhase, cls, isHilly, secondary){
   const key = secondary ? ((danielsPhase==='I' || danielsPhase==='II') ? 'secondaryII' : 'secondary') : ((danielsPhase==='I' ? 'II' : danielsPhase) + (isHilly ? 'Hilly' : ''));
@@ -1321,14 +1326,14 @@ function generatePlan(setup, dayOneOverride){
 
   // --- phases: Daniels' priority weeks over the whole plan, taper weeks being the tail of
   //     Phase IV. skipBase (owner's option) hands Phase I weeks to Phases II/III. ---
-  const dp = danielsPhaseWeeks(totalWeeks);
+  const dp = danielsPhaseWeeks(totalWeeks, !!setup.skipBase);
   const fitnessRatio = clamp(startVol/Math.max(targetPeak,1), 0, 1);
   if(runsPerWeek < requestedRuns) warnings.push(`${requestedRuns} running days at ${fmtDist(currentKm,unit,0)}/week would make some easy runs shorter than 30 minutes, the minimum worth running, so the plan starts on ${runsPerWeek} days. A day comes back in any week whose mileage can carry it.`);
   if(raceKm>=15 && currentKm < raceKm*1.6) warnings.push(`${fmtDist(currentKm,unit,0)}/week is low for a ${raceLabelKm(raceKm)}. The plan builds what it safely can, but expect to treat this one as a completion goal unless the mileage comes up first.`);
   if(trimming) warnings.push(`You already run more than a ${raceLabelKm(raceKm)} needs, so the plan eases volume down about 10% to ${fmtDist(targetPeak,unit,0)}/week and spends the freed-up recovery on sharper quality sessions.`);
   let baseCount = setup.skipBase ? 0 : Math.min(dp.I, nTrain);
-  let phase2Count = dp.II + (setup.skipBase ? Math.ceil(dp.I/2) : 0);
-  let phase3Count = dp.III + (setup.skipBase ? Math.floor(dp.I/2) : 0);
+  let phase2Count = dp.II;
+  let phase3Count = dp.III;
   // Phase IV covers the taper weeks too; whatever is left of it before the taper is 'peak'.
   let peakCount = Math.max(0, dp.IV - nTaper);
   // Reconcile to the training weeks actually available (rounding and taper geometry).
@@ -1461,7 +1466,7 @@ function generatePlan(setup, dayOneOverride){
     if(!roomForQuality && w<nTrain && !weekHasRace && sessionWeek){ beginnerWeek = true; applyBeginner(); beginnerNote(); }
     const wantsQuality = roomForQuality && (phase==='taper' || (phase==='peak') || (phase==='build' && introducePhase==='build'));
     if(wantsQuality && longKm>0 || (phase==='taper' && weeklyKm>0)){
-      if(phase==='taper'){
+      if(phase==='taper' || weekHasRace){ // race week is race week in every taper mode: one sharpener, no second session
         // Keep intensity, cut volume: one race-specific sharpener at ~60% of a normal session,
         // placed on the primary quality day if it falls >= 3 days before the race.
         const qd = qDows[0];
@@ -1486,6 +1491,8 @@ function generatePlan(setup, dayOneOverride){
         if(nQualityMax>=2 && !cutWeek){
           const rot2 = rotationFor(dph, cls, isHilly, true);
           let type2 = rot2[idx % rot2.length]; if(type2===type) type2 = rot2[(idx+1)%rot2.length];
+          const thr = x => x==='tempo' || x==='cruise' || x==='overunder';
+          if(thr(type) && thr(type2)) type2 = rot2.find(x=>!thr(x)) || type2; // two threshold days in a week is one too many
           const s2 = sizeQuality(type2, cls, phase, t, 0.65*sessionScale, weeklyKm, longKm, raceKm, paces);
           quality.push({dow:qDows[1], type:type2, scale:0.65*sessionScale, secondary:true, ...s2});
         }
