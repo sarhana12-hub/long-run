@@ -335,11 +335,6 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .impact-d.up{color:var(--done);}
 .impact-d.down{color:var(--z-tempo);}
 /* exercise library */
-.sx-art{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0;}
-.sx-art.one{grid-template-columns:minmax(0, 200px);}
-.sx-art figure{margin:0; background:var(--surface-2); border-radius:12px; padding:6px;}
-.sx-art svg{width:100%; height:auto; display:block;}
-.sx-art figcaption{font-size:10.5px; color:var(--muted); text-align:center; margin-top:2px;}
 .sx-info{font-size:12.5px; color:var(--ink-soft); line-height:1.45;}
 .sx-info b{color:var(--ink);}
 .sx-info ul{margin:2px 0 6px; padding-left:16px;}
@@ -2441,14 +2436,13 @@ function parseStrengthLine(line){
   const r = m[5].match(/^(.*?)\.?(?: Rest (.+?) between sets\.)?$/);
   return {sets:m[1], amount:m[2], name:m[3], equip:m[4], cue:(r?r[1]:m[5]), rest:(r&&r[2])||null};
 }
-// The library block for one exercise: drawings (start faded, finish solid), what it is,
-// how to set up, the movement, the cues, the common mistake, and the reference page.
+// The library block for one exercise: what it is, how to set up, the movement, the cues,
+// the common mistake, and the reference page. (The stick-figure drawings were dropped on
+// 2026-10-09: the owner found them inaccurate; the art data stays in library.js, unused.)
 function exerciseLibraryHtml(name){
   const e = exerciseInfo(name);
   if(!e) return '';
-  const arts = [{art:e.art, cap:e.art.view==='front' ? 'Front view' : 'Side view'}].concat(e.art2 ? [{art:e.art2, cap:e.art2.view==='front' ? 'Front view' : 'Side view'}] : []);
-  return `<div class="sx-art ${arts.length===1?'one':''}">${arts.map(a=>`<figure>${exerciseSvg(a.art, e.name)}<figcaption>${a.cap} · faded = start, solid = finish</figcaption></figure>`).join('')}</div>
-    <div class="sx-info">
+  return `    <div class="sx-info">
       <div style="margin-bottom:6px;">${esc(e.summary)}</div>
       <b>Set up</b><ul>${e.setup.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
       <b>The movement</b><ul>${e.move.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
@@ -3983,7 +3977,7 @@ function renderSettingsTab(){
         <div class="hint" style="padding:0 0 4px;">Sessions are built from what is ticked. Changing it rebuilds every session from this week on; runs and logs are untouched.</div>
         <div style="padding-bottom:14px;"><div style="display:flex; gap:8px; margin-bottom:10px;"><button class="btn btn-sm" data-act="equipment-none">Bodyweight only</button><button class="btn btn-sm" data-act="equipment-all">Everything</button></div>${equipmentChipsHtml(Array.isArray(s.equipment) ? s.equipment : DEFAULT_EQUIPMENT, 'toggle-equipment')}</div>
       </details>
-      ${row('Exercise library', 'Every lift the plan can prescribe, with how-to and drawings', btn('open-library', 'Browse'))}
+      ${row('Exercise library', 'Every lift the plan can prescribe, with how-to and step photos', btn('open-library', 'Browse'))}
     </div>
 
     <div class="section-title">Reminders</div>

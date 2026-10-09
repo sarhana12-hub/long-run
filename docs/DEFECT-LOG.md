@@ -350,6 +350,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 145. **Single-arm dumbbell row had no weight field while the bench press did** (owner screenshot). The field was shown when the equipment note mentioned a weight, and the row note only says where to brace. *Fix:* the field is decided by the equipment the variant needs (dumbbells, kettlebell, barbell, plates, machines, cable, vest, sled), with the old note check kept as a fallback; this also catches the dumbbell shoulder press, the kettlebell row and the Smith machine squat.
 
+146. **The stick-figure exercise drawings were inaccurate** (owner: so bad they hurt more than they helped). *Fix:* removed from the exercise sheets and the library screen; the written set-up, movement, form points, common mistake and the ACE Fitness step-photo link remain. The drawing data stays in library.js unused, so it can come back if better art is made.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
