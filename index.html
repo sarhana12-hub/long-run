@@ -200,6 +200,24 @@ input.input[type="date"]::-webkit-date-and-time-value{ text-align:left; min-heig
 }
 :root[data-theme="dark"] input.input[type="date"]::-webkit-calendar-picker-indicator{ filter:invert(1); }
 .field{margin-bottom:16px;}
+/* in-app date picker: a field button that opens a month grid beneath it */
+.datefield-btn{display:flex; align-items:center; justify-content:space-between; gap:10px; text-align:left; font-weight:600; cursor:pointer;}
+.datefield-btn.empty{color:var(--muted); font-weight:500;}
+.datefield-btn .ico{width:18px; height:18px; color:var(--muted); flex:none; display:inline-flex;}
+.cal{margin-top:8px; border:1px solid var(--line); border-radius:14px; background:var(--surface); padding:10px 10px 8px; box-shadow:var(--shadow);}
+.cal-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;}
+.cal-head .cal-title{font-weight:700; font-size:14.5px;}
+.cal-nav{width:34px; height:34px; border-radius:10px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); display:inline-flex; align-items:center; justify-content:center;}
+.cal-nav svg{width:16px; height:16px;}
+.cal-dows{display:grid; grid-template-columns:repeat(7,1fr); gap:2px; margin-bottom:2px;}
+.cal-dows span{text-align:center; font-size:10.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+.cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px;}
+.cal-day{height:38px; border:none; background:transparent; border-radius:10px; font-family:var(--font-mono); font-size:14px; font-weight:600; color:var(--ink);}
+.cal-day.out{color:var(--muted); opacity:.55;}
+.cal-day.today{box-shadow:inset 0 0 0 1.5px var(--accent-strong);}
+.cal-day.sel{background:var(--accent); color:var(--accent-ink); box-shadow:none;}
+.cal-day[disabled]{opacity:.25; cursor:default;}
+.cal-foot{display:flex; justify-content:space-between; align-items:center; margin-top:6px;}
 .row{display:flex; gap:10px;}
 .row > *{flex:1;}
 .hint{font-size:12.5px; color:var(--muted); margin-top:6px; line-height:1.45;}
@@ -1114,6 +1132,58 @@ async function disableReminders(){
   try{ const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if(sub){ pushApi({action:'unsubscribe', endpoint: sub.endpoint}).catch(()=>{}); await sub.unsubscribe().catch(()=>{}); } }catch(e){}
   state.push = {...state.push, enabled:false}; Store.setPush(state.push); render(); showToast('Reminders off');
 }
+// ---- In-app date picker. The field is a hidden input with the real id plus a button that
+// shows the date; tapping opens a month grid under it. Picking a day sets the hidden input
+// and dispatches input + change on it, so every existing handler keyed on the id still runs.
+const DP_VIEW = {};
+function dateFieldHtml(id, value, opts){
+  opts = opts || {};
+  const label = value ? niceDateFull(parseDate(value)) : (opts.placeholder || 'Choose a date');
+  return `<div class="datefield" data-dp="${id}">
+    <input type="hidden" id="${id}" value="${esc(value||'')}" data-min="${opts.min||''}" data-max="${opts.max||''}">
+    <button type="button" class="input datefield-btn ${value?'':'empty'}" data-act="dp-toggle" data-dp="${id}"><span class="datefield-label">${esc(label)}</span><span class="ico">${ICONS.calendarCheck}</span></button>
+    <div class="cal" id="cal-${id}" hidden></div>
+  </div>`;
+}
+function dpRender(id){
+  const input = document.getElementById(id), cal = document.getElementById('cal-'+id); if(!input || !cal) return;
+  const value = input.value, min = input.dataset.min, max = input.dataset.max;
+  const today = todayDate();
+  if(!DP_VIEW[id]){ const base = value ? parseDate(value) : today; DP_VIEW[id] = {y: base.getFullYear(), m: base.getMonth()}; }
+  const {y, m} = DP_VIEW[id];
+  const first = new Date(y, m, 1); const startDow = (first.getDay() - (state.setup && state.setup.weekStartDow===1 ? 1 : 0) + 7) % 7;
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const dows = (state.setup && state.setup.weekStartDow===1) ? ['Mo','Tu','We','Th','Fr','Sa','Su'] : ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  const cells = [];
+  const prevDays = new Date(y, m, 0).getDate();
+  for(let i=0;i<42;i++){
+    const dayNum = i - startDow + 1;
+    let d, out = false;
+    if(dayNum<1){ d = new Date(y, m-1, prevDays+dayNum); out = true; }
+    else if(dayNum>daysInMonth){ d = new Date(y, m+1, dayNum-daysInMonth); out = true; }
+    else d = new Date(y, m, dayNum);
+    const iso = fmtDate(d);
+    const disabled = (min && iso<min) || (max && iso>max);
+    const cls = 'cal-day' + (out?' out':'') + (iso===value?' sel':'') + (iso===fmtDate(today)?' today':'');
+    cells.push(`<button type="button" class="${cls}" data-act="dp-pick" data-dp="${id}" data-date="${iso}" ${disabled?'disabled':''}>${d.getDate()}</button>`);
+  }
+  const title = first.toLocaleDateString(undefined, {month:'long', year:'numeric'});
+  cal.innerHTML = `<div class="cal-head"><button type="button" class="cal-nav" data-act="dp-nav" data-dp="${id}" data-dir="-1" aria-label="Previous month">${ICONS.chevron.replace('<svg', '<svg style="transform:rotate(180deg)"')}</button><span class="cal-title">${esc(title)}</span><button type="button" class="cal-nav" data-act="dp-nav" data-dp="${id}" data-dir="1" aria-label="Next month">${ICONS.chevron}</button></div>
+    <div class="cal-dows">${dows.map(x=>`<span>${x}</span>`).join('')}</div>
+    <div class="cal-grid">${cells.join('')}</div>
+    <div class="cal-foot"><button type="button" class="btn btn-sm" data-act="dp-pick" data-dp="${id}" data-date="${fmtDate(today)}" ${((min && fmtDate(today)<min) || (max && fmtDate(today)>max)) ? 'disabled' : ''}>Today</button>${value ? `<button type="button" class="btn btn-sm btn-ghost" data-act="dp-pick" data-dp="${id}" data-date="">Clear</button>` : ''}</div>`;
+}
+function dpSet(id, iso){
+  const input = document.getElementById(id); if(!input) return;
+  input.value = iso || '';
+  const field = input.closest('.datefield'); const btn = field && field.querySelector('.datefield-btn'); const lbl = field && field.querySelector('.datefield-label');
+  if(lbl) lbl.textContent = iso ? niceDateFull(parseDate(iso)) : 'Choose a date';
+  if(btn) btn.classList.toggle('empty', !iso);
+  const cal = document.getElementById('cal-'+id); if(cal) cal.hidden = true;
+  delete DP_VIEW[id];
+  input.dispatchEvent(new Event('input', {bubbles:true}));
+  input.dispatchEvent(new Event('change', {bubbles:true}));
+}
 function showToast(msg, undo, ms){ state.toast = msg; state.toastUndo = undo || null; render(); setTimeout(()=>{ state.toast=null; state.toastUndo=null; render(); }, ms||2200); }
 // Closes whatever sheet is open. A projection note that was held back while a milestone
 // screen was up shows the moment that screen closes.
@@ -1714,8 +1784,7 @@ function renderOnboardStep1(d){
     <div class="section-title">Race day</div>
     <div class="field">
       <div style="position:relative;">
-        <input class="input" type="date" id="in-race-date" value="${d.raceDate}">
-        <div id="race-date-placeholder" style="position:absolute; top:0; left:0; bottom:0; right:32px; display:${d.raceDate?'none':'flex'}; align-items:center; padding-left:13px; background:var(--surface-2); color:var(--muted); border-radius:11px 0 0 11px; pointer-events:none;">Enter date of race here</div>
+        ${dateFieldHtml('in-race-date', d.raceDate, {min: fmtDate(todayDate()), placeholder:'Choose race day'})}
       </div>
       <div class="hint" id="race-date-hint" style="display:${weeksToRace?'':'none'};">${weeksToRace? `${weeksToRace} week${weeksToRace===1?'':'s'} from today.` : ''}</div>
     </div>
@@ -1723,7 +1792,7 @@ function renderOnboardStep1(d){
     ${!isSwitch ? `
     <div class="field">
       <label class="field-label">Already been training for this? (optional)</label>
-      <input class="input" type="date" id="in-training-start" value="${d.trainingStartDate}" max="${fmtDate(todayDate())}">
+      ${dateFieldHtml('in-training-start', d.trainingStartDate, {max: fmtDate(todayDate()), placeholder:'Not yet, start this week'})}
       <div class="hint">Leave blank to start this week. With a date, you land on the week you are in today.</div>
     </div>
     <div id="track-from-block">${trackFromBlockHtml(d)}</div>` : `
@@ -1763,7 +1832,7 @@ function renderOnboardStep1(d){
     ${!isSwitch ? `
     <div class="field">
       <label class="field-label">Already been training for this? (optional)</label>
-      <input class="input" type="date" id="in-training-start" value="${d.trainingStartDate}" max="${fmtDate(todayDate())}">
+      ${dateFieldHtml('in-training-start', d.trainingStartDate, {max: fmtDate(todayDate()), placeholder:'Not yet, start this week'})}
       <div class="hint">Leave blank to start this week. With a date, you land on the week you are in today.</div>
     </div>
     <div id="track-from-block">${trackFromBlockHtml(d)}</div>` : `
@@ -4557,7 +4626,7 @@ function modalLogManualHtml(d){
   const unit = state.setup.units;
   return `
     ${scanBlockHtml(state.modal.scan)}
-    <div class="field"><label class="field-label">Date</label><input class="input" type="date" id="lr-date" value="${d.date}"></div>
+    <div class="field"><label class="field-label">Date</label>${dateFieldHtml('lr-date', d.date, {max: fmtDate(todayDate())})}</div>
     <div class="chip-select" style="margin-bottom:14px;">
       <button class="chip ${d.kind!=='race'?'active':''}" data-act="log-kind" data-kind="run">Training run</button>
       <button class="chip ${d.kind==='race'?'active':''}" data-act="log-kind" data-kind="race">This was a race</button>
@@ -4602,7 +4671,7 @@ function modalLogFromStravaHtml(strava){
         <div class="log-mid"><div class="d">${fmtDist(a.distanceKm,unit)} · ${secToClock(a.durationSec)}</div>${a.name?`<div class="t">${esc(a.name)}</div>`:''}</div>
         <div class="log-pace mono">${paceSecPerKm!=null?paceOrSpeedStr(paceSecPerKm,unit,state.paceFormat):''}</div>
       </div>
-      <div class="field"><label class="field-label">Log this run as</label><input class="input" type="date" id="lr-strava-date" value="${strava.confirm.date}"></div>
+      <div class="field"><label class="field-label">Log this run as</label>${dateFieldHtml('lr-strava-date', strava.confirm.date, {max: fmtDate(todayDate())})}</div>
       <div class="hint" style="margin-bottom:14px;">${strava.confirm.date===a.date ? "This is the date Strava recorded for this run." : "Changed from the date Strava recorded for this run."}</div>
       <div class="chip-select" style="margin-bottom:14px;">
         <button class="chip ${strava.confirm.kind!=='race'?'active':''}" data-act="strava-kind" data-kind="run">Training run</button>
@@ -5329,6 +5398,9 @@ function onClick(e){
     state.modal={type:'log-run', data:{date:day.date, dist:'', time:'', notes:'', kind: day.type==='race' ? 'race' : 'run', rep:''}};
     render(); return;
   }
+  if(act==='dp-toggle'){ const id = el.dataset.dp; const cal = document.getElementById('cal-'+id); if(!cal) return; if(cal.hidden){ dpRender(id); cal.hidden = false; } else cal.hidden = true; return; }
+  if(act==='dp-nav'){ const id = el.dataset.dp; const v = DP_VIEW[id] || {y:todayDate().getFullYear(), m:todayDate().getMonth()}; const nm = new Date(v.y, v.m + Number(el.dataset.dir), 1); DP_VIEW[id] = {y:nm.getFullYear(), m:nm.getMonth()}; dpRender(id); return; }
+  if(act==='dp-pick'){ dpSet(el.dataset.dp, el.dataset.date); return; }
   if(act==='ed-strength-focus'){ state.modal.draft.strengthFocus = el.dataset.focus; render(); return; }
   if(act==='checkin-ease'){
     const wi = Number(el.dataset.wi), km = Number(el.dataset.km);

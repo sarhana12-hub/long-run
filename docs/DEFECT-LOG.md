@@ -342,6 +342,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 141. **Adding a strength session in the day editor always made it a leg session**, and the editor then warned about legs before the long run (owner wanted an upper-body session on a rest day). *Fix:* the editor offers Legs / Upper body & core once the box is ticked, the choice is pinned on the day so rebuilds and swaps keep it, the preview warning sees the choice, and the warning itself no longer fires for legs the day before a plain long run, matching the placement rule.
 
+142. **Date fields opened the stock iOS wheel picker** (owner: hard to use, off brand). *Fix:* an in-app date picker: the field is a button showing the full date; tapping it opens a month grid beneath, in the app's own type and colours, with today ringed, the chosen day in lime, out-of-range days dimmed, month arrows, Today and Clear. Picking a day sets the hidden input with the original id and fires the same events, so every existing handler runs unchanged. Used for race day, training start, the log date and the Strava import date.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
