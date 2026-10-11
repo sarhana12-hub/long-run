@@ -72,8 +72,12 @@ console.log('4. intervals need a rep time');
 
 console.log('5. a tempo run far too fast is capped');
 {
+  // 15% faster than threshold: far too fast, still a real run. At 40% faster the tempo
+  // portion comes out under 2:00/km once the easy warm-up and cool-down are taken off, and
+  // the engine rightly discards it as a bad log; where the first tempo falls, and so its
+  // warm-up share, moves with the calendar, which made the old 0.6 factor fail on some dates.
   const t = dayOf('tempo'); const today = g.parseDate(t.day.date);
-  const f = g.projectFitness(plan, fullLogsBefore(t.day.date).concat([{id:'a', date:t.day.date, distanceKm:t.day.km, durationSec:Math.round(t.day.km*t.week.paces.tempoPerKm*0.6)}]), today);
+  const f = g.projectFitness(plan, fullLogsBefore(t.day.date).concat([{id:'a', date:t.day.date, distanceKm:t.day.km, durationSec:Math.round(t.day.km*t.week.paces.tempoPerKm*0.85)}]), today);
   check('one session moves now by under a point', f.workoutAdjust<=1.0 && f.workoutAdjust>0, String(f.workoutAdjust));
 }
 
