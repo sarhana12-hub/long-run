@@ -23,5 +23,19 @@ names.forEach(n=>{
   if(e.art2){ let s2=''; try{ s2 = lib.exerciseSvg(e.art2, n); }catch(err){ check(n+' second angle renders', false, String(err.message)); } check(n+' second angle has a figure', /<circle/.test(s2) && !/NaN/.test(s2)); }
 });
 console.log(`${names.size} exercise names, ${withLink} with a reference link`);
+// The line under each exercise name answers one question: what do I need, and how am I set
+// up? Equipment first, then position only where the name leaves it unclear, in one phone
+// line. Progression, easier/harder versions and assistance live in the library entry the row
+// opens to, not here (owner, 2026-10-11: the lines ran from 7 to 93 characters).
+const EQUIP_MAX = 35;
+const TIP_WORDS = /;|\bonce\b|\bif\b|easier|harder|assistance|negatives|seconds/i;
+let equipCount = 0;
+[g.STRENGTH_EXERCISES, g.OPTIONAL_EXTRAS].forEach(cat=>Object.values(cat).forEach(def=>def.variants.forEach(v=>{
+  equipCount++;
+  check(`${v.name} note "${v.equip}" fits one line (${v.equip.length}/${EQUIP_MAX})`, v.equip.length>0 && v.equip.length<=EQUIP_MAX);
+  check(`${v.name} note "${v.equip}" is setup only, no tips`, !TIP_WORDS.test(v.equip));
+  check(`${v.name} note "${v.equip}" starts lower case`, v.equip.charAt(0)===v.equip.charAt(0).toLowerCase() || /^Smith/.test(v.equip));
+})));
+console.log(`${equipCount} equipment notes, all ${EQUIP_MAX} characters or fewer`);
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall library checks passed');
 process.exit(failures ? 1 : 0);

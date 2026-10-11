@@ -360,6 +360,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 150. **A peak-week strength session said "About 28 min" with "Full · 40 min" selected** (owner screenshot). The peak-week lower-body session is the maintenance version: five lifts, fewer sets, about 28 minutes. The Full/Shorter chips were offered there too, with the chip labels fixed at 40 and 25; and the "Shorter" version was the same five lifts with slightly more work on the main lift, so the choice saved nothing. *Fix:* Full or Shorter is offered only in build weeks, where the full session really is 40 minutes; peak weeks show the 28-minute session with no chips.
 
+151. **The line under each exercise name had no standard** (owner). It ran from 7 to 93 characters and mixed three things: equipment ("barbell"), setup ("rear foot on a bench, dumbbells in hand") and coaching tips ("a dumbbell in the free hand once 12 is easy", "hands on a bench to make them easier"). *Fix:* the line answers one question, what do I need and how am I set up: equipment first, then position only where the name leaves it unclear, 35 characters at most, no tips. Progression, easier and harder versions and assistance live in the library entry the row opens to; every variant has one, and each tip removed from a line was already there (the bodyweight squat's three-second lowering was added). The library test holds every note to the standard.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
