@@ -21,6 +21,7 @@ function setupFor(o){
     maxLongRunKm:o.maxLong? o.maxLong*MI : null, maxWeeklyKm:o.maxWeekly ? o.maxWeekly*MI : null,
     longRunEmphasis:o.longE??'balanced', speedEmphasis:o.speedE??'balanced',
     hillsMode:o.hilly?'hilly':'flat', skipBase:!!o.skipBase,
+    taperMode:o.taperMode||'full',
   };
 }
 function describe(plan){
@@ -93,6 +94,9 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   const names = full[0].strengthExercises.map(l=>l.replace(/^\d+×\S+\s+/,'').split(' (')[0]); if(new Set(names).size!==names.length) bad.push('full upper session repeats an exercise: '+names.join(', '));
   console.log('\n=== upper session standard vs full ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 149 the run count the plan promised is held in every training week (race week may differ)
+const promisedRunsHeld = (p) => p.weeks.filter(w=>!w.days.some(d=>d.type==='race') && !w.beginnerStructure && w.runsPerWeek < p.runsWeekOne).map(w=>`w${w.weekIndex+1} has ${w.runsPerWeek} run days, plan promised ${p.runsWeekOne}`);
+check('10k, 20 mpw, 5 runs, skip base, train through (reported: weeks with 4 runs)', {race:'10k', mpw:20, weeks:4, recentSec:23*60+15, runs:5, longest:10, skipBase:true, taperMode:'none', longDow:6, raceDow:6}, (p)=>promisedRunsHeld(p));
 check('Half, 3 strength/wk, long Saturday', {race:'half', mpw:30, weeks:12, recentSec:23*60, strength:3, longDow:6});
 check('5k, 1 strength, skip base', {race:'5k', mpw:30, weeks:8, recentSec:21*60, strength:1, skipBase:true});
 check('10k, 24 mpw, long Friday (reported: thin cruise session)', {race:'10k', mpw:24, weeks:10, recentSec:23*60, longDow:5}, (p)=>{

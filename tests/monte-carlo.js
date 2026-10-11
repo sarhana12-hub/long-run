@@ -73,6 +73,24 @@ function sanityCheck(plan, setup){
   const push = (rule, detail) => v.push({rule, detail});
   // 70 one note per cause
   if((plan.warnings||[]).filter(x=>/doesn't fit/.test(x)).length>1) push('dup-notes', (plan.warnings||[]).filter(x=>/doesn't fit/.test(x)).join(' | ').slice(0,160));
+  // What the setup promised, held against every training week (owner 2026-10-11: Settings said
+  // five run days, the weeks had four; no check compared the two). Race week and the taper are
+  // allowed fewer by design; a beginner-structure week is judged by its own rule.
+  // A promised day may go only when even a 19-minute easy run could not fit on the promised
+  // days around the long run and the main session (the optional second session goes first,
+  // so it is not counted as fixed): any week that could have funded the day is a defect.
+  const promisedRuns = plan.runsWeekOne || setup.runsPerWeek;
+  plan.weeks.forEach(w=>{
+    if(w.partialStart || w.beginnerStructure || w.phase==='taper' || w.phase==='recovery' || w.days.some(x=>x.type==='race')) return;
+    const runs = w.days.filter(d=>d.km>0).length;
+    const fixed = w.days.filter(d=>d.type==='long' || (HARD_TYPES.includes(d.type) && !d.secondary) || (g.QUALITY_TYPES.includes(d.type) && !d.easyVariety && !d.secondary));
+    const fixedKm = fixed.reduce((a,d)=>a+d.km,0);
+    const softKm = g.kmForMinutes(20.5, w.paces.easyPerKm); // the engine holds a promised day to 19 min; the slack covers strides the builder funds first and rounding
+    const couldHold = fixed.length + Math.floor(Math.max(0, w.plannedKm - fixedKm - w.days.filter(d=>d.strides).length*0.4)/softKm);
+    if(promisedRuns && runs < Math.min(promisedRuns, couldHold)) push('promised-runs', 'w'+(w.weekIndex+1)+' has '+runs+' run days, setup promised '+promisedRuns+' and '+couldHold+' fit at 20.5 min (plan.runsWeekOne='+plan.runsWeekOne+', '+(w.plannedKm/1.609).toFixed(1)+' mi, '+w.phase+(w.isCutback?' cutback':'')+', long '+(w.days.find(d=>d.type==='long')||{km:0}).km.toFixed(1)+' km, q '+w.days.filter(d=>/tempo|interval|cruise|reps|hills|fartlek|racepace|progression|overunder/.test(d.type)).map(d=>d.type+' '+d.km.toFixed(1)).join('+')+')');
+    const L = w.days.find(d=>d.type==='long');
+    if(L && setup.longDow!=null && L.dow!==setup.longDow) push('long-day', 'w'+(w.weekIndex+1)+' long run on dow '+L.dow+', setup said '+setup.longDow);
+  });
   plan.weeks.forEach(w=>{
     if(w.partialStart) return; // a mid-week start's first week is judged by the engine's validator only
     const p = w.paces; const wk = `w${w.weekIndex+1}`;
@@ -122,7 +140,7 @@ function sanityCheck(plan, setup){
       }
       if(d.type!=='rest' && d.km>0 && (!text.trim() || !sum.trim())) push('empty-text', `${wk} ${d.label}`);
       const raceWeek = w.days.some(x=>x.type==='race');
-      if(d.km>0 && (d.type==='easy'||d.type==='long') && d.label!=='Shakeout Jog' && w.phase!=='taper' && !raceWeek && g.minutesForKm(d.km, p.easyPerKm) < (w.phase==='recovery' ? 19 : w.beginnerStructure ? 21 : 24) && !(d.daysToRace!=null && d.daysToRace<=Math.max(2, plan.taperDays||0))) push('tiny-run', `${wk} ${d.label} ${d.km} km (${g.minutesForKm(d.km,p.easyPerKm).toFixed(0)} min)`);
+      if(d.km>0 && (d.type==='easy'||d.type==='long') && d.label!=='Shakeout Jog' && w.phase!=='taper' && !raceWeek && g.minutesForKm(d.km, p.easyPerKm) < (w.phase==='recovery' ? 19 : w.beginnerStructure ? 21 : w.runsPerWeek <= (plan.runsWeekOne||99) ? 18.5 : 24) && !(d.daysToRace!=null && d.daysToRace<=Math.max(2, plan.taperDays||0))) push('tiny-run', `${wk} ${d.label} ${d.km} km (${g.minutesForKm(d.km,p.easyPerKm).toFixed(0)} min)`);
       if(d.type==='easy' && (!d.paceKey || p[d.paceKey]==null || !text.includes(paceOf(p.easyPerKm)))) push('easy-pace-missing', `${wk} ${d.label}: ${text}`);
       if(HARD_TYPES.includes(d.type)){
         const key = d.paceKey; const ps = key && p[key]!=null ? paceOf(p[key]) : null;

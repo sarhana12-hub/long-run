@@ -356,6 +356,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 148. **The Full upper session told a bodyweight inverted row to go "a little lighter"** (owner screenshot). *Fix:* the second-pull cue checks whether the pull takes a weight (dumbbell, cable, machine, bar); pull-ups and inverted rows get an effort cue plus how to make them easier (a band, or feet closer) instead.
 
+149. **The plan said five run days and gave four** (owner, 10K at 20 mi/week, 5 run days, two sessions a week: peak weeks had Sun, Mon, Wed, Sat runs and three rest days while Settings said "5 run days, 2 rest"). The whole-plan check agreed five fit at 20 mi; a later per-week pass sized the two sessions, found the two easy runs would be 2.6 mi instead of the 3.1-mi (30-minute) floor, and shed a run day rather than shorten an easy run. *Fix:* the run count the plan promised is held, in the per-week sizing pass and in the day builder alike: on promised days an easy run may drop to about 19 minutes before a day is shed, and the optional second session goes before a promised day does; only days above the promise need the 30-minute floor. A beginner-structure week is still judged by its own rule (equal ~30-minute runs). The general plans (speed, distance, maintenance) hold the same promise and now publish it. The random-plan check flags any training week that is short of the promise when it could have funded the day at 20 minutes.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
