@@ -94,6 +94,19 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   const names = full[0].strengthExercises.map(l=>l.replace(/^\d+×\S+\s+/,'').split(' (')[0]); if(new Set(names).size!==names.length) bad.push('full upper session repeats an exercise: '+names.join(', '));
   console.log('\n=== upper session standard vs full ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 150 lower body: Full or Shorter is offered only in build weeks; the peak-week session is
+// already the short one and its chip claimed 40 min against a 28-min header
+{
+  const mk = () => [{date:'2026-10-11', dow:0, type:'easy', km:8, strength:true, strengthFocus:'lower', daysToRace:40}];
+  const build = mk(); g.refreshStrengthWorkouts(build, 'build', 2, {});
+  const buildShort = mk(); g.refreshStrengthWorkouts(buildShort, 'build', 2, {shortDates:new Set(['2026-10-11'])});
+  const peak = mk(); g.refreshStrengthWorkouts(peak, 'peak', 9, {shortDates:new Set(['2026-10-11'])});
+  const bad=[];
+  if(!(build[0].strengthShortable && !build[0].strengthShort && build[0].strengthTimeMin===40)) bad.push('build-week lower session is not shortable at 40 min: '+build[0].strengthTimeMin);
+  if(!(buildShort[0].strengthShort && buildShort[0].strengthTimeMin===25)) bad.push('build-week shorter session is not 25 min');
+  if(peak[0].strengthFocus==='lower' && (peak[0].strengthShortable || peak[0].strengthShort)) bad.push('peak-week lower session still offers Full/Shorter ('+peak[0].strengthTimeMin+' min)');
+  console.log('\n=== lower session full vs shorter ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 149 the run count the plan promised is held in every training week (race week may differ)
 const promisedRunsHeld = (p) => p.weeks.filter(w=>!w.days.some(d=>d.type==='race') && !w.beginnerStructure && w.runsPerWeek < p.runsWeekOne).map(w=>`w${w.weekIndex+1} has ${w.runsPerWeek} run days, plan promised ${p.runsWeekOne}`);
 check('10k, 20 mpw, 5 runs, skip base, train through (reported: weeks with 4 runs)', {race:'10k', mpw:20, weeks:4, recentSec:23*60+15, runs:5, longest:10, skipBase:true, taperMode:'none', longDow:6, raceDow:6}, (p)=>promisedRunsHeld(p));

@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 31; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 32; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -887,9 +887,12 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
       const usedSoFar = _used.length; d.strengthOptional = buildUpperOptional(variant, avail); _used.length = usedSoFar; // extras need no how-to
     } else {
       const express = !!d.strengthExpress && tier!=='light';
-      const short = !express && (tier==='heavy' || tier==='maintain') && opts.shortDates && opts.shortDates.has(d.date);
+      // Full or Shorter is a choice only in build weeks (heavy tier). The peak-week maintain
+      // session is already the short one (same five lifts at about 28 min), so a second
+      // option there saved nothing and its chip claimed 40 min (defect 150).
+      const short = !express && tier==='heavy' && opts.shortDates && opts.shortDates.has(d.date);
       const useTier = express ? 'express' : short ? 'short' : tier;
-      d.strengthShort = !!short; d.strengthShortable = (tier==='heavy' || tier==='maintain') && !express; d.strengthLong = false; d.strengthLongable = false;
+      d.strengthShort = !!short; d.strengthShortable = tier==='heavy' && !express; d.strengthLong = false; d.strengthLongable = false;
       d.strengthExercises = buildLowerStrengthWorkout(useTier, variant, opts.weekInBlock, avail); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : short ? STRENGTH_TIME_MIN.short : STRENGTH_TIME_MIN[tier];
       d.strengthLoadNote = (_used.filter(x=>!x.bodyweight).length===0) ? STRENGTH_LOAD_NOTE.bodyweight : (STRENGTH_LOAD_NOTE[useTier] || STRENGTH_LOAD_NOTE.heavy);
       const usedSoFar = _used.length; d.strengthOptional = useTier==='heavy' ? buildLowerOptional(avail) : undefined; _used.length = usedSoFar;
