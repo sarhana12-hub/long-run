@@ -53,6 +53,22 @@ function todayDate(){ const n=new Date(); return new Date(n.getFullYear(),n.getM
 function kmToUnit(km, unit){ return unit==='mi' ? km/KM_PER_MI : km; }
 function unitToKm(v, unit){ return unit==='mi' ? v*KM_PER_MI : v; }
 function fmtDist(km, unit, digits){ digits = digits==null?1:digits; return `${kmToUnit(km,unit).toFixed(digits)} ${unit}`; }
+// The parts of a session as the runner reads them, to one decimal in their units, adding up
+// to the day's total as shown (defect 157: 2.0 / 4.5 / 1.5 km read as 1.2 + 2.8 + 0.9 mi on a
+// 5.0 mi day, so a runner who followed the text logged 4.9 mi against 5.0 planned). The main
+// set and the warm-up keep their own rounding; the cool-down takes up the difference (it is
+// the least prescriptive part). Without a cool-down the warm-up does.
+function shownPartsFor(day, unit){
+  const r1 = v => Math.round(v*10)/10;
+  const wuKm = day.warmupKm>0.15 ? day.warmupKm : 0, cdKm = day.cooldownKm>0.15 ? day.cooldownKm : 0;
+  const total = r1(kmToUnit(day.km, unit));
+  const main = r1(kmToUnit(Math.max(0, day.km - (day.warmupKm||0) - (day.cooldownKm||0)), unit));
+  let warmup = wuKm ? r1(kmToUnit(wuKm, unit)) : 0;
+  let cooldown = cdKm ? r1(total - main - warmup) : 0;
+  if(!cdKm && wuKm) warmup = r1(total - main);
+  if(cdKm && cooldown < 0.1){ cooldown = r1(kmToUnit(cdKm, unit)); warmup = r1(total - main - cooldown); }
+  return {warmup, main, cooldown, total};
+}
 function interp(anchors, x){
   if(x<=anchors[0][0]) return anchors[0][1];
   for(let i=0;i<anchors.length-1;i++){
@@ -2239,7 +2255,7 @@ return {
   kmForMinutes, minutesForKm,
   vo2FromVelocity, velocityFromVO2, pctMaxForDurationMin, vdotFromRace, paceSecPerKmFromVdotPct, predictedTimeMinFromVdot,
   predictedPaceSecPerKmFromVdot, impliedVdotFromPace, EASY_PCT, THRESHOLD_PCT, INTERVAL_PCT, REP_PCT, paceZonesFromVdot,
-  LOG_PARTS, logMainPart, riegelSec, vvMarathonSecModel1, vvMarathonSecModel2, tandaMarathonSec, predictRace, assessGoal, buildAthlete, zonesForVdot, zonesForPlanVdot, projectRaceTime,
+  LOG_PARTS, logMainPart, shownPartsFor, riegelSec, vvMarathonSecModel1, vvMarathonSecModel2, tandaMarathonSec, predictRace, assessGoal, buildAthlete, zonesForVdot, zonesForPlanVdot, projectRaceTime,
   raceLabelKm, runsPerWeekFor,
   QUALITY_TYPES, WARMUP_ELIGIBLE_TYPES, STRIDES_ELIGIBLE_TYPES, STRIDES_REPS, STRIDES_EXTRA_KM, HILL_STRIDES_EXTRA_KM, QUALITY_WARMUP_KM, QUALITY_COOLDOWN_KM,
   TYPE_LABELS, isLegDemandingDay, isKeySessionDay, structuredEffort, buildWorkoutMeta,

@@ -745,12 +745,12 @@ function raceProjectionFor(vdot, km){
 function warmupClause(day, weekPaces, unit, fmt){
   if(!(day.warmupKm>0.15)) return null;
   const pace = weekPaces && weekPaces.easyPerKm;
-  return `Warm up ${fmtDist(day.warmupKm, unit)} easy${pace!=null?` (${paceOrSpeedStr(pace,unit,fmt)})`:''}`;
+  return `Warm up ${shownPartsFor(day, unit).warmup.toFixed(1)} ${unit} easy${pace!=null?` (${paceOrSpeedStr(pace,unit,fmt)})`:''}`;
 }
 function cooldownClause(day, weekPaces, unit, fmt){
   if(!(day.cooldownKm>0.15)) return null;
   const pace = weekPaces && weekPaces.easyPerKm;
-  return `cool down ${fmtDist(day.cooldownKm, unit)} easy${pace!=null?` (${paceOrSpeedStr(pace,unit,fmt)})`:''}`;
+  return `cool down ${shownPartsFor(day, unit).cooldown.toFixed(1)} ${unit} easy${pace!=null?` (${paceOrSpeedStr(pace,unit,fmt)})`:''}`;
 }
 // Tempo/Race Pace have no reps/cycles structure of their own to imply a distance (unlike
 // hills' rep count or intervals' "N × Rm"), so once they carry a warm-up, the quality
@@ -761,7 +761,7 @@ function qualityDistancePrefix(day, unit){
   if(!(day.type==='tempo' || day.type==='racepace')) return '';
   if(!(day.warmupKm>0.15)) return '';
   const qualityKm = Math.max(0, day.km-(day.warmupKm||0)-(day.cooldownKm||0));
-  return qualityKm>0.15 ? `${fmtDist(qualityKm, unit)} ` : '';
+  return qualityKm>0.15 ? `${shownPartsFor(day, unit).main.toFixed(1)} ${unit} ` : '';
 }
 // A prefixed descBase ("4.3 mi Continuous, comfortably hard") reads oddly mid-sentence
 // with its normal leading capital - lowercase it only when qualityDistancePrefix actually
@@ -4764,32 +4764,24 @@ function entryByChipsHtml(act, by, extra){ return `<div class="chip-select" styl
 function dayHasParts(day){ return !!day && day.type!=='race' && ((day.warmupKm||0)+(day.cooldownKm||0))>0.15; }
 const MAIN_PART_LABEL = {tempo:'Tempo', racepace:'Race pace', overunder:'Over-unders', cruise:'Cruise intervals', intervals:'Reps and jogs', reps:'Reps and jogs', hills:'Hill reps and jogs'};
 function partLabel(part, day){ return part==='warmup' ? 'Warm-up' : part==='cooldown' ? 'Cool-down' : (MAIN_PART_LABEL[day && day.type] || 'Main set'); }
-function plannedPartKm(part, day){ return part==='warmup' ? (day.warmupKm||0) : part==='cooldown' ? (day.cooldownKm||0) : Math.max(0, day.km-(day.warmupKm||0)-(day.cooldownKm||0)); }
 // Form strings for the three parts: a saved log's parts when it has them, otherwise the
 // planned distances with the times left for the runner.
 function partsDraftFor(day, unit, log){
   const out = {};
   LOG_PARTS.forEach(p=>{
     const saved = log && Array.isArray(log.parts) ? log.parts.find(x=>x.part===p) : null;
-    // Planned distances show to one decimal, as the session text does, but the exact planned
-    // distance stays behind the box: left as shown, the exact figure is saved, so three
-    // rounded parts never add up to less than the plan (defect 156: 1.2 + 2.8 + 0.9 mi saved
-    // 4.9 mi against 5.0 planned). A saved part equal to the rounded plan counts as the plan.
-    const plannedKm = plannedPartKm(p, day);
-    const plannedShown = plannedKm>0 ? String(Math.round(kmToUnit(plannedKm, unit)*10)/10) : '';
-    const savedShown = saved ? String(Math.round(kmToUnit(saved.km, unit)*100)/100) : null;
-    const asPlanned = !saved || (plannedKm>0 && Math.abs(Number(savedShown) - Number(plannedShown)) < 0.005);
-    const shown = asPlanned ? plannedShown : savedShown;
-    out[p] = {dist: shown, shown, exactKm: asPlanned && plannedKm>0 ? plannedKm : null, time: saved ? secToClock(saved.sec) : ''};
+    // Planned parts as the session text gives them (they add up to the day's total, defect
+    // 157); a saved part as entered. What the box shows is what is saved.
+    const shownPlanned = shownPartsFor(day, unit)[p];
+    out[p] = {dist: saved ? String(Math.round(kmToUnit(saved.km, unit)*100)/100) : (shownPlanned>0 ? String(shownPlanned) : ''), time: saved ? secToClock(saved.sec) : ''};
     out[p].pace = paceFromTime(out[p].time, partDistU(out[p], unit));
   });
   out._by = entryBy();
   return out;
 }
 // Form strings -> saved parts. Only timed parts are kept; the main set must be one of them.
-// A part's distance: the exact planned one while the box still shows the prefilled figure,
-// otherwise what was typed.
-function partKm(r, unit){ return (r && r.exactKm!=null && r.dist===r.shown) ? r.exactKm : (r && Number(r.dist)>0 ? unitToKm(Number(r.dist), unit) : 0); }
+// A part's distance as the box shows it.
+function partKm(r, unit){ return (r && Number(r.dist)>0) ? unitToKm(Number(r.dist), unit) : 0; }
 function partDistU(r, unit){ const km = partKm(r, unit); return km>0 ? kmToUnit(km, unit) : 0; }
 function partsFromDraft(draft, unit, day){
   const parts = [];
