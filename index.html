@@ -4771,23 +4771,34 @@ function partsDraftFor(day, unit, log){
   const out = {};
   LOG_PARTS.forEach(p=>{
     const saved = log && Array.isArray(log.parts) ? log.parts.find(x=>x.part===p) : null;
-    const km = saved ? saved.km : plannedPartKm(p, day);
-    // planned distances to one decimal, as the session text shows them; saved ones as entered
-    out[p] = {dist: km>0 ? String(saved ? Math.round(kmToUnit(km, unit)*100)/100 : Math.round(kmToUnit(km, unit)*10)/10) : '', time: saved ? secToClock(saved.sec) : ''};
-    out[p].pace = paceFromTime(out[p].time, out[p].dist);
+    // Planned distances show to one decimal, as the session text does, but the exact planned
+    // distance stays behind the box: left as shown, the exact figure is saved, so three
+    // rounded parts never add up to less than the plan (defect 156: 1.2 + 2.8 + 0.9 mi saved
+    // 4.9 mi against 5.0 planned). A saved part equal to the rounded plan counts as the plan.
+    const plannedKm = plannedPartKm(p, day);
+    const plannedShown = plannedKm>0 ? String(Math.round(kmToUnit(plannedKm, unit)*10)/10) : '';
+    const savedShown = saved ? String(Math.round(kmToUnit(saved.km, unit)*100)/100) : null;
+    const asPlanned = !saved || (plannedKm>0 && Math.abs(Number(savedShown) - Number(plannedShown)) < 0.005);
+    const shown = asPlanned ? plannedShown : savedShown;
+    out[p] = {dist: shown, shown, exactKm: asPlanned && plannedKm>0 ? plannedKm : null, time: saved ? secToClock(saved.sec) : ''};
+    out[p].pace = paceFromTime(out[p].time, partDistU(out[p], unit));
   });
   out._by = entryBy();
   return out;
 }
 // Form strings -> saved parts. Only timed parts are kept; the main set must be one of them.
+// A part's distance: the exact planned one while the box still shows the prefilled figure,
+// otherwise what was typed.
+function partKm(r, unit){ return (r && r.exactKm!=null && r.dist===r.shown) ? r.exactKm : (r && Number(r.dist)>0 ? unitToKm(Number(r.dist), unit) : 0); }
+function partDistU(r, unit){ const km = partKm(r, unit); return km>0 ? kmToUnit(km, unit) : 0; }
 function partsFromDraft(draft, unit, day){
   const parts = [];
   for(const p of LOG_PARTS){
     const r = (draft && draft[p]) || {};
-    const sec = parseDurationToSec(r.time)||0, v = Number(r.dist);
+    const sec = parseDurationToSec(r.time)||0, km = partKm(r, unit);
     if(!sec) continue;
-    if(!(v>0)) return {error:`Enter the ${partLabel(p, day).toLowerCase()} distance`};
-    parts.push({part:p, km:Math.round(unitToKm(v, unit)*1000)/1000, sec});
+    if(!(km>0)) return {error:`Enter the ${partLabel(p, day).toLowerCase()} distance`};
+    parts.push({part:p, km:Math.round(km*1000)/1000, sec});
   }
   if(parts.length && !parts.some(x=>x.part==='main')) return {error:`Enter the ${partLabel('main', day).toLowerCase()} time or pace: it is the part that shows the effort`};
   return {parts, complete: parts.length===LOG_PARTS.length};
@@ -4802,7 +4813,7 @@ function partsFieldsHtml(prefix, draft, day, unit){
   const head = `<div style="${grid} margin-bottom:4px;"><span></span><label class="field-label" style="margin:0;">Distance (${unit})</label><label class="field-label" style="margin:0;">${by==='pace' ? `Pace (/${unit})` : 'Time'}</label></div>`;
   const rows = LOG_PARTS.map(p=>{
     const r = draft[p]||{};
-    const km = Number(r.dist)>0 ? unitToKm(Number(r.dist), unit) : 0, sec = parseDurationToSec(r.time)||0;
+    const km = partKm(r, unit), sec = parseDurationToSec(r.time)||0;
     const name = partLabel(p, day);
     return `<div style="${grid} margin-bottom:8px;">
       <div style="font-weight:600; font-size:13.5px;">${esc(name)}<div class="hint" id="${prefix}-pp-${p}" style="margin:2px 0 0; font-weight:400; min-height:1em;">${esc(partHintText(r, km, sec, unit, fmt, by))}</div></div>
@@ -4823,7 +4834,7 @@ function partsTotalHint(draft, unit, day){
 }
 // Live update of one part's pace and the total line, without re-rendering (keeps focus).
 function refreshPartsHints(prefix, draft, day, unit){
-  LOG_PARTS.forEach(p=>{ const el = document.getElementById(`${prefix}-pp-${p}`); if(!el) return; const r = draft[p]||{}; const km = Number(r.dist)>0 ? unitToKm(Number(r.dist), unit) : 0; el.textContent = partHintText(r, km, parseDurationToSec(r.time)||0, unit, state.paceFormat, draft._by||'time'); });
+  LOG_PARTS.forEach(p=>{ const el = document.getElementById(`${prefix}-pp-${p}`); if(!el) return; const r = draft[p]||{}; const km = partKm(r, unit); el.textContent = partHintText(r, km, parseDurationToSec(r.time)||0, unit, state.paceFormat, draft._by||'time'); });
   const t = document.getElementById(`${prefix}-parts-total`); if(t) t.textContent = partsTotalHint(draft, unit, day);
 }
 // The sheet for adding or changing the parts of a run already logged.
@@ -5409,7 +5420,7 @@ function onClick(e){
   }
   if(act==='parts-by'){
     const draft = el.dataset.prefix==='lr' ? state.modal.data.parts : state.modal.draft;
-    if(draft){ draft._by = el.dataset.by; setEntryBy(el.dataset.by); LOG_PARTS.forEach(p=>{ const r = draft[p]; if(r){ if(el.dataset.by==='pace') r.pace = paceFromTime(r.time, r.dist) || r.pace || ''; else r.time = r.time || timeFromPace(r.pace, r.dist); } }); }
+    if(draft){ draft._by = el.dataset.by; setEntryBy(el.dataset.by); const u = state.setup.units; LOG_PARTS.forEach(p=>{ const r = draft[p]; if(r){ if(el.dataset.by==='pace') r.pace = paceFromTime(r.time, partDistU(r, u)) || r.pace || ''; else r.time = r.time || timeFromPace(r.pace, partDistU(r, u)); } }); }
     render(); return;
   }
   if(act==='log-by'){
@@ -5820,9 +5831,10 @@ function onInput(e){
       const draft = mm[1]==='lr' ? state.modal.data.parts : state.modal.draft;
       if(draft){
         const r = draft[mm[3]];
-        if(mm[2]==='t'){ const f = formatDurationDigits(e.target.value); e.target.value = f; r.time = f; r.pace = paceFromTime(r.time, r.dist); }
-        else if(mm[2]==='q'){ const f = formatDurationDigits(e.target.value); e.target.value = f; r.pace = f; r.time = timeFromPace(r.pace, r.dist); }
-        else { r.dist = e.target.value; if((draft._by||'time')==='pace') r.time = timeFromPace(r.pace, r.dist); else r.pace = paceFromTime(r.time, r.dist); }
+        const u = state.setup.units;
+        if(mm[2]==='t'){ const f = formatDurationDigits(e.target.value); e.target.value = f; r.time = f; r.pace = paceFromTime(r.time, partDistU(r, u)); }
+        else if(mm[2]==='q'){ const f = formatDurationDigits(e.target.value); e.target.value = f; r.pace = f; r.time = timeFromPace(r.pace, partDistU(r, u)); }
+        else { r.dist = e.target.value; if((draft._by||'time')==='pace') r.time = timeFromPace(r.pace, partDistU(r, u)); else r.pace = paceFromTime(r.time, partDistU(r, u)); }
         const log = mm[1]==='lp' ? state.logs.find(l=>l.id===state.modal.logId) : null;
         const found = plannedWorkoutForDate(mm[1]==='lr' ? state.modal.data.date : (log && log.date));
         if(found) refreshPartsHints(mm[1], draft, found.day, state.setup.units);
