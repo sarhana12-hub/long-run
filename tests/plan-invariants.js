@@ -94,6 +94,24 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   const names = full[0].strengthExercises.map(l=>l.replace(/^\d+×\S+\s+/,'').split(' (')[0]); if(new Set(names).size!==names.length) bad.push('full upper session repeats an exercise: '+names.join(', '));
   console.log('\n=== upper session standard vs full ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 152 race-pace wording follows whether a goal is set: no goal means the pace is the
+// predicted one, and the page must not call it "your goal pace"
+{
+  const html = require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
+  const i = html.indexOf('const WORKOUT_PURPOSE = {'), j = html.indexOf('function niceDate(', i);
+  const { workoutPurposeFor } = new Function(html.slice(i, j)+'\nreturn {workoutPurposeFor};')();
+  const bad = [];
+  const noGoal = {raceDistanceKm:10, goalRacePerKm:null}, withGoal = {raceDistanceKm:10, goalRacePerKm:290}, general = {raceDistanceKm:null, goalRacePerKm:null};
+  ['racepace','race'].forEach(t=>{
+    const a = workoutPurposeFor(t, noGoal);
+    if(/goal/i.test(a.purpose+a.effort) && !/set a goal/i.test(a.purpose)) bad.push(t+' says goal with no goal set: '+a.purpose+' / '+a.effort);
+    const b = workoutPurposeFor(t, withGoal);
+    if(!/goal|target/i.test(b.purpose+b.effort)) bad.push(t+' with a goal no longer mentions it');
+  });
+  if(workoutPurposeFor('tempo', noGoal)!==workoutPurposeFor('tempo', withGoal)) bad.push('tempo wording changed with the goal');
+  if(!workoutPurposeFor('easy', general)) bad.push('general plan lost its easy-run purpose');
+  console.log('\n=== race-pace wording with and without a goal ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 150 lower body: Full or Shorter is offered only in build weeks; the peak-week session is
 // already the short one and its chip claimed 40 min against a 28-min header
 {

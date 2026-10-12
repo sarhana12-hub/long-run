@@ -362,6 +362,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 151. **The line under each exercise name had no standard** (owner). It ran from 7 to 93 characters and mixed three things: equipment ("barbell"), setup ("rear foot on a bench, dumbbells in hand") and coaching tips ("a dumbbell in the free hand once 12 is easy", "hands on a bench to make them easier"). *Fix:* the line answers one question, what do I need and how am I set up: equipment first, then position only where the name leaves it unclear, 35 characters at most, no tips. Progression, easier and harder versions and assistance live in the library entry the row opens to; every variant has one, and each tip removed from a line was already there (the bodyweight squat's three-second lowering was added). The library test holds every note to the standard.
 
+152. **A race-pace day with no goal set said "your actual goal pace"** (owner screenshot, 10K plan with no goal time). Without a goal the race pace is the one the runner's current fitness predicts, and it moves as runs are logged. *Fix:* race-pace and race-day wording follow whether a goal is set; without one the page says the pace is predicted, that it updates as runs are logged, and that setting a goal time rehearses that instead.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

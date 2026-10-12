@@ -551,6 +551,17 @@ const WORKOUT_PURPOSE = {
   racepace: {purpose:'Rehearses your actual goal pace and race-day rhythm before race day arrives.', effort:'Your goal race effort — not harder, not easier.'},
   race: {purpose:'This is race day — execute your goal-pace strategy.', effort:'Your target race effort.'},
 };
+// Without a goal time, race pace is the pace the runner's current fitness predicts for this
+// distance, not a goal; the wording says so (defect 152: the owner's plan had no goal and the
+// race-pace day said "your actual goal pace").
+const WORKOUT_PURPOSE_NO_GOAL = {
+  racepace: {purpose:'Rehearses the race pace your current fitness predicts, and the rhythm of holding it, before race day arrives. It updates as you log runs; set a goal time to rehearse that instead.', effort:'Predicted race effort — not harder, not easier.'},
+  race: {purpose:'This is race day — run the pace your current fitness predicts, evenly.', effort:'Your race effort.'},
+};
+function workoutPurposeFor(type, plan){
+  const noGoal = plan && plan.raceDistanceKm!=null && plan.goalRacePerKm==null;
+  return (noGoal && WORKOUT_PURPOSE_NO_GOAL[type]) || WORKOUT_PURPOSE[type];
+}
 function niceDate(d){ return d.toLocaleDateString(undefined,{month:'short', day:'numeric'}); }
 function niceDateFull(d){ return d.toLocaleDateString(undefined,{weekday:'long', month:'short', day:'numeric', year:'numeric'}); }
 
@@ -4789,7 +4800,7 @@ function renderDayDetail(){
   const meta = TYPE_META[day.type];
   const weekPaces = getWeekPaces(state.plan, week, state.logs);
   const descriptionParts = (day.descBase==null && day.notes!=null) ? [day.notes] : workoutPartsFor(day, weekPaces, unit, dayFmt(day, fmt));
-  const purpose = WORKOUT_PURPOSE[day.type];
+  const purpose = workoutPurposeFor(day.type, state.plan);
   const strengthFocusNote = day.strengthFocus==='upper'
     ? (day.type==='rest'
       ? `Upper body/core focus — no run today, so it's still a genuine day off for your legs.`
