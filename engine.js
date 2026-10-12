@@ -2049,7 +2049,17 @@ const FITNESS = {
 };
 // Pace of the quality portion of a logged tempo-type run: back the warm-up and cool-down
 // out at easy pace, then whatever time is left belongs to the effort.
+// A logged run can carry its parts (warm-up, main set, cool-down) as the runner timed them.
+// The main set, when entered, is the real effort pace and replaces every estimate (defect 154:
+// a fast warm-up and cool-down made the estimated race-pace portion look far too quick).
+const LOG_PARTS = ['warmup','main','cooldown'];
+function logMainPart(log){
+  const m = log && Array.isArray(log.parts) ? log.parts.find(x=>x && x.part==='main') : null;
+  return (m && m.km>0 && m.sec>0) ? m : null;
+}
 function effortPaceSecPerKm(day, log, easyPaceSecPerKm){
+  const main = logMainPart(log);
+  if(main) return main.sec/main.km;
   const blended = log.durationSec/log.distanceKm;
   const easyKm = (day.warmupKm||0)+(day.cooldownKm||0);
   if(!(easyKm>0.15) || !(log.distanceKm>easyKm+0.3) || !(easyPaceSecPerKm>0)) return blended;
@@ -2229,7 +2239,7 @@ return {
   kmForMinutes, minutesForKm,
   vo2FromVelocity, velocityFromVO2, pctMaxForDurationMin, vdotFromRace, paceSecPerKmFromVdotPct, predictedTimeMinFromVdot,
   predictedPaceSecPerKmFromVdot, impliedVdotFromPace, EASY_PCT, THRESHOLD_PCT, INTERVAL_PCT, REP_PCT, paceZonesFromVdot,
-  riegelSec, vvMarathonSecModel1, vvMarathonSecModel2, tandaMarathonSec, predictRace, assessGoal, buildAthlete, zonesForVdot, zonesForPlanVdot, projectRaceTime,
+  LOG_PARTS, logMainPart, riegelSec, vvMarathonSecModel1, vvMarathonSecModel2, tandaMarathonSec, predictRace, assessGoal, buildAthlete, zonesForVdot, zonesForPlanVdot, projectRaceTime,
   raceLabelKm, runsPerWeekFor,
   QUALITY_TYPES, WARMUP_ELIGIBLE_TYPES, STRIDES_ELIGIBLE_TYPES, STRIDES_REPS, STRIDES_EXTRA_KM, HILL_STRIDES_EXTRA_KM, QUALITY_WARMUP_KM, QUALITY_COOLDOWN_KM,
   TYPE_LABELS, isLegDemandingDay, isKeySessionDay, structuredEffort, buildWorkoutMeta,

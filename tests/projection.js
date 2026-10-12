@@ -150,6 +150,28 @@ console.log('8. which runs moved the projection (projectionImpacts)');
   check('nothing logged, nothing listed', g.projectionImpacts(plan, [], today, km).length===0);
 }
 
+console.log('8b. a tempo logged part by part: the main set as timed beats the estimate (defect 154)');
+{
+  // The owner's case: the main set on target, warm-up and cool-down run well under easy pace.
+  // The whole-run estimate credits the fast easy parts to the main set and reads it as far
+  // too quick; the timed main set reads it as it was.
+  const t = dayOf('tempo'); const today = g.parseDate(t.day.date); const p = t.week.paces;
+  const wu = t.day.warmupKm, cd = t.day.cooldownKm, mainKm = t.day.km - wu - cd;
+  const fastEasy = p.easyPerKm*0.85, mainSec = Math.round(mainKm*p.tempoPerKm);
+  const parts = [{part:'warmup', km:wu, sec:Math.round(wu*fastEasy)}, {part:'main', km:mainKm, sec:mainSec}, {part:'cooldown', km:cd, sec:Math.round(cd*fastEasy)}];
+  const total = parts.reduce((a,x)=>a+x.sec,0);
+  const plain = {id:'a', date:t.day.date, distanceKm:t.day.km, durationSec:total};
+  const split = {...plain, parts};
+  const est = g.effortPaceSecPerKm(t.day, plain, p.easyPerKm);
+  check('without parts the estimate reads the main set too fast', est < p.tempoPerKm - 8, `${est.toFixed(0)} vs ${p.tempoPerKm.toFixed(0)} s/km`);
+  check('with parts the main set reads as timed', Math.abs(g.effortPaceSecPerKm(t.day, split, p.easyPerKm) - p.tempoPerKm) < 1);
+  check('logMainPart ignores a part with no time', g.logMainPart({parts:[{part:'main', km:3, sec:0}]})===null);
+  const before = fullLogsBefore(t.day.date);
+  const fPlain = g.projectFitness(plan, before.concat([plain]), today), fSplit = g.projectFitness(plan, before.concat([split]), today);
+  check('the projection moves less once the parts show an on-target session', fSplit.workoutAdjust < fPlain.workoutAdjust, `${fSplit.workoutAdjust} vs ${fPlain.workoutAdjust}`);
+  check('an on-target timed tempo barely moves now', Math.abs(fSplit.workoutAdjust) <= 0.3, String(fSplit.workoutAdjust));
+}
+
 console.log('9. typed times read seconds first');
 {
   const P = g.parseDurationToSec;
