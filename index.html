@@ -4879,25 +4879,40 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
     : repBasedDay ? '' : paceDeltaLine(comparisonPaceSecPerKm, plannedPaceSecPerKm, unit, fmt);
   const repCompared = repBasedDay && log.repSec>0 && !!plannedRepSec;
 
-  const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs', racepace:'race-pace runs', race:'race-day runs'};
+  // The projection line says what logging this run actually did (defect 158: a race-pace
+  // day read "No impact on the projection" while logging it had moved the 10K projection
+  // 5 seconds, because a completed session banks its share of the plan's fitness gain). The
+  // change and its reasons come from projectionImpacts, the same calculation the projection
+  // itself uses; the pace note says separately whether the run's pace counted.
+  const PACE_NOUNS = {easy:'easy runs', long:'long runs', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs', racepace:'race-pace runs'};
   const repBased = ['intervals','cruise','reps'].includes(day.type);
-  const eligible = log.kind==='race' || day.type==='tempo' || day.type==='overunder' || (repBased && log.repSec>0);
+  const paceCounts = day.type==='tempo' || day.type==='overunder' || (repBased && log.repSec>0);
   let impactLine;
   if(log.kind==='race'){
     impactLine = `A race result: it resets your fitness and the training paces from here on.`;
-  } else if(!eligible){
-    const noun = NONELIGIBLE_NOUNS[day.type];
-    impactLine = repBased ? `Not used for the projection: enter the average rep time to count this session.` : (noun ? `No impact on the projection — ${noun} aren't used for it.` : `No impact on the projection — this run type isn't used for it.`);
   } else {
-    const withPaces = getWeekPaces(plan, week, logs);
-    const withoutPaces = getWeekPaces(plan, week, logs.filter(l=>l.id!==log.id));
-    const deltaSecPerKm = withPaces.tempoPerKm - withoutPaces.tempoPerKm;
-    const deltaPerUnit = unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm;
     const impactKm = isGeneralPlan(state.setup) ? 5 : plan.raceDistanceKm;
     const impact = projectionImpacts(plan, logs, todayDate(), impactKm, {trackingStart: state.setup.trackingStartDate}).find(x=>x.id===log.id);
-    const projNote = impact && impact.deltaSec!==0 ? `${raceLabelKm(impactKm)} projection ${secToClock(Math.abs(impact.deltaSec))} ${impact.deltaSec<0?'faster':'slower'}.` : 'Counted toward the projection; no change from this run alone.';
-    const paceNote = Math.abs(deltaPerUnit)>=1 ? ` Training paces about ${Math.round(Math.abs(deltaPerUnit))} sec/${unit} ${deltaPerUnit>0?'slower':'faster'}.` : '';
-    impactLine = projNote + paceNote;
+    const why = [];
+    if(impact && impact.reasons.includes('session')) why.push('completing the session counts toward the fitness the plan builds');
+    if(impact && impact.reasons.includes('pace-up')) why.push('its pace showed more fitness than planned');
+    if(impact && impact.reasons.includes('pace-down')) why.push('its pace showed less fitness than planned');
+    if(impact && impact.reasons.includes('volume-up')) why.push('it brings your running back toward the plan');
+    const whyText = why.length ? ': '+why.join(', and ') : '';
+    const head = (impact && impact.deltaSec!==0)
+      ? `${raceLabelKm(impactKm)} projection ${secToClock(Math.abs(impact.deltaSec))} ${impact.deltaSec<0?'faster':'slower'}${whyText}.`
+      : why.length ? `Counted toward the projection${whyText}; no change from this run alone.` : `No change to the projection from this run alone.`;
+    const noun = PACE_NOUNS[day.type];
+    const paceBit = paceCounts ? '' : repBased ? ' Enter the average rep time and its pace counts too.' : noun ? ` Its pace isn't used: ${noun} aren't a pace test.` : '';
+    let paceNote = '';
+    if(paceCounts){
+      const withPaces = getWeekPaces(plan, week, logs);
+      const withoutPaces = getWeekPaces(plan, week, logs.filter(l=>l.id!==log.id));
+      const deltaSecPerKm = withPaces.tempoPerKm - withoutPaces.tempoPerKm;
+      const deltaPerUnit = unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm;
+      paceNote = Math.abs(deltaPerUnit)>=1 ? ` Training paces about ${Math.round(Math.abs(deltaPerUnit))} sec/${unit} ${deltaPerUnit>0?'slower':'faster'}.` : '';
+    }
+    impactLine = head.charAt(0).toUpperCase()+head.slice(1) + paceBit + paceNote;
   }
 
   return `<div class="card" style="padding:14px 16px; margin-bottom:16px; background:var(--done-bg); border-color:var(--done);">
