@@ -551,6 +551,17 @@ const WORKOUT_PURPOSE = {
   racepace: {purpose:'Rehearses your actual goal pace and race-day rhythm before race day arrives.', effort:'Your goal race effort — not harder, not easier.'},
   race: {purpose:'This is race day — execute your goal-pace strategy.', effort:'Your target race effort.'},
 };
+// Without a goal time, race pace is the pace the runner's current fitness predicts for this
+// distance, not a goal; the wording says so (defect 152: the owner's plan had no goal and the
+// race-pace day said "your actual goal pace").
+const WORKOUT_PURPOSE_NO_GOAL = {
+  racepace: {purpose:'Rehearses the race pace your current fitness predicts, and the rhythm of holding it, before race day arrives. It updates as you log runs; set a goal time to rehearse that instead.', effort:'Predicted race effort — not harder, not easier.'},
+  race: {purpose:'This is race day — run the pace your current fitness predicts, evenly.', effort:'Your race effort.'},
+};
+function workoutPurposeFor(type, plan){
+  const noGoal = plan && plan.raceDistanceKm!=null && plan.goalRacePerKm==null;
+  return (noGoal && WORKOUT_PURPOSE_NO_GOAL[type]) || WORKOUT_PURPOSE[type];
+}
 function niceDate(d){ return d.toLocaleDateString(undefined,{month:'short', day:'numeric'}); }
 function niceDateFull(d){ return d.toLocaleDateString(undefined,{weekday:'long', month:'short', day:'numeric', year:'numeric'}); }
 
@@ -590,7 +601,10 @@ const RECALIBRATION_PCT = { tempoPerKm: THRESHOLD_PCT, intervalPerKm: INTERVAL_P
 // likely took - then returns the pace implied by whatever's left. Falls back to the
 // plain blended pace when there's no meaningful warm-up/cool-down to account for, or the
 // logged distance doesn't even cover it (e.g. the run was cut short).
-function qualityEffortPaceSecPerKm(day, totalDistanceKm, totalDurationSec, plan){
+function qualityEffortPaceSecPerKm(day, totalDistanceKm, totalDurationSec, plan, dayLogs){
+  // Entered parts beat the estimate: the main set as timed is the effort pace (defect 154).
+  const mains = (dayLogs||[]).map(logMainPart).filter(Boolean);
+  if(mains.length) return mains.reduce((a,m)=>a+m.sec,0)/mains.reduce((a,m)=>a+m.km,0);
   const blended = totalDurationSec/totalDistanceKm;
   const easyPortionKm = (day.warmupKm||0) + (day.cooldownKm||0);
   if(!(easyPortionKm>0.15) || !(totalDistanceKm>easyPortionKm) || plan.startVdot==null) return blended;
@@ -609,7 +623,7 @@ function computeRecalibration(plan, logs){
     const day = findPlanDay(plan, log.date);
     const pct = day && RECALIBRATION_TYPES.includes(day.type) ? RECALIBRATION_PCT[day.paceKey] : null;
     if(pct && log.distanceKm>0){
-      const actualPaceSecPerKm = qualityEffortPaceSecPerKm(day, log.distanceKm, log.durationSec, plan);
+      const actualPaceSecPerKm = qualityEffortPaceSecPerKm(day, log.distanceKm, log.durationSec, plan, [log]);
       const impliedVdot = impliedVdotFromPace(actualPaceSecPerKm, pct);
       matches.push({date:log.date, impliedVdot});
     }
@@ -1190,7 +1204,7 @@ function rerenderSheet(){ const sh = document.querySelector('.sheet'); const top
 // Replaces the open sheet's contents with a fresh render of the same sheet: no page rebuild,
 // no dimmer flash, no entrance animation, scroll position kept.
 function swapSheetContents(){ const sh = document.querySelector('.sheet'); if(!sh || !state.modal){ render(); return; } const top = sh.scrollTop; const tmp = document.createElement('div'); tmp.innerHTML = renderModal(); const fresh = tmp.querySelector('.sheet'); if(!fresh){ render(); return; } sh.innerHTML = fresh.innerHTML; sh.scrollTop = top; }
-function closeModal(){ const held = state.modal && state.modal.type==='milestone' ? state.pendingToast : null; state.modal=null; state.moveFrom=null; state.pendingToast=null; if(held) showToast(held.msg, held.undo, held.ms); else render(); }
+function closeModal(){ if(state.modal && state.modal.type==='log-parts' && state.modal.back){ state.modal = state.modal.back; render(); return; } const held = state.modal && state.modal.type==='milestone' ? state.pendingToast : null; state.modal=null; state.moveFrom=null; state.pendingToast=null; if(held) showToast(held.msg, held.undo, held.ms); else render(); }
 // Flashes a message inline next to the "Your name" label (the lexi-badge span) instead of
 // a floating toast — a fixed-position popup kept landing either behind the Dynamic Island
 // or under the keyboard depending on how far up the screen it sat. Bypasses render()
@@ -1858,7 +1872,9 @@ function renderOnboardStep1(d){
 // Auto-inserts colons as the user types digits, so "2230" becomes "22:30" and
 // "34500" becomes "3:45:00" without anyone having to type ':' themselves.
 function formatDurationDigits(raw){
-  const digits = String(raw).replace(/\D/g,'').slice(0,6);
+  // Leading zeros are dropped first: typing one digit at a time re-reads the formatted value,
+  // and its zeros would otherwise pile up ("1000" typed showed as 00:10:00).
+  const digits = String(raw).replace(/\D/g,'').replace(/^0+/,'').slice(0,6);
   if(!digits.length) return '';
   if(digits.length<=2) return '0:'+digits.padStart(2,'0'); // seconds first: 25 is 0:25
   if(digits.length<=4){
@@ -2428,7 +2444,7 @@ function treadmillNote(day){
   if(!day.treadmill) return null;
   if(day.type==='hills' || day.terrain==='hilly' || day.hillStrides) return null; // the session text already carries its incline
   if(day.easyRole==='recovery') return 'Treadmill: 0–1% incline, speeds above are belt speed.';
-  return 'Treadmill: set a 1% incline to match outdoor effort (Jones & Doust 1996); speeds above are belt speed.';
+  return 'Treadmill: set a 1% incline to match outdoor effort. Speeds above are belt speed.';
 }
 function parseStrengthLine(line){
   const m = line.match(/^(\d+)×(\S+) (.+?) \(([^)]*)\) — (.*)$/);
@@ -3810,7 +3826,7 @@ function paceRunsForType(type){
       const weekPaces = getWeekPaces(state.plan, week, state.logs);
       const plannedPaceSecPerKm = day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : weekPaces[day.paceKey];
       if(plannedPaceSecPerKm==null) continue;
-      const actualPaceSecPerKm = qualityEffortPaceSecPerKm(day, totalKm, totalSec, state.plan);
+      const actualPaceSecPerKm = qualityEffortPaceSecPerKm(day, totalKm, totalSec, state.plan, dayLogs);
       matches.push({date:day.date, actualPaceSecPerKm, plannedPaceSecPerKm});
     }
   }
@@ -4012,6 +4028,7 @@ function renderModal(){
   const m = state.modal;
   if(m.type==='day-detail') return renderDayDetail();
   if(m.type==='log-run') return modalLogRun();
+  if(m.type==='log-parts') return modalLogParts();
   if(m.type==='edit-day') return modalEditDay();
   if(m.type==='confirm-swap') return modalConfirmSwap(m.data);
   if(m.type==='confirm-reset') return modalConfirmReset();
@@ -4502,9 +4519,11 @@ function plannedWorkoutHtml(dateStr){
 function logPaceHint(d, unit){
   const distV = Number(d.dist);
   const durSec = parseDurationToSec(d.time);
-  if(!distV || !durSec) return 'Enter distance and time to see your pace per mile.';
+  const per = unit==='mi' ? 'mile' : 'km';
+  if(d.by==='pace') return (!distV || !durSec) ? `Enter distance and pace per ${per} to work out the time.` : `That's a time of ${secToClock(durSec)}.`;
+  if(!distV || !durSec) return `Enter distance and time to see your pace per ${per}.`;
   const paceSecPerKm = durSec/unitToKm(distV, unit);
-  return `That's about ${paceStr(paceSecPerKm,'mi')} pace.`;
+  return `That's about ${paceStr(paceSecPerKm, unit)} pace.`;
 }
 
 function modalLogRun(){
@@ -4629,6 +4648,18 @@ async function scanWorkoutImage(file){
     setScan({status:'error', error:'Could not read that screenshot.'});
   }
 }
+// The parts block in the log form, for a planned day with a warm-up and cool-down. Folded
+// unless the runner has started on it; the totals below still work on their own.
+function logFormPartsHtml(d, unit){
+  const found = plannedWorkoutForDate(d.date);
+  if(!found || !dayHasParts(found.day)) return '';
+  if(!d.parts || d.partsDate!==d.date){ d.parts = partsDraftFor(found.day, unit, null); d.partsDate = d.date; }
+  const started = LOG_PARTS.some(p=>d.parts[p] && d.parts[p].time);
+  return `<details class="card" style="padding:0 14px; margin-bottom:14px; background:var(--surface-2);" ${started ? 'open' : ''}>
+    <summary style="padding:12px 0; cursor:pointer; font-weight:700; font-size:13.5px;">Enter each part (optional)</summary>
+    <div style="padding-bottom:12px;"><div class="hint" style="margin:0 0 10px;">Warm-up, ${esc(partLabel('main', found.day).toLowerCase())} and cool-down as you ran them. With the ${esc(partLabel('main', found.day).toLowerCase())} entered, its own pace is used instead of an estimate.</div>${partsFieldsHtml('lr', d.parts, found.day, unit)}</div>
+  </details>`;
+}
 function modalLogManualHtml(d){
   const unit = state.setup.units;
   return `
@@ -4641,9 +4672,13 @@ function modalLogManualHtml(d){
     ${d.kind==='race' ? `<div class="hint" style="margin:-6px 0 14px;">A race result resets your fitness and every training pace from here on.</div>` : ''}
     <div id="lr-planned">${d.kind==='race' ? '' : plannedWorkoutHtml(d.date)}</div>
     ${d.kind==='race' ? '' : repFieldHtml(d.date, d.rep, 'lr')}
+    ${d.kind==='race' ? '' : logFormPartsHtml(d, unit)}
+    ${entryByChipsHtml('log-by', d.by || (d.by = entryBy()))}
     <div class="row">
       <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" inputmode="decimal" step="0.01" min="0" id="lr-dist" value="${d.dist}" placeholder="e.g. 5.2"></div>
-      <div class="field"><label class="field-label">Time (h:mm:ss)</label><input class="input" type="text" inputmode="numeric" id="lr-time" value="${d.time}" placeholder="e.g. 45:30"></div>
+      ${d.by==='pace'
+        ? `<div class="field"><label class="field-label">Pace (m:ss per ${unit})</label><input class="input" type="text" inputmode="numeric" id="lr-pace" value="${esc(d.pace||'')}" placeholder="e.g. 8:10"></div>`
+        : `<div class="field"><label class="field-label">Time (h:mm:ss)</label><input class="input" type="text" inputmode="numeric" id="lr-time" value="${d.time}" placeholder="e.g. 45:30"></div>`}
     </div>
     <div class="hint" id="lr-pace-hint" style="margin-bottom:14px;">${logPaceHint(d, unit)}</div>
     <div class="field"><label class="field-label">Notes (optional)</label><input class="input" type="text" id="lr-notes" value="${esc(d.notes)}" placeholder="How did it feel?"></div>
@@ -4716,6 +4751,97 @@ function paceDeltaLine(actualPaceSecPerKm, plannedPaceSecPerKm, unit, fmt){
   return `${secToClock(Math.abs(deltaDisplayPerUnit))}/${unit} ${deltaDisplayPerUnit>0?'slower':'faster'} than planned`;
 }
 
+// Workout parts (defect 154). A day with a warm-up and cool-down can be logged part by part:
+// the main set as timed is the real effort pace, so a quick warm-up no longer makes the main
+// set look faster than it was. Entering parts is optional; the main-set time is what counts.
+// Times or paces: a runner can type either; with a pace, the time is worked out from the
+// distance. The choice is remembered on this device (a convenience, not plan data).
+function entryBy(){ try{ return localStorage.getItem('lr_entry_by')==='pace' ? 'pace' : 'time'; }catch(e){ return 'time'; } }
+function setEntryBy(by){ try{ localStorage.setItem('lr_entry_by', by); }catch(e){} }
+function timeFromPace(paceStr, dist){ const ps = parseDurationToSec(paceStr), v = Number(dist); return (ps>0 && v>0) ? secToClock(Math.round(ps*v)) : ''; }
+function paceFromTime(timeStr, dist){ const ts = parseDurationToSec(timeStr), v = Number(dist); return (ts>0 && v>0) ? secToClock(Math.round(ts/v)) : ''; }
+function entryByChipsHtml(act, by, extra){ return `<div class="chip-select" style="margin:0 0 10px;"><button class="chip ${by==='time'?'active':''}" data-act="${act}" data-by="time"${extra||''}>Enter times</button><button class="chip ${by==='pace'?'active':''}" data-act="${act}" data-by="pace"${extra||''}>Enter paces</button></div>`; }
+function dayHasParts(day){ return !!day && day.type!=='race' && ((day.warmupKm||0)+(day.cooldownKm||0))>0.15; }
+const MAIN_PART_LABEL = {tempo:'Tempo', racepace:'Race pace', overunder:'Over-unders', cruise:'Cruise intervals', intervals:'Reps and jogs', reps:'Reps and jogs', hills:'Hill reps and jogs'};
+function partLabel(part, day){ return part==='warmup' ? 'Warm-up' : part==='cooldown' ? 'Cool-down' : (MAIN_PART_LABEL[day && day.type] || 'Main set'); }
+function plannedPartKm(part, day){ return part==='warmup' ? (day.warmupKm||0) : part==='cooldown' ? (day.cooldownKm||0) : Math.max(0, day.km-(day.warmupKm||0)-(day.cooldownKm||0)); }
+// Form strings for the three parts: a saved log's parts when it has them, otherwise the
+// planned distances with the times left for the runner.
+function partsDraftFor(day, unit, log){
+  const out = {};
+  LOG_PARTS.forEach(p=>{
+    const saved = log && Array.isArray(log.parts) ? log.parts.find(x=>x.part===p) : null;
+    const km = saved ? saved.km : plannedPartKm(p, day);
+    // planned distances to one decimal, as the session text shows them; saved ones as entered
+    out[p] = {dist: km>0 ? String(saved ? Math.round(kmToUnit(km, unit)*100)/100 : Math.round(kmToUnit(km, unit)*10)/10) : '', time: saved ? secToClock(saved.sec) : ''};
+    out[p].pace = paceFromTime(out[p].time, out[p].dist);
+  });
+  out._by = entryBy();
+  return out;
+}
+// Form strings -> saved parts. Only timed parts are kept; the main set must be one of them.
+function partsFromDraft(draft, unit, day){
+  const parts = [];
+  for(const p of LOG_PARTS){
+    const r = (draft && draft[p]) || {};
+    const sec = parseDurationToSec(r.time)||0, v = Number(r.dist);
+    if(!sec) continue;
+    if(!(v>0)) return {error:`Enter the ${partLabel(p, day).toLowerCase()} distance`};
+    parts.push({part:p, km:Math.round(unitToKm(v, unit)*1000)/1000, sec});
+  }
+  if(parts.length && !parts.some(x=>x.part==='main')) return {error:`Enter the ${partLabel('main', day).toLowerCase()} time or pace: it is the part that shows the effort`};
+  return {parts, complete: parts.length===LOG_PARTS.length};
+}
+// Under each part's name: its pace when times are typed, its worked-out time when paces are.
+function partHintText(r, km, sec, unit, fmt, by){ return by==='pace' ? (sec>0 ? `${secToClock(sec)} total` : '') : partPaceText(km, sec, unit, fmt); }
+function partPaceText(km, sec, unit, fmt){ return (km>0 && sec>0) ? paceOrSpeedStr(sec/km, unit, fmt) : ''; }
+function partsFieldsHtml(prefix, draft, day, unit){
+  const fmt = state.paceFormat;
+  const by = draft._by || 'time';
+  const grid = 'display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center;';
+  const head = `<div style="${grid} margin-bottom:4px;"><span></span><label class="field-label" style="margin:0;">Distance (${unit})</label><label class="field-label" style="margin:0;">${by==='pace' ? `Pace (/${unit})` : 'Time'}</label></div>`;
+  const rows = LOG_PARTS.map(p=>{
+    const r = draft[p]||{};
+    const km = Number(r.dist)>0 ? unitToKm(Number(r.dist), unit) : 0, sec = parseDurationToSec(r.time)||0;
+    const name = partLabel(p, day);
+    return `<div style="${grid} margin-bottom:8px;">
+      <div style="font-weight:600; font-size:13.5px;">${esc(name)}<div class="hint" id="${prefix}-pp-${p}" style="margin:2px 0 0; font-weight:400; min-height:1em;">${esc(partHintText(r, km, sec, unit, fmt, by))}</div></div>
+      <input class="input" type="number" inputmode="decimal" step="0.01" min="0" id="${prefix}-pd-${p}" value="${esc(r.dist||'')}" aria-label="${esc(name)} distance in ${unit}">
+      ${by==='pace'
+        ? `<input class="input" type="text" inputmode="numeric" id="${prefix}-pq-${p}" value="${esc(r.pace||'')}" placeholder="m:ss" aria-label="${esc(name)} pace per ${unit}">`
+        : `<input class="input" type="text" inputmode="numeric" id="${prefix}-pt-${p}" value="${esc(r.time||'')}" placeholder="m:ss" aria-label="${esc(name)} time">`}
+    </div>`;
+  }).join('');
+  return entryByChipsHtml('parts-by', by, ` data-prefix="${prefix}"`) + head + rows + `<div class="hint" id="${prefix}-parts-total" style="margin:0;">${esc(partsTotalHint(draft, unit, day))}</div>`;
+}
+function partsTotalHint(draft, unit, day){
+  const r = partsFromDraft(draft, unit, day);
+  if(r.error) return r.error+'.';
+  if(r.complete){ const km = r.parts.reduce((a,x)=>a+x.km,0), sec = r.parts.reduce((a,x)=>a+x.sec,0); return `All three parts entered: the run is saved as ${fmtDist(km, unit)} in ${secToClock(sec)}.`; }
+  if(r.parts.length) return `The ${partLabel('main', day).toLowerCase()} pace is used as entered; the other parts are optional.`;
+  return `Distances are the planned ones; change any you ran differently. The ${partLabel('main', day).toLowerCase()} is the part that matters.`;
+}
+// Live update of one part's pace and the total line, without re-rendering (keeps focus).
+function refreshPartsHints(prefix, draft, day, unit){
+  LOG_PARTS.forEach(p=>{ const el = document.getElementById(`${prefix}-pp-${p}`); if(!el) return; const r = draft[p]||{}; const km = Number(r.dist)>0 ? unitToKm(Number(r.dist), unit) : 0; el.textContent = partHintText(r, km, parseDurationToSec(r.time)||0, unit, state.paceFormat, draft._by||'time'); });
+  const t = document.getElementById(`${prefix}-parts-total`); if(t) t.textContent = partsTotalHint(draft, unit, day);
+}
+// The sheet for adding or changing the parts of a run already logged.
+function modalLogParts(){
+  const m = state.modal; const unit = state.setup.units;
+  const log = state.logs.find(l=>l.id===m.logId);
+  const found = log ? plannedWorkoutForDate(log.date) : null;
+  if(!log || !found || !dayHasParts(found.day)) return modalShell('Enter each part', `<div class="hint">This run has no planned warm-up and cool-down to split it by.</div>`);
+  const day = found.day;
+  if(!m.draft) m.draft = partsDraftFor(day, unit, log);
+  const hasParts = Array.isArray(log.parts) && log.parts.length>0;
+  return modalShell('Enter each part', `
+    <div class="hint" style="margin-bottom:12px;">${esc(niceDate(parseDate(log.date)))} · logged ${esc(fmtDist(log.distanceKm, unit))} in ${esc(secToClock(log.durationSec))}. Enter each part as you ran it, from your watch's splits or segments: a time or a pace.</div>
+    ${partsFieldsHtml('lp', m.draft, day, unit)}
+    <button class="btn btn-primary btn-block" data-act="save-log-parts" style="padding:13px; margin-top:14px;">Save parts</button>
+    ${hasParts ? `<button class="btn btn-ghost btn-block" data-act="clear-log-parts" style="margin-top:8px;">Remove the parts</button>` : ''}
+  `);
+}
 function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
   const plannedKm = day.km;
   const plannedPaceSecPerKm = day.paceKey ? (day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : getWeekPaces(plan, week, logs)[day.paceKey]) : null;
@@ -4727,8 +4853,15 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
   // so the two numbers on screen don't look like they're contradicting each other.
   const actualPaceSecPerKm = log.distanceKm>0 ? log.durationSec/log.distanceKm : null;
   const totalEasyKm = (day.warmupKm||0) + (day.cooldownKm||0);
-  const warmupAdjusted = totalEasyKm>0.15 && log.distanceKm>totalEasyKm;
-  const comparisonPaceSecPerKm = warmupAdjusted ? qualityEffortPaceSecPerKm(day, log.distanceKm, log.durationSec, plan) : actualPaceSecPerKm;
+  // The main set as timed, when the runner entered the parts; otherwise an estimate that
+  // assumes the warm-up and cool-down ran at easy pace, labelled as such (defect 154).
+  const mainPart = logMainPart(log);
+  const warmupAdjusted = !mainPart && totalEasyKm>0.15 && log.distanceKm>totalEasyKm;
+  const comparisonPaceSecPerKm = mainPart ? mainPart.sec/mainPart.km : warmupAdjusted ? qualityEffortPaceSecPerKm(day, log.distanceKm, log.durationSec, plan) : actualPaceSecPerKm;
+  const canSplit = log.kind!=='race' && dayHasParts(day);
+  const partsHtml = (Array.isArray(log.parts) && log.parts.length)
+    ? `<div style="margin-top:8px; font-size:13px; color:var(--ink-soft);">${LOG_PARTS.map(pn=>log.parts.find(x=>x.part===pn)).filter(Boolean).map(x=>`<div>${esc(partLabel(x.part, day))}: ${esc(fmtDist(x.km, unit))} in ${esc(secToClock(x.sec))} · ${esc(paceOrSpeedStr(x.sec/x.km, unit, fmt))}</div>`).join('')}</div>`
+    : '';
 
   const distLine = plannedKm>0
     ? `${fmtDist(log.distanceKm,unit)} logged vs ${fmtDist(plannedKm,unit)} planned`
@@ -4770,9 +4903,15 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
       Logged
     </div>
     <div style="font-weight:700; font-size:14.5px;">${esc(distLine)}</div>
-    <div style="font-size:13.5px; color:var(--ink-soft); margin-top:2px;">${secToClock(log.durationSec)}${actualPaceSecPerKm!=null?' · '+paceOrSpeedStr(actualPaceSecPerKm,unit,fmt):''}${paceCompareLine?' · '+((warmupAdjusted && !repCompared)?'excluding warm-up, ':'')+paceCompareLine:''}</div>
+    <div style="font-size:13.5px; color:var(--ink-soft); margin-top:2px;">${secToClock(log.durationSec)}${actualPaceSecPerKm!=null?' · '+paceOrSpeedStr(actualPaceSecPerKm,unit,fmt)+(mainPart||warmupAdjusted?' overall':''):''}</div>
+    ${partsHtml}
+    ${paceCompareLine ? `<div style="font-size:13.5px; margin-top:6px;">${esc(mainPart && !repCompared ? `${partLabel('main', day)} ${paceOrSpeedStr(comparisonPaceSecPerKm, unit, fmt)}, ${paceCompareLine}` : (warmupAdjusted && !repCompared) ? `${partLabel('main', day)} about ${paceOrSpeedStr(comparisonPaceSecPerKm, unit, fmt)}, ${paceCompareLine}` : paceCompareLine)}</div>` : ''}
+    ${(warmupAdjusted && !repCompared) ? `<div class="hint" style="margin-top:4px;">Estimated: assumes the warm-up and cool-down were at easy pace. Enter each part for the exact figure.</div>` : ''}
     <div class="hint" style="margin-top:8px; color:var(--ink-soft);">${impactLine}</div>
-    <button class="btn btn-ghost btn-sm" data-act="delete-log" data-id="${log.id}" style="margin-top:10px; color:#C4432E;">Remove this log</button>
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
+      ${canSplit ? `<button class="btn btn-sm" data-act="edit-log-parts" data-id="${log.id}">${mainPart ? 'Edit the parts' : 'Enter each part'}</button>` : ''}
+      <button class="btn btn-ghost btn-sm" data-act="delete-log" data-id="${log.id}" style="color:#C4432E;">Remove this log</button>
+    </div>
   </div>`;
 }
 
@@ -4789,7 +4928,7 @@ function renderDayDetail(){
   const meta = TYPE_META[day.type];
   const weekPaces = getWeekPaces(state.plan, week, state.logs);
   const descriptionParts = (day.descBase==null && day.notes!=null) ? [day.notes] : workoutPartsFor(day, weekPaces, unit, dayFmt(day, fmt));
-  const purpose = WORKOUT_PURPOSE[day.type];
+  const purpose = workoutPurposeFor(day.type, state.plan);
   const strengthFocusNote = day.strengthFocus==='upper'
     ? (day.type==='rest'
       ? `Upper body/core focus — no run today, so it's still a genuine day off for your legs.`
@@ -5268,6 +5407,16 @@ function onClick(e){
     };
     render(); return;
   }
+  if(act==='parts-by'){
+    const draft = el.dataset.prefix==='lr' ? state.modal.data.parts : state.modal.draft;
+    if(draft){ draft._by = el.dataset.by; setEntryBy(el.dataset.by); LOG_PARTS.forEach(p=>{ const r = draft[p]; if(r){ if(el.dataset.by==='pace') r.pace = paceFromTime(r.time, r.dist) || r.pace || ''; else r.time = r.time || timeFromPace(r.pace, r.dist); } }); }
+    render(); return;
+  }
+  if(act==='log-by'){
+    const d = state.modal.data; d.by = el.dataset.by; setEntryBy(d.by);
+    if(d.by==='pace') d.pace = paceFromTime(d.time, d.dist) || d.pace || ''; else d.time = d.time || timeFromPace(d.pace, d.dist);
+    render(); return;
+  }
   if(act==='log-kind'){ state.modal.data.kind = el.dataset.kind; render(); return; }
   if(act==='remove-splits'){ if(state.modal && state.modal.scan){ state.modal.scan.splits = []; state.modal.scan.notes = (state.modal.scan.notes||[]).filter(n=>!/split/i.test(n)).concat(['Splits removed; the run is kept as distance and time.']); } render(); return; }
   if(act==='log-mode-manual'){ state.modal.mode='manual'; render(); return; }
@@ -5284,8 +5433,19 @@ function onClick(e){
     const d = state.modal.data;
     const durSec = parseDurationToSec(d.time);
     const distV = Number(d.dist);
-    if(!d.date || !distV || !durSec){ showToast('Enter date, distance and time'); return; }
-    const entry = {date:d.date, distanceKm:unitToKm(distV,unit), durationSec:durSec, notes:d.notes, createdAt:new Date().toISOString()};
+    // Parts, when timed: the main set must be among them, and all three timed set the total.
+    const foundDay = d.kind!=='race' ? plannedWorkoutForDate(d.date) : null;
+    let parts = null;
+    if(foundDay && dayHasParts(foundDay.day) && d.parts && d.partsDate===d.date){
+      const r = partsFromDraft(d.parts, unit, foundDay.day);
+      if(r.error){ showToast(r.error); return; }
+      if(r.parts.length) parts = r;
+    }
+    const totalKm = parts && parts.complete ? parts.parts.reduce((a,x)=>a+x.km,0) : (distV ? unitToKm(distV,unit) : 0);
+    const totalSec = parts && parts.complete ? parts.parts.reduce((a,x)=>a+x.sec,0) : durSec;
+    if(!d.date || !totalKm || !totalSec){ showToast(parts ? 'Enter the total distance and time, or all three parts' : (d.by==='pace' ? 'Enter date, distance and pace' : 'Enter date, distance and time')); return; }
+    const entry = {date:d.date, distanceKm:Math.round(totalKm*1000)/1000, durationSec:totalSec, notes:d.notes, createdAt:new Date().toISOString()};
+    if(parts) entry.parts = parts.parts;
     if(state.modal.scan && state.modal.scan.splits && state.modal.scan.splits.length) entry.splits = state.modal.scan.splits.map(x=>x.paceSecPerKm);
     if(d.kind==='race') entry.kind = 'race';
     else { const found = plannedWorkoutForDate(d.date); const repM = found ? repMetersForDay(found.day) : null; const repSec = parseDurationToSec(d.rep); if(repM && repSec>0){ entry.repSec = repSec; entry.repMeters = repM; } }
@@ -5317,6 +5477,36 @@ function onClick(e){
     if(c.kind==='race') entry.kind = 'race';
     else { const found = plannedWorkoutForDate(date); const repM = found ? repMetersForDay(found.day) : null; const repSec = parseDurationToSec(c.rep); if(repM && repSec>0){ entry.repSec = repSec; entry.repMeters = repM; } }
     commitLogEntry(entry);
+    return;
+  }
+  if(act==='edit-log-parts'){
+    // The parts sheet replaces the day sheet; saving or closing it brings the day back.
+    state.modal = {type:'log-parts', logId: el.dataset.id, back: state.modal};
+    render(); return;
+  }
+  if(act==='save-log-parts' || act==='clear-log-parts'){
+    const m = state.modal; const unit = state.setup.units;
+    const log = state.logs.find(l=>l.id===m.logId); const found = log ? plannedWorkoutForDate(log.date) : null;
+    if(!log || !found){ closeModal(); return; }
+    let updated;
+    if(act==='clear-log-parts'){ updated = {...log}; delete updated.parts; }
+    else {
+      const r = partsFromDraft(m.draft, unit, found.day);
+      if(r.error){ showToast(r.error); return; }
+      if(!r.parts.length){ showToast(`Enter at least the ${partLabel('main', found.day).toLowerCase()} time or pace`); return; }
+      updated = {...log, parts: r.parts};
+      // All three timed: the run's total is their sum, so the card and the week add up.
+      if(r.complete){ updated.distanceKm = Math.round(r.parts.reduce((a,x)=>a+x.km,0)*1000)/1000; updated.durationSec = r.parts.reduce((a,x)=>a+x.sec,0); }
+    }
+    const before = projectionSnapshot();
+    state.logs = state.logs.map(l=>l.id===log.id ? updated : l);
+    Store.setLogs(state.logs);
+    const after = projectionSnapshot();
+    const moved = before && after ? Math.round(after.sec - before.sec) : 0;
+    state.modal = m.back || null;
+    render();
+    const done = act==='clear-log-parts' ? 'Parts removed.' : 'Parts saved.';
+    showToast(moved ? `${done} ${raceLabelKm(after.km)} projection ${secToClock(Math.abs(moved))} ${moved<0?'faster':'slower'}, now ${secToClock(after.sec)}.` : done);
     return;
   }
   if(act==='delete-log'){
@@ -5624,6 +5814,22 @@ function onInput(e){
   if(state.modal && state.modal.type==='library' && e.target.id==='lib-q'){
     state.modal.q = e.target.value; const sheet = document.querySelector('.sheet'); const y = sheet ? sheet.scrollTop : 0; render(); const i = document.getElementById('lib-q'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = y; return;
   }
+  // Part fields: the log form (lr-) and the edit sheet (lp-) share one handler.
+  { const mm = e.target.id && e.target.id.match(/^(lr|lp)-p([dtq])-(warmup|main|cooldown)$/);
+    if(mm && state.modal && (state.modal.type==='log-run' || state.modal.type==='log-parts')){
+      const draft = mm[1]==='lr' ? state.modal.data.parts : state.modal.draft;
+      if(draft){
+        const r = draft[mm[3]];
+        if(mm[2]==='t'){ const f = formatDurationDigits(e.target.value); e.target.value = f; r.time = f; r.pace = paceFromTime(r.time, r.dist); }
+        else if(mm[2]==='q'){ const f = formatDurationDigits(e.target.value); e.target.value = f; r.pace = f; r.time = timeFromPace(r.pace, r.dist); }
+        else { r.dist = e.target.value; if((draft._by||'time')==='pace') r.time = timeFromPace(r.pace, r.dist); else r.pace = paceFromTime(r.time, r.dist); }
+        const log = mm[1]==='lp' ? state.logs.find(l=>l.id===state.modal.logId) : null;
+        const found = plannedWorkoutForDate(mm[1]==='lr' ? state.modal.data.date : (log && log.date));
+        if(found) refreshPartsHints(mm[1], draft, found.day, state.setup.units);
+      }
+      return;
+    }
+  }
   if(state.modal && state.modal.type==='log-run'){
     const d = state.modal.data;
     if(e.target.id==='lr-time'){
@@ -5631,14 +5837,15 @@ function onInput(e){
       e.target.value = formatted;
       d.time = formatted;
     }
-    if(e.target.id==='lr-dist'){ d.dist = e.target.value; }
+    if(e.target.id==='lr-dist'){ d.dist = e.target.value; if(d.by==='pace') d.time = timeFromPace(d.pace, d.dist); }
+    if(e.target.id==='lr-pace'){ const f = formatDurationDigits(e.target.value); e.target.value = f; d.pace = f; d.time = timeFromPace(d.pace, d.dist); }
     if(e.target.id==='lr-notes'){ d.notes = e.target.value; }
     if(e.target.id==='lr-rep'){ const f = formatDurationDigits(e.target.value); e.target.value = f; d.rep = f; }
     if(e.target.id==='lr-strava-rep' && state.modal.strava && state.modal.strava.confirm){ const f = formatDurationDigits(e.target.value); e.target.value = f; state.modal.strava.confirm.rep = f; }
-    if(e.target.id==='lr-time' || e.target.id==='lr-dist'){
+    if(e.target.id==='lr-time' || e.target.id==='lr-dist' || e.target.id==='lr-pace'){
       const hintEl = document.getElementById('lr-pace-hint');
       if(hintEl){
-        hintEl.textContent = 'Enter distance and time to see your pace per mile.';
+        hintEl.textContent = logPaceHint(d, state.setup.units);
         clearTimeout(lrPaceHintTimer);
         lrPaceHintTimer = setTimeout(()=>{
           const el2 = document.getElementById('lr-pace-hint');
