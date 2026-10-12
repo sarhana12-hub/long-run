@@ -100,7 +100,7 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   const html = require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
   const i = html.indexOf('function entryBy('), j = html.indexOf('function partHintText(', i);
   const names = Object.keys(g).filter(k=>/^[A-Za-z_$][\w$]*$/.test(k));
-  const page = new Function('g', `${names.map(k=>`const ${k} = g.${k};`).join('\n')}\n${html.slice(i, j)}\nreturn {partsDraftFor, partsFromDraft};`)(g);
+  const page = new Function('g', `${names.map(k=>`const ${k} = g.${k};`).join('\n')}\n${html.slice(i, j)}\nreturn {partsDraftFor, partsFromDraft, correctRoundedParts};`)(g);
   const bad = [];
   const pl = g.generatePlan({units:'mi', raceKey:'10k', raceDistanceKm:10, raceDate:'2026-10-31', currentWeeklyKm:20*MI, recentDistanceKm:5, recentTimeSec:23*60+15, longDow:6, weekStartDow:0, ...g.deriveScheduleFromLongDow(6,3), runsPerWeek:5, strengthPerWeek:3, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'hilly', skipBase:false, taperMode:'full'}, g.parseDate('2026-08-15'));
   const days = pl.weeks.flatMap(w=>w.days).filter(d=>((d.warmupKm||0)+(d.cooldownKm||0))>0.15 && d.type!=='race');
@@ -121,6 +121,18 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   ['warmup','main','cooldown'].forEach(p=>{ typed[p].time = '10:00'; }); typed.cooldown.dist = '1.1';
   const t = page.partsFromDraft(typed, 'mi', day);
   if(Math.abs(t.parts[2].km - 1.1*MI) > 0.002) bad.push('a typed cool-down distance was not used as typed: '+t.parts[2].km);
+  // runs saved before the fix: rounded parts are corrected once on load (no localStorage in
+  // node, so the time-kept branch), a typed part is left alone, and a second pass does nothing
+  { const unit='mi';
+    const rk = pn => g.unitToKm(Math.round(g.kmToUnit(pn==='warmup'?day.warmupKm:pn==='cooldown'?day.cooldownKm:day.km-day.warmupKm-day.cooldownKm, unit)*10)/10, unit);
+    const old = {id:'x', date:day.date, distanceKm:0, durationSec:0, parts:['warmup','main','cooldown'].map(pn=>({part:pn, km:Math.round(rk(pn)*1000)/1000, sec:600}))};
+    const logs = [old, {...old, id:'y', parts: old.parts.map(x=>x.part==='cooldown' ? {...x, km:1.1*MI} : x)}];
+    if(!page.correctRoundedParts(pl, logs, unit)) bad.push('rounded saved parts were not corrected on load');
+    if(Math.abs(logs[0].distanceKm - day.km) > 0.002) bad.push('corrected run is '+logs[0].distanceKm+' km, planned '+day.km);
+    if(logs[0].durationSec !== 1800) bad.push('time mode changed the times: '+logs[0].durationSec);
+    if(Math.abs(logs[1].parts[2].km - 1.1*MI) > 0.002) bad.push('a typed part was changed on load');
+    if(page.correctRoundedParts(pl, logs, unit)) bad.push('the correction ran twice');
+  }
   console.log('\n=== part distances add up to the plan ==='); if(bad.length){ failures++; [...new Set(bad)].slice(0,6).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
 // 152 race-pace wording follows whether a goal is set: no goal means the pace is the

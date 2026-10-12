@@ -1247,6 +1247,7 @@ function boot(){
   const setup = Store.getSetup();
   let plan = Store.getPlan();
   state.logs = Store.getLogs();
+  if(plan && setup && correctRoundedParts(plan, state.logs, setup.units||'km')) Store.setLogs(state.logs);
   state.strengthDone = Store.getStrengthDone();
   state.strengthShort = Store.getStrengthShort();
   state.strengthLong = Store.getStrengthLong();
@@ -4791,6 +4792,31 @@ function partsDraftFor(day, unit, log){
 // otherwise what was typed.
 function partKm(r, unit){ return (r && r.exactKm!=null && r.dist===r.shown) ? r.exactKm : (r && Number(r.dist)>0 ? unitToKm(Number(r.dist), unit) : 0); }
 function partDistU(r, unit){ const km = partKm(r, unit); return km>0 ? kmToUnit(km, unit) : 0; }
+// Runs logged part by part before defect 156 was fixed saved the rounded prefilled distances
+// (1.2 + 2.8 + 0.9 mi for a 5.0 mi day). Once, on load, a part whose distance is exactly that
+// rounded planned figure takes the exact planned distance. The old build kept no record of
+// whether a time or a pace was typed; the entry mode this device last used decides which is
+// kept (pace: the time is rescaled; time: the time stays). Parts the runner changed are left.
+function correctRoundedParts(plan, logs, unit){
+  let changed = false;
+  const byPace = entryBy()==='pace';
+  const days = {}; (plan.weeks||[]).forEach(w=>w.days.forEach(d=>{ days[d.date] = d; }));
+  logs.forEach((log, idx)=>{
+    if(log.partsExact || !Array.isArray(log.parts) || !log.parts.length) return;
+    const day = days[log.date];
+    if(!day || !dayHasParts(day)){ logs[idx] = {...log, partsExact:true}; changed = true; return; }
+    const parts = log.parts.map(x=>{
+      const planned = plannedPartKm(x.part, day);
+      const roundedKm = Math.round(unitToKm(Math.round(kmToUnit(planned, unit)*10)/10, unit)*1000)/1000;
+      if(!(planned>0) || Math.abs(x.km - roundedKm) > 0.0015 || Math.abs(x.km - planned) < 0.0015) return x;
+      return {...x, km: Math.round(planned*1000)/1000, sec: byPace ? Math.round(x.sec*planned/x.km) : x.sec};
+    });
+    const next = {...log, parts, partsExact:true};
+    if(LOG_PARTS.every(pn=>parts.some(x=>x.part===pn))){ next.distanceKm = Math.round(parts.reduce((a,x)=>a+x.km,0)*1000)/1000; next.durationSec = parts.reduce((a,x)=>a+x.sec,0); }
+    logs[idx] = next; changed = true;
+  });
+  return changed;
+}
 function partsFromDraft(draft, unit, day){
   const parts = [];
   for(const p of LOG_PARTS){
@@ -5456,7 +5482,7 @@ function onClick(e){
     const totalSec = parts && parts.complete ? parts.parts.reduce((a,x)=>a+x.sec,0) : durSec;
     if(!d.date || !totalKm || !totalSec){ showToast(parts ? 'Enter the total distance and time, or all three parts' : (d.by==='pace' ? 'Enter date, distance and pace' : 'Enter date, distance and time')); return; }
     const entry = {date:d.date, distanceKm:Math.round(totalKm*1000)/1000, durationSec:totalSec, notes:d.notes, createdAt:new Date().toISOString()};
-    if(parts) entry.parts = parts.parts;
+    if(parts){ entry.parts = parts.parts; entry.partsExact = true; }
     if(state.modal.scan && state.modal.scan.splits && state.modal.scan.splits.length) entry.splits = state.modal.scan.splits.map(x=>x.paceSecPerKm);
     if(d.kind==='race') entry.kind = 'race';
     else { const found = plannedWorkoutForDate(d.date); const repM = found ? repMetersForDay(found.day) : null; const repSec = parseDurationToSec(d.rep); if(repM && repSec>0){ entry.repSec = repSec; entry.repMeters = repM; } }
@@ -5505,7 +5531,7 @@ function onClick(e){
       const r = partsFromDraft(m.draft, unit, found.day);
       if(r.error){ showToast(r.error); return; }
       if(!r.parts.length){ showToast(`Enter at least the ${partLabel('main', found.day).toLowerCase()} time or pace`); return; }
-      updated = {...log, parts: r.parts};
+      updated = {...log, parts: r.parts, partsExact:true};
       // All three timed: the run's total is their sum, so the card and the week add up.
       if(r.complete){ updated.distanceKm = Math.round(r.parts.reduce((a,x)=>a+x.km,0)*1000)/1000; updated.durationSec = r.parts.reduce((a,x)=>a+x.sec,0); }
     }
