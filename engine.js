@@ -2059,7 +2059,9 @@ function validatePlan(plan, setup){
    "If you complete the plan" adds the scheduled gain still to come, in full. */
 const FITNESS = {
   halfLifeDays:21, sessionCapUp:2, sessionCapDown:3, totalCap:2, damping:1.5, recentSessions:5, lookbackDays:42,
-  typeWeight:{tempo:1, overunder:0.8, cruise:1, intervals:0.8, reps:0.5},
+  // racepace: a controlled segment at race pace, not an all-out effort, so it weighs least
+  // (owner decision 2026-10-12: count it, at a lower weight than the threshold sessions)
+  typeWeight:{tempo:1, overunder:0.8, cruise:1, intervals:0.8, reps:0.5, racepace:0.4},
   lowWindowDays:14, lowFraction:0.5, decayPerWeek:0.5, decayCap:2,
   potentialBand:0.6, noEvidenceBand:1.0,
 };
@@ -2134,15 +2136,26 @@ function projectFitness(plan, logs, today, opts){
     const hit = byDate[l.date]; if(!hit) return;
     const {day, week} = hit; const dd = parseDate(l.date);
     if(dd<=anchorDate || daysBetween(dd, today) > FITNESS.lookbackDays) return;
-    const type = day.type; let pace = null, pct = null;
+    const type = day.type; let pace = null, pct = null, implied = null;
     if(type==='tempo' || type==='overunder'){
       const baseVdot = week.baselineVdot!=null ? week.baselineVdot : plan.startVdot;
       pace = effortPaceSecPerKm(day, l, zonesForPlanVdot(plan, baseVdot).easyPerKm); pct = THRESHOLD_PCT;
     } else if((type==='cruise' || type==='intervals' || type==='reps') && l.repSec>0 && l.repMeters>0){
       pace = l.repSec/(l.repMeters/1000); pct = type==='cruise' ? THRESHOLD_PCT : type==='intervals' ? INTERVAL_PCT : REP_PCT;
+    } else if(type==='racepace' && plan.raceDistanceKm>0 && logMainPart(l)){
+      // Race pace counts only with the main set entered (defect 158). It is measured against
+      // the race pace the projection itself predicts at the fitness expected now, so running
+      // exactly that pace changes nothing; faster or slower moves fitness by the difference
+      // between the two race-equivalent VDOTs. The projection's own race model is used (not
+      // the raw VDOT curve), so a marathon's deliberately conservative pace is "on target".
+      const main = logMainPart(l), raceKm = plan.raceDistanceKm, expectedVdot = anchorVdot + earned;
+      const actualPace = main.sec/main.km, expectedSec = projectRaceTime(plan, expectedVdot, raceKm).sec;
+      if(actualPace>120 && actualPace<900 && expectedSec>0) implied = expectedVdot + (vdotFromRace(raceKm, actualPace*raceKm) - vdotFromRace(raceKm, expectedSec));
     }
-    if(pace==null || !(pace>120 && pace<900)) return;
-    const implied = impliedVdotFromPace(pace, pct);
+    if(implied==null){
+      if(pace==null || !(pace>120 && pace<900)) return;
+      implied = impliedVdotFromPace(pace, pct);
+    }
     const delta = clamp(implied - (anchorVdot + earned), -FITNESS.sessionCapDown, FITNESS.sessionCapUp);
     const weight = (FITNESS.typeWeight[type]||0.5) * Math.pow(0.5, daysBetween(dd, today)/FITNESS.halfLifeDays);
     samples.push({date:l.date, type, impliedVdot: round1(implied), delta: round1(delta), weight: Math.round(weight*100)/100});

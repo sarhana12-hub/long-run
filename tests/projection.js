@@ -172,6 +172,28 @@ console.log('8b. a tempo logged part by part: the main set as timed beats the es
   check('an on-target timed tempo barely moves now', Math.abs(fSplit.workoutAdjust) <= 0.3, String(fSplit.workoutAdjust));
 }
 
+console.log('8c. race pace counts through its timed part, at a lower weight (defect 158)');
+{
+  // A plan whose calendar has a race-pace day; the half plan above has them in its peak.
+  const r = dayOf('racepace'); const today = g.parseDate(r.day.date);
+  const before = fullLogsBefore(r.day.date);
+  const mainKm = r.day.km - (r.day.warmupKm||0) - (r.day.cooldownKm||0);
+  const withMain = secPerKm => ({id:'rp', date:r.day.date, distanceKm:r.day.km, durationSec:Math.round(r.day.km*r.week.paces.easyPerKm),
+    parts:[{part:'warmup', km:r.day.warmupKm, sec:Math.round(r.day.warmupKm*r.week.paces.easyPerKm)}, {part:'main', km:mainKm, sec:Math.round(mainKm*secPerKm)}, {part:'cooldown', km:r.day.cooldownKm, sec:Math.round(r.day.cooldownKm*r.week.paces.easyPerKm)}]});
+  const base = g.projectFitness(plan, before, today);
+  const predictedPace = g.projectRaceTime(plan, base.anchorVdot!=null ? base.anchorVdot + base.earnedGain : base.nowVdot, plan.raceDistanceKm).sec / plan.raceDistanceKm;
+  const fAt = g.projectFitness(plan, before.concat([withMain(predictedPace)]), today);
+  const fFast = g.projectFitness(plan, before.concat([withMain(predictedPace*0.97)]), today);
+  const fSlow = g.projectFitness(plan, before.concat([withMain(predictedPace*1.03)]), today);
+  const noParts = g.projectFitness(plan, before.concat([{id:'rp', date:r.day.date, distanceKm:r.day.km, durationSec:Math.round(r.day.km*predictedPace*0.9)}]), today);
+  check('it is used as evidence once the race-pace part is entered', fAt.evidence.some(x=>x.type==='racepace'));
+  check('at the predicted race pace it barely moves now', Math.abs(fAt.workoutAdjust - base.workoutAdjust) <= 0.15, `${fAt.workoutAdjust} vs ${base.workoutAdjust}`);
+  check('faster than predicted moves now up', fFast.workoutAdjust > fAt.workoutAdjust);
+  check('slower than predicted moves now down', fSlow.workoutAdjust < fAt.workoutAdjust);
+  check('it weighs less than a tempo session', g.FITNESS.typeWeight.racepace < g.FITNESS.typeWeight.tempo && g.FITNESS.typeWeight.racepace < g.FITNESS.typeWeight.reps);
+  check('without parts its pace is not used', !noParts.evidence.some(x=>x.type==='racepace'));
+}
+
 console.log('9. typed times read seconds first');
 {
   const P = g.parseDurationToSec;

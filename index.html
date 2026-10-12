@@ -4239,8 +4239,8 @@ function renderStatDetailModal(statKey){
         <summary><span class="lbl" style="font-weight:700; font-size:14.5px;">Methodology</span><span class="chev" style="color:var(--muted);">${ICONS.chevron}</span></summary>
         <div class="hint" style="margin:0 0 14px; font-size:13.5px; line-height:1.5;">
           <p style="margin:0 0 10px;"><strong>Three numbers, one model.</strong> Each time is the middle of a range, and the range is the reliable part. "At the start" is your setup fitness. "If you complete the plan" adds the gain the remaining sessions are expected to bring.</p>
-          <p style="margin:0 0 10px;"><strong>What moves "Now".</strong> A logged race resets it outright. Each quality session logged on its planned day banks its share of the plan's expected gain, about the gain six weeks of sessions usually bring. Tempo and over/under runs also count through their pace; cruise, interval and rep sessions through the average rep time you enter. The last five such runs within six weeks count, and one run only ever moves it a fraction.</p>
-          <p style="margin:0;"><strong>What doesn't.</strong> Hill, fartlek, progression and race-pace sessions bank their share but carry no pace evidence. Easy and long runs never move it: their pace says nothing about your ceiling. Two weeks under half the planned volume ease it down slowly.</p>
+          <p style="margin:0 0 10px;"><strong>What moves "Now".</strong> A logged race resets it outright. Each quality session logged on its planned day banks its share of the plan's expected gain, about the gain six weeks of sessions usually bring. Tempo and over/under runs also count through their pace; cruise, interval and rep sessions through the average rep time you enter; race-pace sessions, at a lower weight, through the race-pace part's time once you enter each part. The last five such runs within six weeks count, and one run only ever moves it a fraction.</p>
+          <p style="margin:0;"><strong>What doesn't.</strong> Hill, fartlek and progression sessions bank their share but carry no pace evidence. Easy and long runs never move it: their pace says nothing about your ceiling. Two weeks under half the planned volume ease it down slowly.</p>
         </div>
       </details>`;
     footnote = '';
@@ -4847,7 +4847,9 @@ function modalLogParts(){
 }
 function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
   const plannedKm = day.km;
-  const plannedPaceSecPerKm = day.paceKey ? (day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : getWeekPaces(plan, week, logs)[day.paceKey]) : null;
+  // The target as it stood before this run: a run that moves fitness moves the week's paces,
+  // and judging it against paces it already shifted would read it as on target (defect 158).
+  const plannedPaceSecPerKm = day.paceKey ? (day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : getWeekPaces(plan, week, logs.filter(l=>l.id!==log.id))[day.paceKey]) : null;
   // The pace shown next to duration is always the plain logged average (matches the
   // distance/time the runner actually entered) - but for a day with a warm-up baked in,
   // comparing THAT blended average directly against the pure quality-pace target would
@@ -4884,9 +4886,9 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
   // 5 seconds, because a completed session banks its share of the plan's fitness gain). The
   // change and its reasons come from projectionImpacts, the same calculation the projection
   // itself uses; the pace note says separately whether the run's pace counted.
-  const PACE_NOUNS = {easy:'easy runs', long:'long runs', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs', racepace:'race-pace runs'};
+  const PACE_NOUNS = {easy:'easy runs', long:'long runs', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs'};
   const repBased = ['intervals','cruise','reps'].includes(day.type);
-  const paceCounts = day.type==='tempo' || day.type==='overunder' || (repBased && log.repSec>0);
+  const paceCounts = day.type==='tempo' || day.type==='overunder' || (repBased && log.repSec>0) || (day.type==='racepace' && !!logMainPart(log));
   let impactLine;
   if(log.kind==='race'){
     impactLine = `A race result: it resets your fitness and the training paces from here on.`;
@@ -4903,7 +4905,7 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
       ? `${raceLabelKm(impactKm)} projection ${secToClock(Math.abs(impact.deltaSec))} ${impact.deltaSec<0?'faster':'slower'}${whyText}.`
       : why.length ? `Counted toward the projection${whyText}; no change from this run alone.` : `No change to the projection from this run alone.`;
     const noun = PACE_NOUNS[day.type];
-    const paceBit = paceCounts ? '' : repBased ? ' Enter the average rep time and its pace counts too.' : noun ? ` Its pace isn't used: ${noun} aren't a pace test.` : '';
+    const paceBit = paceCounts ? '' : repBased ? ' Enter the average rep time and its pace counts too.' : (day.type==='racepace' && dayHasParts(day)) ? ' Enter each part and the race-pace time counts too.' : noun ? ` Its pace isn't used: ${noun} aren't a pace test.` : '';
     let paceNote = '';
     if(paceCounts){
       const withPaces = getWeekPaces(plan, week, logs);
