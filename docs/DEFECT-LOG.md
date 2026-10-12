@@ -370,6 +370,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 155. **Only a time could be typed for a run** (owner: "the user should be able to enter a pace per mile and have the app calculate the time given a distance"). *Fix:* the run total and each part can be entered as a time or as a pace per mile or km ("Enter times" / "Enter paces"); with a pace, the time is worked out from the distance and shown, and that is what is saved. The choice is remembered on the device. The pace hint under the total also follows the runner's units (it always said "per mile").
 
+156. **Rounded part distances logged a run short of the plan** (owner screenshot: parts prefilled as 1.2, 2.8 and 0.9 mi saved the run as 4.9 mi against 5.0 planned). The planned parts are 2.0, 4.5 and 1.5 km, 4.97 mi; each box showed one decimal and the rounded figures were saved. *Fix:* the exact planned distance stays behind each prefilled box and is saved while the box still shows the prefilled figure; a typed distance is used as typed. A part saved earlier at the rounded planned figure is read back as the plan, so re-saving corrects it. A test checks every warm-up day of a plan, in miles and km, adds up to the planned distance.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
