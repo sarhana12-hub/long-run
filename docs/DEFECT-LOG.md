@@ -364,6 +364,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 152. **A race-pace day with no goal set said "your actual goal pace"** (owner screenshot, 10K plan with no goal time). Without a goal the race pace is the one the runner's current fitness predicts, and it moves as runs are logged. *Fix:* race-pace and race-day wording follow whether a goal is set; without one the page says the pace is predicted, that it updates as runs are logged, and that setting a goal time rehearses that instead.
 
+153. **A citation was still on screen after the owner asked for them to go** (owner screenshot): the treadmill note read "set a 1% incline to match outdoor effort (Jones & Doust 1996)". *Fix:* the citation is removed; the source stays in the code comment. A new test, `tests/no-citations.js`, fails on any author name, "et al", name-and-year or study wording in the page's own text or in anything the engine and exercise library generate across a spread of plans; it runs with `npm test`.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

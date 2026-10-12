@@ -2439,7 +2439,7 @@ function treadmillNote(day){
   if(!day.treadmill) return null;
   if(day.type==='hills' || day.terrain==='hilly' || day.hillStrides) return null; // the session text already carries its incline
   if(day.easyRole==='recovery') return 'Treadmill: 0–1% incline, speeds above are belt speed.';
-  return 'Treadmill: set a 1% incline to match outdoor effort (Jones & Doust 1996); speeds above are belt speed.';
+  return 'Treadmill: set a 1% incline to match outdoor effort. Speeds above are belt speed.';
 }
 function parseStrengthLine(line){
   const m = line.match(/^(\d+)×(\S+) (.+?) \(([^)]*)\) — (.*)$/);
