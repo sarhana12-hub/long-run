@@ -53,6 +53,22 @@ function todayDate(){ const n=new Date(); return new Date(n.getFullYear(),n.getM
 function kmToUnit(km, unit){ return unit==='mi' ? km/KM_PER_MI : km; }
 function unitToKm(v, unit){ return unit==='mi' ? v*KM_PER_MI : v; }
 function fmtDist(km, unit, digits){ digits = digits==null?1:digits; return `${kmToUnit(km,unit).toFixed(digits)} ${unit}`; }
+// The parts of a session as the runner reads them, to one decimal in their units, adding up
+// to the day's total as shown (defect 157: 2.0 / 4.5 / 1.5 km read as 1.2 + 2.8 + 0.9 mi on a
+// 5.0 mi day, so a runner who followed the text logged 4.9 mi against 5.0 planned). The main
+// set and the warm-up keep their own rounding; the cool-down takes up the difference (it is
+// the least prescriptive part). Without a cool-down the warm-up does.
+function shownPartsFor(day, unit){
+  const r1 = v => Math.round(v*10)/10;
+  const wuKm = day.warmupKm>0.15 ? day.warmupKm : 0, cdKm = day.cooldownKm>0.15 ? day.cooldownKm : 0;
+  const total = r1(kmToUnit(day.km, unit));
+  const main = r1(kmToUnit(Math.max(0, day.km - (day.warmupKm||0) - (day.cooldownKm||0)), unit));
+  let warmup = wuKm ? r1(kmToUnit(wuKm, unit)) : 0;
+  let cooldown = cdKm ? r1(total - main - warmup) : 0;
+  if(!cdKm && wuKm) warmup = r1(total - main);
+  if(cdKm && cooldown < 0.1){ cooldown = r1(kmToUnit(cdKm, unit)); warmup = r1(total - main - cooldown); }
+  return {warmup, main, cooldown, total};
+}
 function interp(anchors, x){
   if(x<=anchors[0][0]) return anchors[0][1];
   for(let i=0;i<anchors.length-1;i++){
@@ -2043,7 +2059,9 @@ function validatePlan(plan, setup){
    "If you complete the plan" adds the scheduled gain still to come, in full. */
 const FITNESS = {
   halfLifeDays:21, sessionCapUp:2, sessionCapDown:3, totalCap:2, damping:1.5, recentSessions:5, lookbackDays:42,
-  typeWeight:{tempo:1, overunder:0.8, cruise:1, intervals:0.8, reps:0.5},
+  // racepace: a controlled segment at race pace, not an all-out effort, so it weighs least
+  // (owner decision 2026-10-12: count it, at a lower weight than the threshold sessions)
+  typeWeight:{tempo:1, overunder:0.8, cruise:1, intervals:0.8, reps:0.5, racepace:0.4},
   lowWindowDays:14, lowFraction:0.5, decayPerWeek:0.5, decayCap:2,
   potentialBand:0.6, noEvidenceBand:1.0,
 };
@@ -2118,15 +2136,26 @@ function projectFitness(plan, logs, today, opts){
     const hit = byDate[l.date]; if(!hit) return;
     const {day, week} = hit; const dd = parseDate(l.date);
     if(dd<=anchorDate || daysBetween(dd, today) > FITNESS.lookbackDays) return;
-    const type = day.type; let pace = null, pct = null;
+    const type = day.type; let pace = null, pct = null, implied = null;
     if(type==='tempo' || type==='overunder'){
       const baseVdot = week.baselineVdot!=null ? week.baselineVdot : plan.startVdot;
       pace = effortPaceSecPerKm(day, l, zonesForPlanVdot(plan, baseVdot).easyPerKm); pct = THRESHOLD_PCT;
     } else if((type==='cruise' || type==='intervals' || type==='reps') && l.repSec>0 && l.repMeters>0){
       pace = l.repSec/(l.repMeters/1000); pct = type==='cruise' ? THRESHOLD_PCT : type==='intervals' ? INTERVAL_PCT : REP_PCT;
+    } else if(type==='racepace' && plan.raceDistanceKm>0 && logMainPart(l)){
+      // Race pace counts only with the main set entered (defect 158). It is measured against
+      // the race pace the projection itself predicts at the fitness expected now, so running
+      // exactly that pace changes nothing; faster or slower moves fitness by the difference
+      // between the two race-equivalent VDOTs. The projection's own race model is used (not
+      // the raw VDOT curve), so a marathon's deliberately conservative pace is "on target".
+      const main = logMainPart(l), raceKm = plan.raceDistanceKm, expectedVdot = anchorVdot + earned;
+      const actualPace = main.sec/main.km, expectedSec = projectRaceTime(plan, expectedVdot, raceKm).sec;
+      if(actualPace>120 && actualPace<900 && expectedSec>0) implied = expectedVdot + (vdotFromRace(raceKm, actualPace*raceKm) - vdotFromRace(raceKm, expectedSec));
     }
-    if(pace==null || !(pace>120 && pace<900)) return;
-    const implied = impliedVdotFromPace(pace, pct);
+    if(implied==null){
+      if(pace==null || !(pace>120 && pace<900)) return;
+      implied = impliedVdotFromPace(pace, pct);
+    }
     const delta = clamp(implied - (anchorVdot + earned), -FITNESS.sessionCapDown, FITNESS.sessionCapUp);
     const weight = (FITNESS.typeWeight[type]||0.5) * Math.pow(0.5, daysBetween(dd, today)/FITNESS.halfLifeDays);
     samples.push({date:l.date, type, impliedVdot: round1(implied), delta: round1(delta), weight: Math.round(weight*100)/100});
@@ -2239,7 +2268,7 @@ return {
   kmForMinutes, minutesForKm,
   vo2FromVelocity, velocityFromVO2, pctMaxForDurationMin, vdotFromRace, paceSecPerKmFromVdotPct, predictedTimeMinFromVdot,
   predictedPaceSecPerKmFromVdot, impliedVdotFromPace, EASY_PCT, THRESHOLD_PCT, INTERVAL_PCT, REP_PCT, paceZonesFromVdot,
-  LOG_PARTS, logMainPart, riegelSec, vvMarathonSecModel1, vvMarathonSecModel2, tandaMarathonSec, predictRace, assessGoal, buildAthlete, zonesForVdot, zonesForPlanVdot, projectRaceTime,
+  LOG_PARTS, logMainPart, shownPartsFor, riegelSec, vvMarathonSecModel1, vvMarathonSecModel2, tandaMarathonSec, predictRace, assessGoal, buildAthlete, zonesForVdot, zonesForPlanVdot, projectRaceTime,
   raceLabelKm, runsPerWeekFor,
   QUALITY_TYPES, WARMUP_ELIGIBLE_TYPES, STRIDES_ELIGIBLE_TYPES, STRIDES_REPS, STRIDES_EXTRA_KM, HILL_STRIDES_EXTRA_KM, QUALITY_WARMUP_KM, QUALITY_COOLDOWN_KM,
   TYPE_LABELS, isLegDemandingDay, isKeySessionDay, structuredEffort, buildWorkoutMeta,

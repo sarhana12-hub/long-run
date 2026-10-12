@@ -745,12 +745,12 @@ function raceProjectionFor(vdot, km){
 function warmupClause(day, weekPaces, unit, fmt){
   if(!(day.warmupKm>0.15)) return null;
   const pace = weekPaces && weekPaces.easyPerKm;
-  return `Warm up ${fmtDist(day.warmupKm, unit)} easy${pace!=null?` (${paceOrSpeedStr(pace,unit,fmt)})`:''}`;
+  return `Warm up ${shownPartsFor(day, unit).warmup.toFixed(1)} ${unit} easy${pace!=null?` (${paceOrSpeedStr(pace,unit,fmt)})`:''}`;
 }
 function cooldownClause(day, weekPaces, unit, fmt){
   if(!(day.cooldownKm>0.15)) return null;
   const pace = weekPaces && weekPaces.easyPerKm;
-  return `cool down ${fmtDist(day.cooldownKm, unit)} easy${pace!=null?` (${paceOrSpeedStr(pace,unit,fmt)})`:''}`;
+  return `cool down ${shownPartsFor(day, unit).cooldown.toFixed(1)} ${unit} easy${pace!=null?` (${paceOrSpeedStr(pace,unit,fmt)})`:''}`;
 }
 // Tempo/Race Pace have no reps/cycles structure of their own to imply a distance (unlike
 // hills' rep count or intervals' "N × Rm"), so once they carry a warm-up, the quality
@@ -761,7 +761,7 @@ function qualityDistancePrefix(day, unit){
   if(!(day.type==='tempo' || day.type==='racepace')) return '';
   if(!(day.warmupKm>0.15)) return '';
   const qualityKm = Math.max(0, day.km-(day.warmupKm||0)-(day.cooldownKm||0));
-  return qualityKm>0.15 ? `${fmtDist(qualityKm, unit)} ` : '';
+  return qualityKm>0.15 ? `${shownPartsFor(day, unit).main.toFixed(1)} ${unit} ` : '';
 }
 // A prefixed descBase ("4.3 mi Continuous, comfortably hard") reads oddly mid-sentence
 // with its normal leading capital - lowercase it only when qualityDistancePrefix actually
@@ -4239,8 +4239,8 @@ function renderStatDetailModal(statKey){
         <summary><span class="lbl" style="font-weight:700; font-size:14.5px;">Methodology</span><span class="chev" style="color:var(--muted);">${ICONS.chevron}</span></summary>
         <div class="hint" style="margin:0 0 14px; font-size:13.5px; line-height:1.5;">
           <p style="margin:0 0 10px;"><strong>Three numbers, one model.</strong> Each time is the middle of a range, and the range is the reliable part. "At the start" is your setup fitness. "If you complete the plan" adds the gain the remaining sessions are expected to bring.</p>
-          <p style="margin:0 0 10px;"><strong>What moves "Now".</strong> A logged race resets it outright. Each quality session logged on its planned day banks its share of the plan's expected gain, about the gain six weeks of sessions usually bring. Tempo and over/under runs also count through their pace; cruise, interval and rep sessions through the average rep time you enter. The last five such runs within six weeks count, and one run only ever moves it a fraction.</p>
-          <p style="margin:0;"><strong>What doesn't.</strong> Hill, fartlek, progression and race-pace sessions bank their share but carry no pace evidence. Easy and long runs never move it: their pace says nothing about your ceiling. Two weeks under half the planned volume ease it down slowly.</p>
+          <p style="margin:0 0 10px;"><strong>What moves "Now".</strong> A logged race resets it outright. Each quality session logged on its planned day banks its share of the plan's expected gain, about the gain six weeks of sessions usually bring. Tempo and over/under runs also count through their pace; cruise, interval and rep sessions through the average rep time you enter; race-pace sessions, at a lower weight, through the race-pace part's time once you enter each part. The last five such runs within six weeks count, and one run only ever moves it a fraction.</p>
+          <p style="margin:0;"><strong>What doesn't.</strong> Hill, fartlek and progression sessions bank their share but carry no pace evidence. Easy and long runs never move it: their pace says nothing about your ceiling. Two weeks under half the planned volume ease it down slowly.</p>
         </div>
       </details>`;
     footnote = '';
@@ -4764,32 +4764,24 @@ function entryByChipsHtml(act, by, extra){ return `<div class="chip-select" styl
 function dayHasParts(day){ return !!day && day.type!=='race' && ((day.warmupKm||0)+(day.cooldownKm||0))>0.15; }
 const MAIN_PART_LABEL = {tempo:'Tempo', racepace:'Race pace', overunder:'Over-unders', cruise:'Cruise intervals', intervals:'Reps and jogs', reps:'Reps and jogs', hills:'Hill reps and jogs'};
 function partLabel(part, day){ return part==='warmup' ? 'Warm-up' : part==='cooldown' ? 'Cool-down' : (MAIN_PART_LABEL[day && day.type] || 'Main set'); }
-function plannedPartKm(part, day){ return part==='warmup' ? (day.warmupKm||0) : part==='cooldown' ? (day.cooldownKm||0) : Math.max(0, day.km-(day.warmupKm||0)-(day.cooldownKm||0)); }
 // Form strings for the three parts: a saved log's parts when it has them, otherwise the
 // planned distances with the times left for the runner.
 function partsDraftFor(day, unit, log){
   const out = {};
   LOG_PARTS.forEach(p=>{
     const saved = log && Array.isArray(log.parts) ? log.parts.find(x=>x.part===p) : null;
-    // Planned distances show to one decimal, as the session text does, but the exact planned
-    // distance stays behind the box: left as shown, the exact figure is saved, so three
-    // rounded parts never add up to less than the plan (defect 156: 1.2 + 2.8 + 0.9 mi saved
-    // 4.9 mi against 5.0 planned). A saved part equal to the rounded plan counts as the plan.
-    const plannedKm = plannedPartKm(p, day);
-    const plannedShown = plannedKm>0 ? String(Math.round(kmToUnit(plannedKm, unit)*10)/10) : '';
-    const savedShown = saved ? String(Math.round(kmToUnit(saved.km, unit)*100)/100) : null;
-    const asPlanned = !saved || (plannedKm>0 && Math.abs(Number(savedShown) - Number(plannedShown)) < 0.005);
-    const shown = asPlanned ? plannedShown : savedShown;
-    out[p] = {dist: shown, shown, exactKm: asPlanned && plannedKm>0 ? plannedKm : null, time: saved ? secToClock(saved.sec) : ''};
+    // Planned parts as the session text gives them (they add up to the day's total, defect
+    // 157); a saved part as entered. What the box shows is what is saved.
+    const shownPlanned = shownPartsFor(day, unit)[p];
+    out[p] = {dist: saved ? String(Math.round(kmToUnit(saved.km, unit)*100)/100) : (shownPlanned>0 ? String(shownPlanned) : ''), time: saved ? secToClock(saved.sec) : ''};
     out[p].pace = paceFromTime(out[p].time, partDistU(out[p], unit));
   });
   out._by = entryBy();
   return out;
 }
 // Form strings -> saved parts. Only timed parts are kept; the main set must be one of them.
-// A part's distance: the exact planned one while the box still shows the prefilled figure,
-// otherwise what was typed.
-function partKm(r, unit){ return (r && r.exactKm!=null && r.dist===r.shown) ? r.exactKm : (r && Number(r.dist)>0 ? unitToKm(Number(r.dist), unit) : 0); }
+// A part's distance as the box shows it.
+function partKm(r, unit){ return (r && Number(r.dist)>0) ? unitToKm(Number(r.dist), unit) : 0; }
 function partDistU(r, unit){ const km = partKm(r, unit); return km>0 ? kmToUnit(km, unit) : 0; }
 function partsFromDraft(draft, unit, day){
   const parts = [];
@@ -4855,7 +4847,9 @@ function modalLogParts(){
 }
 function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
   const plannedKm = day.km;
-  const plannedPaceSecPerKm = day.paceKey ? (day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : getWeekPaces(plan, week, logs)[day.paceKey]) : null;
+  // The target as it stood before this run: a run that moves fitness moves the week's paces,
+  // and judging it against paces it already shifted would read it as on target (defect 158).
+  const plannedPaceSecPerKm = day.paceKey ? (day.paceOverrideSecPerKm!=null ? day.paceOverrideSecPerKm : getWeekPaces(plan, week, logs.filter(l=>l.id!==log.id))[day.paceKey]) : null;
   // The pace shown next to duration is always the plain logged average (matches the
   // distance/time the runner actually entered) - but for a day with a warm-up baked in,
   // comparing THAT blended average directly against the pure quality-pace target would
@@ -4887,25 +4881,40 @@ function renderLoggedComparisonHtml(day, log, plan, week, logs, unit, fmt){
     : repBasedDay ? '' : paceDeltaLine(comparisonPaceSecPerKm, plannedPaceSecPerKm, unit, fmt);
   const repCompared = repBasedDay && log.repSec>0 && !!plannedRepSec;
 
-  const NONELIGIBLE_NOUNS = {easy:'easy runs', long:'long runs', rest:'rest days', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs', racepace:'race-pace runs', race:'race-day runs'};
+  // The projection line says what logging this run actually did (defect 158: a race-pace
+  // day read "No impact on the projection" while logging it had moved the 10K projection
+  // 5 seconds, because a completed session banks its share of the plan's fitness gain). The
+  // change and its reasons come from projectionImpacts, the same calculation the projection
+  // itself uses; the pace note says separately whether the run's pace counted.
+  const PACE_NOUNS = {easy:'easy runs', long:'long runs', hills:'hill repeats', fartlek:'fartlek runs', progression:'progression runs'};
   const repBased = ['intervals','cruise','reps'].includes(day.type);
-  const eligible = log.kind==='race' || day.type==='tempo' || day.type==='overunder' || (repBased && log.repSec>0);
+  const paceCounts = day.type==='tempo' || day.type==='overunder' || (repBased && log.repSec>0) || (day.type==='racepace' && !!logMainPart(log));
   let impactLine;
   if(log.kind==='race'){
     impactLine = `A race result: it resets your fitness and the training paces from here on.`;
-  } else if(!eligible){
-    const noun = NONELIGIBLE_NOUNS[day.type];
-    impactLine = repBased ? `Not used for the projection: enter the average rep time to count this session.` : (noun ? `No impact on the projection — ${noun} aren't used for it.` : `No impact on the projection — this run type isn't used for it.`);
   } else {
-    const withPaces = getWeekPaces(plan, week, logs);
-    const withoutPaces = getWeekPaces(plan, week, logs.filter(l=>l.id!==log.id));
-    const deltaSecPerKm = withPaces.tempoPerKm - withoutPaces.tempoPerKm;
-    const deltaPerUnit = unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm;
     const impactKm = isGeneralPlan(state.setup) ? 5 : plan.raceDistanceKm;
     const impact = projectionImpacts(plan, logs, todayDate(), impactKm, {trackingStart: state.setup.trackingStartDate}).find(x=>x.id===log.id);
-    const projNote = impact && impact.deltaSec!==0 ? `${raceLabelKm(impactKm)} projection ${secToClock(Math.abs(impact.deltaSec))} ${impact.deltaSec<0?'faster':'slower'}.` : 'Counted toward the projection; no change from this run alone.';
-    const paceNote = Math.abs(deltaPerUnit)>=1 ? ` Training paces about ${Math.round(Math.abs(deltaPerUnit))} sec/${unit} ${deltaPerUnit>0?'slower':'faster'}.` : '';
-    impactLine = projNote + paceNote;
+    const why = [];
+    if(impact && impact.reasons.includes('session')) why.push('completing the session counts toward the fitness the plan builds');
+    if(impact && impact.reasons.includes('pace-up')) why.push('its pace showed more fitness than planned');
+    if(impact && impact.reasons.includes('pace-down')) why.push('its pace showed less fitness than planned');
+    if(impact && impact.reasons.includes('volume-up')) why.push('it brings your running back toward the plan');
+    const whyText = why.length ? ': '+why.join(', and ') : '';
+    const head = (impact && impact.deltaSec!==0)
+      ? `${raceLabelKm(impactKm)} projection ${secToClock(Math.abs(impact.deltaSec))} ${impact.deltaSec<0?'faster':'slower'}${whyText}.`
+      : why.length ? `Counted toward the projection${whyText}; no change from this run alone.` : `No change to the projection from this run alone.`;
+    const noun = PACE_NOUNS[day.type];
+    const paceBit = paceCounts ? '' : repBased ? ' Enter the average rep time and its pace counts too.' : (day.type==='racepace' && dayHasParts(day)) ? ' Enter each part and the race-pace time counts too.' : noun ? ` Its pace isn't used: ${noun} aren't a pace test.` : '';
+    let paceNote = '';
+    if(paceCounts){
+      const withPaces = getWeekPaces(plan, week, logs);
+      const withoutPaces = getWeekPaces(plan, week, logs.filter(l=>l.id!==log.id));
+      const deltaSecPerKm = withPaces.tempoPerKm - withoutPaces.tempoPerKm;
+      const deltaPerUnit = unit==='mi' ? deltaSecPerKm*KM_PER_MI : deltaSecPerKm;
+      paceNote = Math.abs(deltaPerUnit)>=1 ? ` Training paces about ${Math.round(Math.abs(deltaPerUnit))} sec/${unit} ${deltaPerUnit>0?'slower':'faster'}.` : '';
+    }
+    impactLine = head.charAt(0).toUpperCase()+head.slice(1) + paceBit + paceNote;
   }
 
   return `<div class="card" style="padding:14px 16px; margin-bottom:16px; background:var(--done-bg); border-color:var(--done);">

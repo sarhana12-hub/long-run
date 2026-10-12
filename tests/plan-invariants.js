@@ -94,34 +94,45 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   const names = full[0].strengthExercises.map(l=>l.replace(/^\d+×\S+\s+/,'').split(' (')[0]); if(new Set(names).size!==names.length) bad.push('full upper session repeats an exercise: '+names.join(', '));
   console.log('\n=== upper session standard vs full ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
-// 156 part distances left as prefilled add up to the planned day, never the rounded figures;
-// a distance the runner types is used as typed
+// 157 what the runner reads adds up: on every day with a warm-up, the session text's warm-up,
+// main set and cool-down sum to the day's total as shown, and the parts sheet prefills the
+// same figures (owner: 1.2 + 2.8 + 0.9 mi read on a 5.0 mi day, logged 4.9 vs 5.0 planned)
 {
   const html = require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
   const i = html.indexOf('function entryBy('), j = html.indexOf('function partHintText(', i);
   const names = Object.keys(g).filter(k=>/^[A-Za-z_$][\w$]*$/.test(k));
   const page = new Function('g', `${names.map(k=>`const ${k} = g.${k};`).join('\n')}\n${html.slice(i, j)}\nreturn {partsDraftFor, partsFromDraft};`)(g);
-  const bad = [];
-  const pl = g.generatePlan({units:'mi', raceKey:'10k', raceDistanceKm:10, raceDate:'2026-10-31', currentWeeklyKm:20*MI, recentDistanceKm:5, recentTimeSec:23*60+15, longDow:6, weekStartDow:0, ...g.deriveScheduleFromLongDow(6,3), runsPerWeek:5, strengthPerWeek:3, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'hilly', skipBase:false, taperMode:'full'}, g.parseDate('2026-08-15'));
-  const days = pl.weeks.flatMap(w=>w.days).filter(d=>((d.warmupKm||0)+(d.cooldownKm||0))>0.15 && d.type!=='race');
-  if(!days.length) bad.push('no day with a warm-up to test');
-  for(const unit of ['mi','km']) days.forEach(day=>{
-    const draft = page.partsDraftFor(day, unit, null);
-    ['warmup','main','cooldown'].forEach(p=>{ draft[p].time = '10:00'; });
-    const r = page.partsFromDraft(draft, unit, day);
-    const sum = r.parts.reduce((a,x)=>a+x.km,0);
-    if(Math.abs(sum - day.km) > 0.002) bad.push(`${day.date} ${day.type} (${unit}): parts as prefilled add to ${sum.toFixed(3)} km, planned ${day.km}`);
-    // the owner's saved state: rounded parts saved earlier are read back as the plan
-    const roundedSaved = {parts: r.parts.map(x=>({...x, km: g.unitToKm(Math.round(g.kmToUnit(x.km, unit)*10)/10, unit)}))};
-    const again = page.partsFromDraft(page.partsDraftFor(day, unit, roundedSaved), unit, day);
-    const sum2 = again.parts.reduce((a,x)=>a+x.km,0);
-    if(Math.abs(sum2 - day.km) > 0.002) bad.push(`${day.date} (${unit}): rounded saved parts re-saved as ${sum2.toFixed(3)} km, planned ${day.km}`);
+  const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();
+  const bad = []; let checked = 0;
+  const profiles = [{race:'10k', km:10, mpw:20, runs:5, longDow:6, dayOne:'2026-08-15', raceDate:'2026-10-31'}, {race:'half', km:21.0975, mpw:30, runs:5, longDow:0, weeks:14}, {race:'marathon', km:42.195, mpw:40, runs:5, longDow:0, weeks:18}, {race:'5k', km:5, mpw:15, runs:4, longDow:6, weeks:10}];
+  profiles.forEach(pr=>{
+    let rd = pr.raceDate; if(!rd){ let d = g.addDays(g.todayDate(), pr.weeks*7); while(d.getDay()!==6) d = g.addDays(d,1); rd = g.fmtDate(d); }
+    const pl = g.generatePlan({units:'mi', raceKey:pr.race, raceDistanceKm:pr.km, raceDate:rd, currentWeeklyKm:pr.mpw*MI, recentDistanceKm:5, recentTimeSec:24*60, longDow:pr.longDow, weekStartDow:0, ...g.deriveScheduleFromLongDow(pr.longDow,2), runsPerWeek:pr.runs, strengthPerWeek:2, longRunEmphasis:'balanced', speedEmphasis:'balanced', hillsMode:'flat', skipBase:false, taperMode:'full'}, pr.dayOne ? g.parseDate(pr.dayOne) : undefined);
+    pl.weeks.forEach(w=>w.days.filter(d=>((d.warmupKm||0)+(d.cooldownKm||0))>0.15 && d.type!=='race').forEach(day=>{
+      for(const unit of ['mi','km']){
+        checked++;
+        const total = Number(g.kmToUnit(day.km, unit).toFixed(1));
+        if(day.type==='tempo' || day.type==='racepace'){
+          const text = ui.workoutPartsFor(day, w.paces, unit, 'pace').join(' | ');
+          const num = re => { const m = text.match(re); return m ? Number(m[1]) : null; };
+          const wu = num(new RegExp('Warm up ([\\d.]+) '+unit)), cd = num(new RegExp('[Cc]ool down ([\\d.]+) '+unit)), main = num(new RegExp('\\| ([\\d.]+) '+unit+' (?:continuous|at)'));
+          if(wu==null || main==null) bad.push(`${day.date} ${day.type} (${unit}): parts not found in "${text.slice(0,120)}"`);
+          else if(Math.abs(wu + main + (cd||0) - total) > 0.001) bad.push(`${day.date} ${day.type} (${unit}): text reads ${wu} + ${main} + ${cd||0} = ${(wu+main+(cd||0)).toFixed(1)}, day shows ${total}`);
+        }
+        const draft = page.partsDraftFor(day, unit, null);
+        const sum = ['warmup','main','cooldown'].reduce((a,p)=>a+(Number(draft[p].dist)||0),0);
+        if(Math.abs(sum - total) > 0.001) bad.push(`${day.date} ${day.type} (${unit}): parts sheet prefills ${sum.toFixed(1)}, day shows ${total}`);
+      }
+    }));
   });
-  const day = days[0]; const typed = page.partsDraftFor(day, 'mi', null);
-  ['warmup','main','cooldown'].forEach(p=>{ typed[p].time = '10:00'; }); typed.cooldown.dist = '1.1';
+  if(checked < 20) bad.push('only '+checked+' warm-up days checked');
+  // a distance the runner types is saved as typed
+  const pl = g.generatePlan({units:'mi', raceKey:'10k', raceDistanceKm:10, raceDate:'2026-10-31', currentWeeklyKm:20*MI, recentDistanceKm:5, recentTimeSec:23*60+15, longDow:6, weekStartDow:0, ...g.deriveScheduleFromLongDow(6,3), runsPerWeek:5, strengthPerWeek:3, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'hilly', skipBase:false, taperMode:'full'}, g.parseDate('2026-08-15'));
+  const day = pl.weeks.flatMap(w=>w.days).find(d=>d.warmupKm>0.15);
+  const typed = page.partsDraftFor(day, 'mi', null); ['warmup','main','cooldown'].forEach(p=>{ typed[p].time = '10:00'; }); typed.cooldown.dist = '1.1';
   const t = page.partsFromDraft(typed, 'mi', day);
   if(Math.abs(t.parts[2].km - 1.1*MI) > 0.002) bad.push('a typed cool-down distance was not used as typed: '+t.parts[2].km);
-  console.log('\n=== part distances add up to the plan ==='); if(bad.length){ failures++; [...new Set(bad)].slice(0,6).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+  console.log(`\n=== what the runner reads adds up (${checked} warm-up days, mi and km) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,6).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
 // 152 race-pace wording follows whether a goal is set: no goal means the pace is the
 // predicted one, and the page must not call it "your goal pace"
