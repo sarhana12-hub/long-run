@@ -154,7 +154,7 @@ const EXERCISE_LIBRARY = {
     art2: {view:'front', start:{x:60, y:120, stance:14, arms:{angle:18, fore:178}}, finish:{x:170, y:150, stance:22, kneeOut:6, bend:1, arms:{angle:18, fore:178}}, scene:['floor', {text:[126,234,'knees out, chest tall']}]},
   },
   'Bodyweight squat': {
-    summary: 'The squat with no load. Slow on the way down so it still counts.',
+    summary: 'The squat with no load. Three seconds on the way down so it still counts.',
     setup: ['Feet shoulder-width, arms out in front for balance.'],
     move: ['Sit down and back for three seconds until the thighs are about level.', 'Stand up through the whole foot.'],
     cues: ['Chest up, knees over the toes.', 'Control the lowering; the slow part is the work.'],
