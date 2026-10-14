@@ -810,6 +810,20 @@ function fillPacePlaceholders(text, day, weekPaces, unit, fmt){
     .replace(/\{pace\}/g, own!=null ? paceOrSpeedStr(own, unit, fmt) : 'the target pace').replace(/\{easy\}/g, easy!=null ? paceOrSpeedStr(easy, unit, fmt) : 'easy');
   return {text: out, hasPlaceholder};
 }
+// Treadmills count in miles, so on a treadmill day every metre distance gets a rough mile
+// equivalent beside it (defect 161, owner: "800m can be treated as half a mile"). Multiples
+// of 400 m are clean quarters (400 m = 0.25 mi, 800 m = 0.5, 1600 m = 1); anything else is the
+// nearest tenth (1000 m = 0.6, 600 m = 0.4, a 300 m jog = 0.2). Metric runners' treadmills
+// already count in km, so their text is left as it is.
+function treadmillMilesFor(meters){
+  const q = meters/400;
+  if(Math.abs(q - Math.round(q)) < 1e-9) return String(Math.round(q)*0.25).replace(/^0\./,'0.');
+  return (Math.round(meters/1609.344*10)/10).toFixed(1);
+}
+function withTreadmillMiles(text, day, unit){
+  if(!text || !day || !day.treadmill || unit!=='mi') return text;
+  return text.replace(/\b(\d{3,5})m\b(?! \()/g, (m, n)=>`${n}m (${treadmillMilesFor(Number(n))} mi)`);
+}
 function renderWorkoutText(day, weekPaces, unit, fmt){
   if(!day.descBase) return '';
   const segs = [];
@@ -832,7 +846,7 @@ function renderWorkoutText(day, weekPaces, unit, fmt){
   if(day.strides) text += day.hillStrides ? ` + hill strides (${stridesDetail(day, unit)})` : ` + strides (${stridesDetail(day, unit)})`;
   if(day.terrain==='hilly') text += day.treadmillHills ? ' — set a 1–2% incline throughout to mimic the terrain' : ' — rolling hills, run by effort not pace';
   else if(day.terrain==='suggested') text += day.treadmillHills ? ' — a 1% incline offsets the lack of wind resistance indoors, if you’d like' : ' — rolling terrain if you have it';
-  return text;
+  return withTreadmillMiles(text, day, unit);
 }
 // One-line summary for the Plan tab's day cards - what the session IS and the one pace
 // that matters. The full warm-up/main/cool-down walk-through stays in the day sheet.
@@ -859,7 +873,7 @@ function daySummaryText(day, weekPaces, unit, fmt){
     default: return dayDisplayText(day, weekPaces, unit, fmt);
   }
   if(day.terrain==='hilly') parts.push('rolling hills');
-  return parts.join(' · ');
+  return withTreadmillMiles(parts.join(' · '), day, unit);
 }
 function dayDisplayText(day, weekPaces, unit, fmt){
   if(day.descBase==null && day.notes!=null) return day.notes; // plans saved before this update
@@ -896,7 +910,7 @@ function workoutPartsFor(day, weekPaces, unit, fmt){
   if(day.strides) parts.push((day.hillStrides ? 'Finish with hill strides — ' : 'Finish with strides — ') + stridesDetail(day, unit));
   if(day.terrain==='hilly') parts.push(day.treadmillHills ? 'Course: set a 1–2% incline throughout to mimic the terrain' : 'Course: rolling hills — run by effort, not pace');
   else if(day.terrain==='suggested') parts.push(day.treadmillHills ? 'Course: a 1% incline offsets the lack of wind resistance indoors, if you’d like' : 'Rolling terrain if you have it');
-  return parts;
+  return parts.map(t=>withTreadmillMiles(t, day, unit));
 }
 function paceInputValue(effectiveSecPerKm, unit, fmt){
   if(effectiveSecPerKm==null) return '';
