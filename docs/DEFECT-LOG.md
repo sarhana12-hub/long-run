@@ -384,6 +384,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 162. **Switching between "Enter times" and "Enter paces" threw the runner out of the box and back to the top** (owner). Each switch redrew the whole page or sheet. *Fix:* the switch swaps the sheet's contents in place (its scroll kept) or redraws the page with its scroll kept, and a box left a moment before gets the cursor back, or its twin in the other mode (a part's time box and its pace box, the total's time and pace, the rep time and rep pace, each setup race's time and pace). The log form's "Enter each part" section stays open once used. Setup boxes also redrew the page on losing focus while the finger was still on the button being tapped, which could swallow the tap and jump the page; that redraw now waits for the finger to lift and keeps the scroll.
 
+163. **Switching to paces in one place switched every place** (owner: "I might want to enter paces for the intervals but a time for the overall run"). All the time-or-pace choices shared one saved preference. *Fix:* each place keeps its own: a run's total, its parts, interval reps, and setup's race results and goal. A place never chosen starts from the single choice saved before, so nobody's current setting changes.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan

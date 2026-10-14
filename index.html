@@ -1984,7 +1984,7 @@ const SETUP_TIME_FIELDS = [
   {key:'recent2', time:'recent2Time', pace:'recent2Pace', km: d=>{ const p = d.recent2DistanceKey ? RACE_PRESETS.find(r=>r.key===d.recent2DistanceKey) : null; return p ? p.km : null; }},
   {key:'goal', time:'goalTime', pace:'goalPace', km: d=>d.raceDistanceKm||null},
 ];
-function setupBy(d){ if(!d.timeBy) d.timeBy = entryBy(); return d.timeBy; }
+function setupBy(d){ if(!d.timeBy) d.timeBy = entryBy('setup'); return d.timeBy; }
 // A pace typed for one field: its time follows from that field's distance.
 function syncSetupTimeFromPace(d, f){ const km = f.km(d); if(km && d[f.pace]) d[f.time] = timeFromPace(d[f.pace], kmToUnit(km, d.units)); }
 // Paces shown for the times already held (switching to paces, or after a units change).
@@ -4648,7 +4648,7 @@ function repFieldHtml(dateStr, repValue, idPrefix, by, repPace, note){
   if(!day || !['intervals','cruise','reps'].includes(day.type)) return '';
   const repM = repMetersForDay(day);
   if(!repM) return '';
-  const unit = state.setup.units; by = by || entryBy();
+  const unit = state.setup.units; by = by || entryBy('rep');
   const input = by==='pace'
     ? `<label class="field-label" for="${idPrefix}-rep-pace">Average rep pace (m:ss per ${unit})</label><input class="input" type="text" inputmode="numeric" id="${idPrefix}-rep-pace" value="${esc(repPace||'')}" placeholder="e.g. 7:45">`
     : `<label class="field-label" for="${idPrefix}-rep">Average time per ${repM} m rep (m:ss)</label><input class="input" type="text" inputmode="numeric" id="${idPrefix}-rep" value="${esc(repValue||'')}" placeholder="e.g. 3:45">`;
@@ -4757,9 +4757,9 @@ function modalLogManualHtml(d){
     </div>
     ${d.kind==='race' ? `<div class="hint" style="margin:-6px 0 14px;">A race result resets your fitness and every training pace from here on.</div>` : ''}
     <div id="lr-planned">${d.kind==='race' ? '' : plannedWorkoutHtml(d.date)}</div>
-    ${d.kind==='race' ? '' : repFieldHtml(d.date, d.rep, 'lr', d.repBy, d.repPace)}
+    ${d.kind==='race' ? '' : repFieldHtml(d.date, d.rep, 'lr', d.repBy || (d.repBy = entryBy('rep')), d.repPace)}
     ${d.kind==='race' ? '' : logFormPartsHtml(d, unit)}
-    ${entryByChipsHtml('log-by', d.by || (d.by = entryBy()))}
+    ${entryByChipsHtml('log-by', d.by || (d.by = entryBy('total')))}
     <div class="row">
       <div class="field"><label class="field-label">Distance (${unit})</label><input class="input" type="number" inputmode="decimal" step="0.01" min="0" id="lr-dist" value="${d.dist}" placeholder="e.g. 5.2"></div>
       ${d.by==='pace'
@@ -4842,8 +4842,15 @@ function paceDeltaLine(actualPaceSecPerKm, plannedPaceSecPerKm, unit, fmt){
 // set look faster than it was. Entering parts is optional; the main-set time is what counts.
 // Times or paces: a runner can type either; with a pace, the time is worked out from the
 // distance. The choice is remembered on this device (a convenience, not plan data).
-function entryBy(){ try{ return localStorage.getItem('lr_entry_by')==='pace' ? 'pace' : 'time'; }catch(e){ return 'time'; } }
-function setEntryBy(by){ try{ localStorage.setItem('lr_entry_by', by); }catch(e){} }
+// Each place keeps its own choice (defect 163, owner: "I might want to enter paces for the
+// intervals but a time for the overall run"): 'total' (a run's distance and time), 'parts'
+// (warm-up / main set / cool-down), 'rep' (interval reps), 'setup' (race results and goal).
+// A place never chosen starts from the single choice the app kept before, so nobody's
+// current setting changes.
+function entryBy(place){
+  try{ const v = localStorage.getItem('lr_entry_by_'+place) || localStorage.getItem('lr_entry_by'); return v==='pace' ? 'pace' : 'time'; }catch(e){ return 'time'; }
+}
+function setEntryBy(place, by){ try{ localStorage.setItem('lr_entry_by_'+place, by); }catch(e){} }
 function timeFromPace(paceStr, dist){ const ps = parseDurationToSec(paceStr), v = Number(dist); return (ps>0 && v>0) ? secToClock(Math.round(ps*v)) : ''; }
 function paceFromTime(timeStr, dist){ const ts = parseDurationToSec(timeStr), v = Number(dist); return (ts>0 && v>0) ? secToClock(Math.round(ts/v)) : ''; }
 function entryByChipsHtml(act, by, extra){ return `<div class="chip-select" style="margin:0 0 10px;"><button class="chip ${by==='time'?'active':''}" data-act="${act}" data-by="time"${extra||''}>Enter times</button><button class="chip ${by==='pace'?'active':''}" data-act="${act}" data-by="pace"${extra||''}>Enter paces</button></div>`; }
@@ -4862,7 +4869,7 @@ function partsDraftFor(day, unit, log){
     out[p] = {dist: saved ? String(Math.round(kmToUnit(saved.km, unit)*100)/100) : (shownPlanned>0 ? String(shownPlanned) : ''), time: saved ? secToClock(saved.sec) : ''};
     out[p].pace = paceFromTime(out[p].time, partDistU(out[p], unit));
   });
-  out._by = entryBy();
+  out._by = entryBy('parts');
   return out;
 }
 // Form strings -> saved parts. Only timed parts are kept; the main set must be one of them.
@@ -5436,7 +5443,7 @@ function onClick(e){
     render(); const i = document.getElementById('in-custom-dist'); if(i) i.focus();
     return;
   }
-  if(act==='setup-by'){ const d = state.onboardDraft; d.timeBy = el.dataset.by; setEntryBy(d.timeBy); if(d.timeBy==='pace') syncSetupPacesFromTimes(d); rerenderKeepingPlace(); return; }
+  if(act==='setup-by'){ const d = state.onboardDraft; d.timeBy = el.dataset.by; setEntryBy('setup', d.timeBy); if(d.timeBy==='pace') syncSetupPacesFromTimes(d); rerenderKeepingPlace(); return; }
   if(act==='pick-recent'){ state.onboardDraft.recentDistanceKey = el.dataset.key; resyncSetupTimes(state.onboardDraft); render(); return; }
   if(act==='pick-goal-mode'){ state.onboardDraft.goalMode = el.dataset.mode; render(); return; }
   if(act==='pick-hills-mode'){ state.onboardDraft.hillsMode = el.dataset.mode; render(); return; }
@@ -5518,14 +5525,14 @@ function onClick(e){
   if(act==='parts-by'){
     const draft = el.dataset.prefix==='lr' ? state.modal.data.parts : state.modal.draft;
     if(el.dataset.prefix==='lr' && state.modal.data) state.modal.data.partsOpen = true;
-    if(draft){ draft._by = el.dataset.by; setEntryBy(el.dataset.by); const u = state.setup.units; LOG_PARTS.forEach(p=>{ const r = draft[p]; if(r){ if(el.dataset.by==='pace') r.pace = paceFromTime(r.time, partDistU(r, u)) || r.pace || ''; else r.time = r.time || timeFromPace(r.pace, partDistU(r, u)); } }); }
+    if(draft){ draft._by = el.dataset.by; setEntryBy('parts', el.dataset.by); const u = state.setup.units; LOG_PARTS.forEach(p=>{ const r = draft[p]; if(r){ if(el.dataset.by==='pace') r.pace = paceFromTime(r.time, partDistU(r, u)) || r.pace || ''; else r.time = r.time || timeFromPace(r.pace, partDistU(r, u)); } }); }
     rerenderKeepingPlace(); return;
   }
   if(act==='rep-by'){
     const strava = el.dataset.prefix==='lr-strava';
     const target = strava ? (state.modal.strava && state.modal.strava.confirm) : state.modal.data;
     if(target){
-      target.repBy = el.dataset.by; setEntryBy(el.dataset.by);
+      target.repBy = el.dataset.by; setEntryBy('rep', el.dataset.by);
       const found = plannedWorkoutForDate(target.date); const repM = found ? repMetersForDay(found.day) : null;
       if(el.dataset.by==='pace') target.repPace = repPaceFromTime(target.rep, repM, state.setup.units) || target.repPace || '';
       else target.rep = target.rep || repTimeFromPace(target.repPace, repM, state.setup.units);
@@ -5533,7 +5540,7 @@ function onClick(e){
     rerenderKeepingPlace(); return;
   }
   if(act==='log-by'){
-    const d = state.modal.data; d.by = el.dataset.by; setEntryBy(d.by);
+    const d = state.modal.data; d.by = el.dataset.by; setEntryBy('total', d.by);
     if(d.by==='pace') d.pace = paceFromTime(d.time, d.dist) || d.pace || ''; else d.time = d.time || timeFromPace(d.pace, d.dist);
     rerenderKeepingPlace(); return;
   }
