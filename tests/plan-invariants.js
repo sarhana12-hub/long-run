@@ -94,6 +94,30 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   const names = full[0].strengthExercises.map(l=>l.replace(/^\d+×\S+\s+/,'').split(' (')[0]); if(new Set(names).size!==names.length) bad.push('full upper session repeats an exercise: '+names.join(', '));
   console.log('\n=== upper session standard vs full ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
+{
+  const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();
+  const pl = g.generatePlan({units:'mi', raceKey:'10k', raceDistanceKm:10, raceDate:'2026-10-31', currentWeeklyKm:30*MI, recentDistanceKm:5, recentTimeSec:23*60, longDow:6, weekStartDow:0, ...g.deriveScheduleFromLongDow(6,2), runsPerWeek:5, strengthPerWeek:2, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'flat', skipBase:false, taperMode:'full'}, g.parseDate('2026-08-15'));
+  const bad = []; let seen = 0;
+  pl.weeks.forEach(w=>w.days.filter(d=>/\d{3,5}m\b/.test(d.descBase||'')).forEach(d=>{
+    seen++;
+    const tm = {...d, treadmill:true};
+    const parts = ui.workoutPartsFor(tm, w.paces, 'mi', 'speed').join(' | ');
+    const summary = ui.daySummaryText(tm, w.paces, 'mi', 'speed');
+    for(const [where, text] of [['day sheet', parts], ['day card', summary]]){
+      const bare = (text.match(/\b\d{3,5}m\b(?! \(\d)/g)||[]);
+      if(bare.length) bad.push(`${d.date} ${d.type} ${where}: metres without miles: ${bare.join(', ')} in "${text.slice(0,100)}"`);
+    }
+    const off = ui.workoutPartsFor(d, w.paces, 'mi', 'pace').join(' | ');
+    if(/\d+m \(\d/.test(off)) bad.push(`${d.date}: mile equivalents shown off the treadmill`);
+    const km = ui.workoutPartsFor(tm, w.paces, 'km', 'speed').join(' | ');
+    if(/\d+m \(\d/.test(km)) bad.push(`${d.date}: mile equivalents shown in km`);
+  }));
+  const one = pl.weeks.flatMap(w=>w.days.map(d=>({d,w}))).find(x=>/800m/.test(x.d.descBase||''));
+  if(one && !ui.workoutPartsFor({...one.d, treadmill:true}, one.w.paces, 'mi', 'speed').join(' ').includes('800m (0.5 mi)')) bad.push('800m is not shown as 0.5 mi');
+  if(seen < 3) bad.push('only '+seen+' days with metre distances checked');
+  console.log(`\n=== treadmill days show miles beside metres (${seen} days) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,6).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 157 what the runner reads adds up: on every day with a warm-up, the session text's warm-up,
 // main set and cool-down sum to the day's total as shown, and the parts sheet prefills the
 // same figures (owner: 1.2 + 2.8 + 0.9 mi read on a 5.0 mi day, logged 4.9 vs 5.0 planned)
