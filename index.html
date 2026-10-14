@@ -1930,17 +1930,38 @@ function animalPaceComparison(mph){
   const pick = pool[Math.floor(Math.random()*pool.length)];
   return `about the running pace of ${pick.name}. ${pick.quip}`;
 }
+// Race results and the goal can be typed as a finish time or as a pace (defect 160): the
+// time is worked out from the race distance and stays the value the plan is built from.
+const SETUP_TIME_FIELDS = [
+  {key:'recent', time:'recentTime', pace:'recentPace', km: d=>{ const p = RACE_PRESETS.find(r=>r.key===d.recentDistanceKey); return p ? p.km : null; }},
+  {key:'recent2', time:'recent2Time', pace:'recent2Pace', km: d=>{ const p = d.recent2DistanceKey ? RACE_PRESETS.find(r=>r.key===d.recent2DistanceKey) : null; return p ? p.km : null; }},
+  {key:'goal', time:'goalTime', pace:'goalPace', km: d=>d.raceDistanceKm||null},
+];
+function setupBy(d){ if(!d.timeBy) d.timeBy = entryBy(); return d.timeBy; }
+// A pace typed for one field: its time follows from that field's distance.
+function syncSetupTimeFromPace(d, f){ const km = f.km(d); if(km && d[f.pace]) d[f.time] = timeFromPace(d[f.pace], kmToUnit(km, d.units)); }
+// Paces shown for the times already held (switching to paces, or after a units change).
+function syncSetupPacesFromTimes(d){ SETUP_TIME_FIELDS.forEach(f=>{ const km = f.km(d); d[f.pace] = km ? paceFromTime(d[f.time], kmToUnit(km, d.units)) : ''; }); d.pacesUnit = d.units; }
+// After a distance changes, a pace-mode field keeps its pace and its time is redone.
+function resyncSetupTimes(d){ if(setupBy(d)==='pace') SETUP_TIME_FIELDS.forEach(f=>syncSetupTimeFromPace(d, f)); }
+function setupTimeHint(d, f){
+  const sec = parseDurationToSec(d[f.time]), km = f.km(d);
+  if(!sec || !km) return '';
+  return setupBy(d)==='pace' ? `That's a finish time of ${secToClock(sec)}.` : `That's about ${paceStr(sec/km, d.units)} pace.`;
+}
+function setupTimeInputHtml(d, f, placeholderTime){
+  const byPace = setupBy(d)==='pace';
+  return byPace
+    ? `<input class="input" type="text" inputmode="numeric" id="in-${f.key}-pace" placeholder="pace per ${d.units==='mi'?'mile':'km'}, e.g. 8:10" value="${esc(d[f.pace]||'')}">`
+    : `<input class="input" type="text" inputmode="numeric" id="in-${f.key}-time" placeholder="${placeholderTime}" value="${esc(d[f.time]||'')}">`;
+}
 function recentPaceHint(d){
-  const preset = RACE_PRESETS.find(r=>r.key===d.recentDistanceKey);
-  const sec = parseDurationToSec(d.recentTime);
-  if(!preset || !sec) return 'A finish time sets your training paces.';
-  const secPerKm = sec/preset.km;
-  const mph = 3600/(secPerKm*KM_PER_MI);
-  void mph;
-  return `That's about ${paceStr(secPerKm,'mi')} pace.`;
+  const f = SETUP_TIME_FIELDS[0];
+  return setupTimeHint(d, f) || (setupBy(d)==='pace' ? 'Your average pace for that race sets your training paces.' : 'A finish time sets your training paces.');
 }
 
 function renderOnboardStep2(d){
+  if(setupBy(d)==='pace' && d.pacesUnit!==d.units) syncSetupPacesFromTimes(d);
   const recentChips = RACE_PRESETS.slice(0,5).map(r=>`<button class="chip ${d.recentDistanceKey===r.key?'active':''}" data-act="pick-recent" data-key="${r.key}">${r.label}</button>`).join('');
   const isGeneral = d.goalMode==='general';
   const isDistance = isGeneral && d.planKind==='distance';
@@ -2029,22 +2050,26 @@ function renderOnboardStep2(d){
       <div class="hint">${d.skipBase ? "Speed sessions from week one. Good if you already train consistently." : "A few weeks of easy running and strides before speed work."}</div>
     </div>` : ''}
     <div class="field">
+      <label class="field-label">Enter race results and goal as</label>
+      ${entryByChipsHtml('setup-by', setupBy(d))}
+    </div>
+    <div class="field">
       <label class="field-label">Most recent race (optional)</label>
       <div class="chip-select" style="margin-bottom:10px;">${recentChips}</div>
-      <input class="input" type="text" inputmode="numeric" id="in-recent-time" placeholder="e.g. 25:30" value="${esc(d.recentTime)}">
+      ${setupTimeInputHtml(d, SETUP_TIME_FIELDS[0], 'e.g. 25:30')}
       <div class="hint" id="recent-pace-hint">${recentPaceHint(d)}</div>
     </div>
     <div class="field">
       <label class="field-label">Another race, different distance (optional)</label>
       <div class="chip-select" style="margin-bottom:10px;"><button class="chip ${!d.recent2DistanceKey?'active':''}" data-act="pick-recent2" data-key="">None</button>${recent2Chips}</div>
-      ${d.recent2DistanceKey ? `<input class="input" type="text" inputmode="numeric" id="in-recent2-time" placeholder="e.g. 25:30" value="${esc(d.recent2Time)}">` : ''}
-      <div class="hint">Two distances sharpen half and marathon projections.</div>
+      ${d.recent2DistanceKey ? setupTimeInputHtml(d, SETUP_TIME_FIELDS[1], 'e.g. 25:30') : ''}
+      <div class="hint" id="recent2-pace-hint">${d.recent2DistanceKey && setupTimeHint(d, SETUP_TIME_FIELDS[1]) ? esc(setupTimeHint(d, SETUP_TIME_FIELDS[1]))+' ' : ''}Two distances sharpen half and marathon projections.</div>
     </div>
     ${isGeneral ? '' : `
     <div class="field">
-      <label class="field-label">Goal time for this race (optional)</label>
-      <input class="input" type="text" inputmode="numeric" id="in-goal-time" placeholder="e.g. 1:45:00" value="${esc(d.goalTime)}">
-      <div class="hint">Optional. Your paces guide you either way.</div>
+      <label class="field-label">Goal ${setupBy(d)==='pace' ? 'pace' : 'time'} for this race (optional)</label>
+      ${setupTimeInputHtml(d, SETUP_TIME_FIELDS[2], 'e.g. 1:45:00')}
+      <div class="hint" id="goal-pace-hint">${setupTimeHint(d, SETUP_TIME_FIELDS[2]) ? esc(setupTimeHint(d, SETUP_TIME_FIELDS[2]))+' ' : ''}Optional. Your paces guide you either way.</div>
       ${predictionHint ? `<div class="hint" style="margin-top:8px;">${predictionHint}</div>` : ''}
     </div>`}
     ${isDistance ? `<div class="section-title">Your goal</div>${distanceGoalHtml}` : ''}
@@ -5355,6 +5380,7 @@ function onClick(e){
   if(act==='pick-race'){
     const preset = RACE_PRESETS.find(r=>r.key===el.dataset.key);
     state.onboardDraft.raceKey = preset.key; state.onboardDraft.raceDistanceKm = preset.km;
+    resyncSetupTimes(state.onboardDraft);
     render(); return;
   }
   if(act==='pick-unit'){ state.onboardDraft.units = el.dataset.u; render(); return; }
@@ -5363,7 +5389,8 @@ function onClick(e){
     render(); const i = document.getElementById('in-custom-dist'); if(i) i.focus();
     return;
   }
-  if(act==='pick-recent'){ state.onboardDraft.recentDistanceKey = el.dataset.key; render(); return; }
+  if(act==='setup-by'){ const d = state.onboardDraft; d.timeBy = el.dataset.by; setEntryBy(d.timeBy); if(d.timeBy==='pace') syncSetupPacesFromTimes(d); render(); return; }
+  if(act==='pick-recent'){ state.onboardDraft.recentDistanceKey = el.dataset.key; resyncSetupTimes(state.onboardDraft); render(); return; }
   if(act==='pick-goal-mode'){ state.onboardDraft.goalMode = el.dataset.mode; render(); return; }
   if(act==='pick-hills-mode'){ state.onboardDraft.hillsMode = el.dataset.mode; render(); return; }
   if(act==='pick-skip-base'){ state.onboardDraft.skipBase = el.dataset.mode==='1'; render(); return; }
@@ -5399,7 +5426,7 @@ function onClick(e){
     showToast('Strength sessions updated for your equipment');
     return;
   }
-  if(act==='pick-recent2'){ state.onboardDraft.recent2DistanceKey = el.dataset.key||''; if(!el.dataset.key) state.onboardDraft.recent2Time=''; render(); return; }
+  if(act==='pick-recent2'){ state.onboardDraft.recent2DistanceKey = el.dataset.key||''; if(!el.dataset.key){ state.onboardDraft.recent2Time=''; state.onboardDraft.recent2Pace=''; } resyncSetupTimes(state.onboardDraft); render(); return; }
   if(act==='pick-plan-kind'){
     const kind = el.dataset.kind;
     state.onboardDraft.planKind = kind;
@@ -5830,8 +5857,17 @@ function onInput(e){
   if(e.target.id==='in-custom-dist'){
     const v = Number(e.target.value);
     if(v>0){
-      state.onboardDraft.raceKey='custom'; state.onboardDraft.raceDistanceKm = unitToKm(v, state.onboardDraft.units);
+      state.onboardDraft.raceKey='custom'; state.onboardDraft.raceDistanceKm = unitToKm(v, state.onboardDraft.units); resyncSetupTimes(state.onboardDraft);
       document.querySelectorAll('[data-act="pick-race"]').forEach(c=>c.classList.remove('active'));
+    }
+  }
+  { const pm = e.target.id && e.target.id.match(/^in-(recent|recent2|goal)-pace$/);
+    if(pm && state.onboardDraft){
+      const d = state.onboardDraft, f = SETUP_TIME_FIELDS.find(x=>x.key===pm[1]);
+      const v = formatDurationDigits(e.target.value); e.target.value = v; d[f.pace] = v;
+      syncSetupTimeFromPace(d, f); if(!v) d[f.time] = '';
+      const hint = document.getElementById(f.key==='recent' ? 'recent-pace-hint' : f.key+'-pace-hint');
+      if(hint) hint.textContent = f.key==='recent' ? recentPaceHint(d) : (setupTimeHint(d, f) ? setupTimeHint(d, f)+' ' : '') + (f.key==='goal' ? 'Optional. Your paces guide you either way.' : 'Two distances sharpen half and marathon projections.');
     }
   }
   if(e.target.id==='in-recent2-time'){
@@ -5950,7 +5986,7 @@ function onChange(e){
   if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; render(); return; }
   if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; render(); return; }
   if(e.target.id==='in-longest'){ state.onboardDraft.longestRecentMi = e.target.value; render(); return; }
-  if(e.target.id==='in-recent-time' || e.target.id==='in-recent2-time'){ render(); return; }
+  if(e.target.id==='in-recent-time' || e.target.id==='in-recent2-time' || e.target.id==='in-recent-pace' || e.target.id==='in-recent2-pace' || e.target.id==='in-goal-pace'){ render(); return; }
   if(e.target.id==='in-max-long'){ state.onboardDraft.maxLongRunMi = e.target.value; }
   if(e.target.id==='in-max-weekly'){ state.onboardDraft.maxWeeklyMi = e.target.value; render(); return; }
   if(e.target.id==='in-weeks'){ state.onboardDraft.weeks = e.target.value; render(); return; }
