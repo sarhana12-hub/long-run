@@ -1214,6 +1214,39 @@ function showToast(msg, undo, ms){ state.toast = msg; state.toastUndo = undo || 
 // screen was up shows the moment that screen closes.
 document.addEventListener('toggle', e=>{ if(e.target && e.target.id==='strength-details' && state.modal) state.modal.strengthOpen = e.target.open; }, true);
 // Re-renders an open sheet in place: same scroll position, no entrance animation.
+// Switching between "Enter times" and "Enter paces" redraws the form; the runner stays where
+// they were (defect 162: it scrolled back to the top and dropped the box being typed in).
+// A sheet keeps its scroll by swapping its contents in place, a page keeps the body's scroll,
+// and a box left a moment ago gets the cursor back, or its twin in the other mode.
+let entryFocus = {id:null, leftAt:0};
+document.addEventListener('focusout', e=>{ if(e.target && e.target.id && /^(lr|lp|in)-/.test(e.target.id)) entryFocus = {id:e.target.id, leftAt:Date.now()}; });
+function entryTwinId(id){
+  const pairs = [[/^(lr|lp)-pt-(\w+)$/, (m)=>`${m[1]}-pq-${m[2]}`], [/^(lr|lp)-pq-(\w+)$/, (m)=>`${m[1]}-pt-${m[2]}`],
+    [/^lr-time$/, ()=>'lr-pace'], [/^lr-pace$/, ()=>'lr-time'],
+    [/^(lr|lr-strava)-rep$/, (m)=>`${m[1]}-rep-pace`], [/^(lr|lr-strava)-rep-pace$/, (m)=>`${m[1]}-rep`],
+    [/^in-(recent|recent2|goal)-time$/, (m)=>`in-${m[1]}-pace`], [/^in-(recent|recent2|goal)-pace$/, (m)=>`in-${m[1]}-time`]];
+  for(const [re, to] of pairs){ const m = id.match(re); if(m) return to(m); }
+  return id;
+}
+// Setup boxes redraw the page when they lose focus (the projection and hints depend on
+// them). Leaving a box by tapping a button fires that redraw while the finger is still down,
+// which replaced the button under the finger: the tap was lost and the page jumped (defect
+// 162). Such a redraw now waits for the finger to lift, so the tap lands first, and keeps the
+// page's scroll.
+let pointerIsDown = false, setupRedrawPending = false;
+document.addEventListener('pointerdown', ()=>{ pointerIsDown = true; }, true);
+document.addEventListener('pointerup', ()=>{ setTimeout(()=>{ pointerIsDown = false; if(setupRedrawPending){ setupRedrawPending = false; const y = pageScrollY(); render(); pageScrollTo(y); } }, 0); }, true);
+function setupChangeRedraw(){ if(pointerIsDown){ setupRedrawPending = true; return; } const y = pageScrollY(); render(); pageScrollTo(y); }
+function rerenderKeepingPlace(){
+  setupRedrawPending = false;
+  const recent = entryFocus.id && Date.now() - entryFocus.leftAt < 2000 ? entryFocus.id : null;
+  if(state.modal && document.querySelector('.sheet')) swapSheetContents();
+  else { const y = pageScrollY(); render(); pageScrollTo(y); }
+  if(recent){
+    const el = document.getElementById(entryTwinId(recent)) || document.getElementById(recent);
+    if(el){ el.focus({preventScroll:true}); try{ const n = el.value.length; el.setSelectionRange(n, n); }catch(e){} }
+  }
+}
 function rerenderSheet(){ const sh = document.querySelector('.sheet'); const top = sh ? sh.scrollTop : 0; if(state.modal) state.modal.quiet = true; render(); const sh2 = document.querySelector('.sheet'); if(sh2) sh2.scrollTop = top; }
 // Replaces the open sheet's contents with a fresh render of the same sheet: no page rebuild,
 // no dimmer flash, no entrance animation, scroll position kept.
@@ -4707,7 +4740,7 @@ function logFormPartsHtml(d, unit){
   const found = plannedWorkoutForDate(d.date);
   if(!found || !dayHasParts(found.day)) return '';
   if(!d.parts || d.partsDate!==d.date){ d.parts = partsDraftFor(found.day, unit, null); d.partsDate = d.date; }
-  const started = LOG_PARTS.some(p=>d.parts[p] && d.parts[p].time);
+  const started = d.partsOpen || LOG_PARTS.some(p=>d.parts[p] && (d.parts[p].time || d.parts[p].pace));
   return `<details class="card" style="padding:0 14px; margin-bottom:14px; background:var(--surface-2);" ${started ? 'open' : ''}>
     <summary style="padding:12px 0; cursor:pointer; font-weight:700; font-size:13.5px;">Enter each part (optional)</summary>
     <div style="padding-bottom:12px;"><div class="hint" style="margin:0 0 10px;">Warm-up, ${esc(partLabel('main', found.day).toLowerCase())} and cool-down as you ran them. With the ${esc(partLabel('main', found.day).toLowerCase())} entered, its own pace is used instead of an estimate.</div>${partsFieldsHtml('lr', d.parts, found.day, unit)}</div>
@@ -5403,7 +5436,7 @@ function onClick(e){
     render(); const i = document.getElementById('in-custom-dist'); if(i) i.focus();
     return;
   }
-  if(act==='setup-by'){ const d = state.onboardDraft; d.timeBy = el.dataset.by; setEntryBy(d.timeBy); if(d.timeBy==='pace') syncSetupPacesFromTimes(d); render(); return; }
+  if(act==='setup-by'){ const d = state.onboardDraft; d.timeBy = el.dataset.by; setEntryBy(d.timeBy); if(d.timeBy==='pace') syncSetupPacesFromTimes(d); rerenderKeepingPlace(); return; }
   if(act==='pick-recent'){ state.onboardDraft.recentDistanceKey = el.dataset.key; resyncSetupTimes(state.onboardDraft); render(); return; }
   if(act==='pick-goal-mode'){ state.onboardDraft.goalMode = el.dataset.mode; render(); return; }
   if(act==='pick-hills-mode'){ state.onboardDraft.hillsMode = el.dataset.mode; render(); return; }
@@ -5484,8 +5517,9 @@ function onClick(e){
   }
   if(act==='parts-by'){
     const draft = el.dataset.prefix==='lr' ? state.modal.data.parts : state.modal.draft;
+    if(el.dataset.prefix==='lr' && state.modal.data) state.modal.data.partsOpen = true;
     if(draft){ draft._by = el.dataset.by; setEntryBy(el.dataset.by); const u = state.setup.units; LOG_PARTS.forEach(p=>{ const r = draft[p]; if(r){ if(el.dataset.by==='pace') r.pace = paceFromTime(r.time, partDistU(r, u)) || r.pace || ''; else r.time = r.time || timeFromPace(r.pace, partDistU(r, u)); } }); }
-    render(); return;
+    rerenderKeepingPlace(); return;
   }
   if(act==='rep-by'){
     const strava = el.dataset.prefix==='lr-strava';
@@ -5496,12 +5530,12 @@ function onClick(e){
       if(el.dataset.by==='pace') target.repPace = repPaceFromTime(target.rep, repM, state.setup.units) || target.repPace || '';
       else target.rep = target.rep || repTimeFromPace(target.repPace, repM, state.setup.units);
     }
-    render(); return;
+    rerenderKeepingPlace(); return;
   }
   if(act==='log-by'){
     const d = state.modal.data; d.by = el.dataset.by; setEntryBy(d.by);
     if(d.by==='pace') d.pace = paceFromTime(d.time, d.dist) || d.pace || ''; else d.time = d.time || timeFromPace(d.pace, d.dist);
-    render(); return;
+    rerenderKeepingPlace(); return;
   }
   if(act==='log-kind'){ state.modal.data.kind = el.dataset.kind; render(); return; }
   if(act==='remove-splits'){ if(state.modal && state.modal.scan){ state.modal.scan.splits = []; state.modal.scan.notes = (state.modal.scan.notes||[]).filter(n=>!/split/i.test(n)).concat(['Splits removed; the run is kept as distance and time.']); } render(); return; }
@@ -5997,15 +6031,15 @@ function onChange(e){
     onTrainingStartChanged(e.target.value);
     return;
   }
-  if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; render(); return; }
-  if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; render(); return; }
-  if(e.target.id==='in-longest'){ state.onboardDraft.longestRecentMi = e.target.value; render(); return; }
-  if(e.target.id==='in-recent-time' || e.target.id==='in-recent2-time' || e.target.id==='in-recent-pace' || e.target.id==='in-recent2-pace' || e.target.id==='in-goal-pace'){ render(); return; }
+  if(e.target.id==='in-weekly'){ state.onboardDraft.currentWeeklyMi = e.target.value; setupChangeRedraw(); return; }
+  if(e.target.id==='in-goal-time'){ state.onboardDraft.goalTime = e.target.value; setupChangeRedraw(); return; }
+  if(e.target.id==='in-longest'){ state.onboardDraft.longestRecentMi = e.target.value; setupChangeRedraw(); return; }
+  if(e.target.id==='in-recent-time' || e.target.id==='in-recent2-time' || e.target.id==='in-recent-pace' || e.target.id==='in-recent2-pace' || e.target.id==='in-goal-pace'){ setupChangeRedraw(); return; }
   if(e.target.id==='in-max-long'){ state.onboardDraft.maxLongRunMi = e.target.value; }
-  if(e.target.id==='in-max-weekly'){ state.onboardDraft.maxWeeklyMi = e.target.value; render(); return; }
-  if(e.target.id==='in-weeks'){ state.onboardDraft.weeks = e.target.value; render(); return; }
-  if(e.target.id==='in-distance-current'){ state.onboardDraft.distanceGoalCurrentMi = e.target.value; render(); return; }
-  if(e.target.id==='in-distance-target'){ state.onboardDraft.distanceGoalTargetMi = e.target.value; render(); return; }
+  if(e.target.id==='in-max-weekly'){ state.onboardDraft.maxWeeklyMi = e.target.value; setupChangeRedraw(); return; }
+  if(e.target.id==='in-weeks'){ state.onboardDraft.weeks = e.target.value; setupChangeRedraw(); return; }
+  if(e.target.id==='in-distance-current'){ state.onboardDraft.distanceGoalCurrentMi = e.target.value; setupChangeRedraw(); return; }
+  if(e.target.id==='in-distance-target'){ state.onboardDraft.distanceGoalTargetMi = e.target.value; setupChangeRedraw(); return; }
   if(state.modal && state.modal.type==='pacing-sheet' && e.target.id==='ps-course'){
     state.modal.courseKey = e.target.value || null;
     render(); return;

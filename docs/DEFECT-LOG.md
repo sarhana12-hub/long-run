@@ -382,6 +382,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 161. **Treadmill days gave rep distances in metres only** (owner: show a mile equivalent beside metres on the treadmill, "800m can be treated as half a mile"). *Fix:* on a treadmill day in miles, every metre distance in the day sheet, the plan card and the description carries a rough mile figure: multiples of 400 m as clean quarters (400 m = 0.25 mi, 800 m = 0.5, 1200 m = 0.75, 1600 m = 1), anything else to the nearest tenth (1000 m = 0.6, 600 m = 0.4, a 300 m jog = 0.2). Outdoor days and km users are unchanged (a metric treadmill already counts in km). A test checks every metre distance on treadmill days carries miles, and none appear outdoors or in km.
 
+162. **Switching between "Enter times" and "Enter paces" threw the runner out of the box and back to the top** (owner). Each switch redrew the whole page or sheet. *Fix:* the switch swaps the sheet's contents in place (its scroll kept) or redraws the page with its scroll kept, and a box left a moment before gets the cursor back, or its twin in the other mode (a part's time box and its pace box, the total's time and pace, the rep time and rep pace, each setup race's time and pace). The log form's "Enter each part" section stays open once used. Setup boxes also redrew the page on losing focus while the finger was still on the button being tapped, which could swallow the tap and jump the page; that redraw now waits for the finger to lift and keeps the scroll.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
