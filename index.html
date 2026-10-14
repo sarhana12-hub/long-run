@@ -4560,13 +4560,27 @@ function modalLogRun(){
 
 // Interval-type planned days ask for the average rep time; that is the only honest way to
 // read fitness off a session whose whole-run time blends reps with recovery jogs.
-function repFieldHtml(dateStr, repValue, idPrefix){
+// The rep can be typed as a time per rep or as the reps' average pace (defect 159: a watch
+// shows pace, not rep time). A pace is turned into the rep time from the rep distance, and the
+// rep time is what is saved, so everything downstream is unchanged.
+function repTimeFromPace(paceStr, repM, unit){ const ps = parseDurationToSec(paceStr); return (ps>0 && repM>0) ? secToClock(Math.round(ps*repM/(unit==='mi' ? 1609.344 : 1000))) : ''; }
+function repPaceFromTime(timeStr, repM, unit){ const ts = parseDurationToSec(timeStr); return (ts>0 && repM>0) ? secToClock(Math.round(ts*(unit==='mi' ? 1609.344 : 1000)/repM)) : ''; }
+function repHintText(by, repValue, repM, note){
+  const base = 'Only the reps can feed the projection; the whole-run time includes the recovery jogs.';
+  if(by==='pace') return (repValue ? `That's ${repValue} per ${repM} m rep. ` : 'Your watch\'s average pace over the reps; the rep time is worked out from it. ') + (note||'') + base;
+  return (note||'') + base;
+}
+function repFieldHtml(dateStr, repValue, idPrefix, by, repPace, note){
   const found = plannedWorkoutForDate(dateStr);
   const day = found && found.day;
   if(!day || !['intervals','cruise','reps'].includes(day.type)) return '';
   const repM = repMetersForDay(day);
   if(!repM) return '';
-  return `<div class="field"><label class="field-label">Average time per ${repM} m rep (m:ss)</label><input class="input" type="text" inputmode="numeric" id="${idPrefix}-rep" value="${esc(repValue||'')}" placeholder="e.g. 3:45"><div class="hint">Only the rep time can feed the projection; the whole-run time includes the recovery jogs.</div></div>`;
+  const unit = state.setup.units; by = by || entryBy();
+  const input = by==='pace'
+    ? `<label class="field-label" for="${idPrefix}-rep-pace">Average rep pace (m:ss per ${unit})</label><input class="input" type="text" inputmode="numeric" id="${idPrefix}-rep-pace" value="${esc(repPace||'')}" placeholder="e.g. 7:45">`
+    : `<label class="field-label" for="${idPrefix}-rep">Average time per ${repM} m rep (m:ss)</label><input class="input" type="text" inputmode="numeric" id="${idPrefix}-rep" value="${esc(repValue||'')}" placeholder="e.g. 3:45">`;
+  return `<div class="field">${entryByChipsHtml('rep-by', by, ` data-prefix="${idPrefix}"`)}${input}<div class="hint" id="${idPrefix}-rep-hint">${esc(repHintText(by, repValue, repM, note))}</div></div>`;
 }
 // "Scan a workout screenshot": the picture is read on the phone (Tesseract.js, fetched on
 // first use), parsed by scan.js, and the form is prefilled for the runner to check.
@@ -4671,7 +4685,7 @@ function modalLogManualHtml(d){
     </div>
     ${d.kind==='race' ? `<div class="hint" style="margin:-6px 0 14px;">A race result resets your fitness and every training pace from here on.</div>` : ''}
     <div id="lr-planned">${d.kind==='race' ? '' : plannedWorkoutHtml(d.date)}</div>
-    ${d.kind==='race' ? '' : repFieldHtml(d.date, d.rep, 'lr')}
+    ${d.kind==='race' ? '' : repFieldHtml(d.date, d.rep, 'lr', d.repBy, d.repPace)}
     ${d.kind==='race' ? '' : logFormPartsHtml(d, unit)}
     ${entryByChipsHtml('log-by', d.by || (d.by = entryBy()))}
     <div class="row">
@@ -4719,7 +4733,7 @@ function modalLogFromStravaHtml(strava){
         <button class="chip ${strava.confirm.kind!=='race'?'active':''}" data-act="strava-kind" data-kind="run">Training run</button>
         <button class="chip ${strava.confirm.kind==='race'?'active':''}" data-act="strava-kind" data-kind="race">This was a race</button>
       </div>
-      ${strava.confirm.kind==='race' ? '' : repFieldHtml(strava.confirm.date, strava.confirm.rep, 'lr-strava').replace('Your reps feed', (strava.confirm.rep && strava.confirm.lapsTried ? 'Read from your Strava laps — change it if that looks wrong. ' : '') + 'Your reps feed')}
+      ${strava.confirm.kind==='race' ? '' : repFieldHtml(strava.confirm.date, strava.confirm.rep, 'lr-strava', strava.confirm.repBy, strava.confirm.repPace, (strava.confirm.rep && strava.confirm.lapsTried) ? 'Read from your Strava laps; change it if that looks wrong. ' : '')}
       <button class="btn btn-primary btn-block" data-act="confirm-import-strava" style="margin-bottom:8px; padding:13px;">Log run</button>
       <button class="btn btn-block" data-act="cancel-import-strava">Back to list</button>
     `;
@@ -5432,6 +5446,17 @@ function onClick(e){
     if(draft){ draft._by = el.dataset.by; setEntryBy(el.dataset.by); const u = state.setup.units; LOG_PARTS.forEach(p=>{ const r = draft[p]; if(r){ if(el.dataset.by==='pace') r.pace = paceFromTime(r.time, partDistU(r, u)) || r.pace || ''; else r.time = r.time || timeFromPace(r.pace, partDistU(r, u)); } }); }
     render(); return;
   }
+  if(act==='rep-by'){
+    const strava = el.dataset.prefix==='lr-strava';
+    const target = strava ? (state.modal.strava && state.modal.strava.confirm) : state.modal.data;
+    if(target){
+      target.repBy = el.dataset.by; setEntryBy(el.dataset.by);
+      const found = plannedWorkoutForDate(target.date); const repM = found ? repMetersForDay(found.day) : null;
+      if(el.dataset.by==='pace') target.repPace = repPaceFromTime(target.rep, repM, state.setup.units) || target.repPace || '';
+      else target.rep = target.rep || repTimeFromPace(target.repPace, repM, state.setup.units);
+    }
+    render(); return;
+  }
   if(act==='log-by'){
     const d = state.modal.data; d.by = el.dataset.by; setEntryBy(d.by);
     if(d.by==='pace') d.pace = paceFromTime(d.time, d.dist) || d.pace || ''; else d.time = d.time || timeFromPace(d.pace, d.dist);
@@ -5863,6 +5888,18 @@ function onInput(e){
     if(e.target.id==='lr-notes'){ d.notes = e.target.value; }
     if(e.target.id==='lr-rep'){ const f = formatDurationDigits(e.target.value); e.target.value = f; d.rep = f; }
     if(e.target.id==='lr-strava-rep' && state.modal.strava && state.modal.strava.confirm){ const f = formatDurationDigits(e.target.value); e.target.value = f; state.modal.strava.confirm.rep = f; }
+    // rep typed as a pace: the rep time follows from the rep distance
+    if(e.target.id==='lr-rep-pace' || e.target.id==='lr-strava-rep-pace'){
+      const strava = e.target.id==='lr-strava-rep-pace';
+      const target = strava ? (state.modal.strava && state.modal.strava.confirm) : d;
+      if(target){
+        const f = formatDurationDigits(e.target.value); e.target.value = f; target.repPace = f;
+        const found = plannedWorkoutForDate(target.date); const repM = found ? repMetersForDay(found.day) : null;
+        target.rep = repTimeFromPace(f, repM, state.setup.units);
+        const hint = document.getElementById((strava ? 'lr-strava' : 'lr')+'-rep-hint');
+        if(hint && repM) hint.textContent = repHintText('pace', target.rep, repM, '');
+      }
+    }
     if(e.target.id==='lr-time' || e.target.id==='lr-dist' || e.target.id==='lr-pace'){
       const hintEl = document.getElementById('lr-pace-hint');
       if(hintEl){
