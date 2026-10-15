@@ -283,6 +283,9 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .day-sx svg{width:18px; height:18px;}
 .day-sx.done{color:var(--done);}
 .day-card.today{border-color:var(--accent-strong); background:var(--today-bg);}
+/* Today, once logged, is green like any completed day; a thin ring in today's colour keeps it
+   findable (defect 164: the today style overrode the logged one). */
+.day-card.today.logged{background:var(--done-bg); border-color:var(--done); box-shadow:0 0 0 2px var(--accent-strong);}
 .pill .pill-ico{display:inline-flex; width:11px; height:11px;}
 .pill .pill-ico svg{width:11px; height:11px;}
 /* today card */

@@ -386,6 +386,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 163. **Switching to paces in one place switched every place** (owner: "I might want to enter paces for the intervals but a time for the overall run"). All the time-or-pace choices shared one saved preference. *Fix:* each place keeps its own: a run's total, its parts, interval reps, and setup's race results and goal. A place never chosen starts from the single choice saved before, so nobody's current setting changes.
 
+164. **Today's card stayed yellow after its run was logged** (owner screenshot: Wednesday logged, check mark shown, but no green). The card carried both the logged and the today style; the today rule came later in the stylesheet at the same weight, so it overrode the green. *Fix:* a logged today card is green like any completed day, with a thin ring in today's colour so it stays findable; checked in dark and light themes.
+
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
 ## Rules now checked on every random plan
