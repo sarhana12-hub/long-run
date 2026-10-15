@@ -4723,6 +4723,8 @@ async function scanWorkoutImage(file){
     if(parsed.date) d.date = parsed.date;
     if(parsed.distanceKm) d.dist = String(Math.round(kmToUnit(parsed.distanceKm, unit)*100)/100);
     if(parsed.durationSec) d.time = secToClock(parsed.durationSec);
+    // the total entered as a pace shows the scan as a pace too (defect 165)
+    if(d.time && d.dist) d.pace = paceFromTime(d.time, d.dist);
     // interval-type day: reps from Apple segments or Garmin laps when they match the rep distance
     const found = plannedWorkoutForDate(d.date); const repM = found ? repMetersForDay(found.day) : null;
     if(repM && parsed.segments.length){ const rs = repSecFromSegments(parsed.segments, repM); if(rs){ d.rep = secToClock(rs); notes.push(`Average rep time read from the segments: ${secToClock(rs)} per ${repM} m.`); } else notes.push('Segments were found but none match the planned rep distance; enter the rep time by hand.'); }
