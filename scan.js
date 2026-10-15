@@ -81,9 +81,15 @@ function parseWorkoutText(rawText, opts){
   const dist = distances.find(d=>d.labelled) || distances.filter(d=>d.v>=0.5).sort((a,b)=>b.v-a.v)[0] || null;
   if(dist){ out.unit = dist.u; out.distanceKm = dist.u==='mi' ? dist.v*KM_PER_MI : dist.v; }
 
+  // A Splits screen's own rows: their "Time" and "Pace" column headings label each split, not
+  // the run, so nothing below the Splits header counts as the run's total time or average pace
+  // unless it says so (defect 165: a splits table read 9:24, the first split, as the total).
+  const splitStart = lines.findIndex(l=>/^splits?\b|^mile splits|^km splits|\bsplits\b/i.test(l));
+  const inSplits = i => splitStart>=0 && i>splitStart;
+
   // pace (average)
   const paces = [];
-  lines.forEach((l,i)=>{ let m; PACE_RE.lastIndex=0; while((m = PACE_RE.exec(l))){ paces.push({sec: toSec(0, m[1], m[2]), u:m[3].toLowerCase(), line:i, labelled:/avg|average|pace/i.test(lines[i-1]||'')||/avg|average/i.test(l)}); } });
+  lines.forEach((l,i)=>{ let m; PACE_RE.lastIndex=0; while((m = PACE_RE.exec(l))){ paces.push({sec: toSec(0, m[1], m[2]), u:m[3].toLowerCase(), line:i, labelled: inSplits(i) ? /avg|average/i.test(l) : (/avg|average|pace/i.test(lines[i-1]||'')||/avg|average/i.test(l))}); } });
   const pace = paces.find(p=>p.labelled) || null;
   if(pace){ out.paceSecPerKm = pace.u==='mi' ? pace.sec/KM_PER_MI : pace.sec; if(!out.unit) out.unit = pace.u; }
 
@@ -103,6 +109,7 @@ function parseWorkoutText(rawText, opts){
       // the k-th value belongs to the k-th label
       else if(toks.length>1 && prevLabels.length===toks.length){ score = labelScore(prevLabels[k]); ctx = prevLabels[k]+' '+l; }
       else { score = labelScore(prev); ctx = prev+' '+l; }
+      if(inSplits(i) && score<2) return; // a split's time, under the table's "Time" heading
       times.push({sec, line:i, score, ctx});
     });
   });
@@ -119,23 +126,30 @@ function parseWorkoutText(rawText, opts){
   else if(out.distanceKm && out.paceSecPerKm){ out.durationSec = Math.round(out.distanceKm*out.paceSecPerKm); out.notes.push('Time worked out from distance and average pace.'); }
 
   // splits: pace tokens listed after a Splits/Mile/Km header, one per row
-  const splitStart = lines.findIndex(l=>/^splits?\b|^mile splits|^km splits|\bsplits\b/i.test(l));
   if(splitStart>=0){
+    // Split times in reading order, wherever they sit: the text reader may return the table
+    // row by row ("1  09:24  9'24''/MI") or column by column (all times, then all paces).
+    // A time is an mm:ss token that is not a pace (no quote marks, no /mi or /km after it).
+    const splitTimes = [];
     // "1 Mile" / "1 Kilometer" header on Apple's Splits screen says what each split is
     const hdr = lines.slice(splitStart, splitStart+4).join(' ').match(/(\d+(?:\.\d+)?)\s*(mile|mi\b|kilomet|km\b)/i);
     const splitKm = hdr ? Number(hdr[1])*(/^(mile|mi)/i.test(hdr[2]) ? KM_PER_MI : 1) : null;
     for(let i=splitStart+1;i<lines.length;i++){
       const l = lines[i]; let m; PACE_RE.lastIndex=0; const row = []; while((m = PACE_RE.exec(l))) row.push({sec: toSec(0,m[1],m[2]), u:m[3].toLowerCase()});
+      if(!/heart|cadence|elevation|power/i.test(l)){ const tre = /(?:^|[^\d'’:])(\d{1,2}):(\d{2})(?![\d'’"”:])(?!\s*\/\s*(?:mi|km)\b)/gi; let tm; while((tm = tre.exec(l))) splitTimes.push(toSec(0, tm[1], tm[2])); }
       // Apple's in-page splits: "1  08:24  8'24''  133BPM" - the pace is the quote-style token
       // (minutes'seconds'' with no unit); the mm:ss before it is the split's time, not its pace.
       if(!row.length){ const q = l.match(/^\s*\d{1,2}\s+(?:\d{1,2}:\d{2}\s+)?(\d{1,2})\s*['’]\s*(\d{2})\s*['’"”]*/); if(q) row.push({sec: toSec(0,q[1],q[2]), u: out.unit||'mi'}); }
       if(row.length){
-        const r = row[0]; const t = l.match(/^\s*\d{1,2}\s+(\d{1,2}):(\d{2})\b/);
-        out.splits.push({index: out.splits.length+1, paceSecPerKm: r.u==='mi' ? r.sec/KM_PER_MI : r.sec, timeSec: t ? toSec(0,t[1],t[2]) : null});
+        const r = row[0];
+        out.splits.push({index: out.splits.length+1, paceSecPerKm: r.u==='mi' ? r.sec/KM_PER_MI : r.sec, timeSec: null});
         if(!out.unit) out.unit = r.u;
       }
-      else if(out.splits.length && /heart|cadence|elevation|power|workout|summary/i.test(l)) break;
+      else if(out.splits.length && /workout|summary/i.test(l)) break;
     }
+    // one time per split, in order: pair them up (a different count means a time was misread
+    // or the phone's clock crept in, so the times are left out rather than guessed)
+    if(splitTimes.length===out.splits.length) out.splits.forEach((sp,k)=>{ sp.timeSec = splitTimes[k]; });
     // A splits screen on its own still gives the whole run: time is the sum of the splits,
     // distance is the full splits plus the partial last one (its time over its pace).
     if(out.splits.length && out.splits.every(s=>s.timeSec>0)){

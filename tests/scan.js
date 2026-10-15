@@ -145,6 +145,27 @@ Time Pace
   check('no date, says so', r.date===null && r.notes.some(n=>/No date/.test(n)));
 }
 
+console.log('4e. Apple Splits table with heart rate and cadence, in every reading order (defect 165)');
+{
+  // The owner's screenshot: three splits, 09:24 / 09:22 / 04:44 at 9'24''-9'22''/MI. The text
+  // reader may return the table row by row, without row numbers, or column by column; the
+  // "Time" and "Pace" headings label each split, never the run.
+  const head = `Splits\n1 Mile\nTime Pace Heart Rate Cadence`;
+  const layouts = {
+    'row by row': `3:58 44\n${head}\n1 09:24 9'24''/MI 132BPM 158SPM\n2 09:22 9'22''/MI 148BPM 157SPM\n3 04:44 9'22''/MI 152BPM 156SPM`,
+    'no row numbers': `${head}\n09:24 9'24''/MI 132BPM 158SPM\n09:22 9'22''/MI 148BPM 157SPM\n04:44 9'22''/MI 152BPM 156SPM`,
+    'column by column, cell per line': `3:58 44\nSplits\n1 Mile\nTime\nPace\nHeart Rate\nCadence\n1\n09:24\n9'24''/MI\n132BPM\n158SPM\n2\n09:22\n9'22''/MI\n148BPM\n157SPM\n3\n04:44\n9'22''/MI\n152BPM\n156SPM`,
+    'column by column, in blocks': `${head}\n1\n2\n3\n09:24\n09:22\n04:44\n9'24''/MI\n9'22''/MI\n9'22''/MI\n132BPM 158SPM\n148BPM 157SPM\n152BPM 156SPM`,
+  };
+  for(const [name, txt] of Object.entries(layouts)){
+    const r = s.parseWorkoutText(txt, {today});
+    check(`${name}: time is the splits' sum, 23:30, not the first split`, r.durationSec===23*60+30, String(r.durationSec));
+    check(`${name}: distance worked out, 2.5 mi`, r.distanceKm && Math.abs(r.distanceKm/1.609344-2.5)<0.02, String(r.distanceKm && r.distanceKm/1.609344));
+    check(`${name}: no split's pace taken as the average`, r.paceSecPerKm==null, String(r.paceSecPerKm));
+    check(`${name}: each split has its own time`, r.splits.map(x=>x.timeSec).join(',')==='564,562,284', JSON.stringify(r.splits.map(x=>x.timeSec)));
+  }
+}
+
 console.log('5. Apple segments and rep time');
 {
   const r = s.parseWorkoutText(`Segments
