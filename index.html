@@ -2553,17 +2553,61 @@ const KNOWN_KEYS = new Set(), LOADABLE_KEYS = new Set();
 (()=>{ const all = Object.assign({}, typeof STRENGTH_EXERCISES!=="undefined" ? STRENGTH_EXERCISES : {}, typeof OPTIONAL_EXTRAS!=="undefined" ? OPTIONAL_EXTRAS : {}); Object.entries(all).forEach(([id, def])=>(def.variants||[]).forEach(v=>{ const key = v.name+"|"+(v.equip||""); KNOWN_KEYS.add(key); if(id!=="invertedRow" && (v.needs||[]).some(eq=>LOAD_EQUIP_IDS.has(eq))) LOADABLE_KEYS.add(key); })); })(); // an inverted row under a Smith bar is still bodyweight
 function isLoadable(name, equip){ const key = name+"|"+(equip||""); return KNOWN_KEYS.has(key) ? LOADABLE_KEYS.has(key) : LOADABLE_EQUIP.test(equip||""); }
 function loadUnit(){ return (state.setup && state.setup.units)==='km' ? 'kg' : 'lb'; }
-function strengthLoadHtml(name, date){
+// Weight guidance (defect 166). A weight logged last time is taken to mean the target reps
+// were done at it (owner: otherwise the runner would have lowered it). The suggestion then
+// follows two things: the rep target, and the kind of session.
+// - Different rep target: the equivalent weight for today's reps, by Epley's estimate
+//   (weight x (1 + reps/30) is the same effort), so more reps reads lighter, fewer heavier.
+// - Same rep target in a build-week session: one step up (2.5-5 lb, 1-2.5 kg), the usual
+//   double-progression step. In peak and taper sessions the load is held: they keep the
+//   weight and drop the volume.
+// Rounded to 2.5 lb or 1 kg, the smallest plate or dumbbell step most gyms have.
+function loadSuggestion(last, todayReps, tier, unit){
+  if(!last || !(last.value>0)) return null;
+  const toUnit = v => (last.unit && last.unit!==unit) ? (unit==='kg' ? v/2.20462 : v*2.20462) : v;
+  const lastV = toUnit(last.value), step = unit==='kg' ? 1 : 2.5;
+  const round = v => Math.max(step, Math.round(v/step)*step);
+  const fmtW = v => `${Number.isInteger(v) ? v : v.toFixed(1).replace(/\.0$/,'')} ${unit}`;
+  const lastStr = `${fmtW(Math.round(lastV*10)/10)}${last.reps ? ` for ${last.reps} reps` : ''} on ${niceDate(parseDate(last.date))}`;
+  const progress = tier==='heavy' || tier==='short';
+  // Peak and taper sessions keep the load with fewer reps ("keep the load, drop the volume"),
+  // so fewer reps there is not a reason to go heavier; more reps still reads lighter.
+  const repsChanged = last.reps && todayReps && last.reps!==todayReps && (progress || todayReps>last.reps);
+  if(repsChanged){
+    const eq = round(lastV*(1+last.reps/30)/(1+todayReps/30));
+    const dir = todayReps>last.reps ? 'more' : 'fewer';
+    return {value:eq, text:`Last time ${lastStr}. Today's target is ${todayReps} reps, ${dir} than then, so about ${fmtW(eq)} is the same effort.`};
+  }
+  const num = v => Number.isInteger(v) ? String(v) : v.toFixed(1).replace(/\.0$/,'');
+  if(progress){
+    const lo = round(lastV+step), hi = round(lastV+step*2);
+    const why = (last.reps && todayReps) ? 'Same reps today, so go up a step' : 'Go up a step';
+    return {value:lo, text:`Last time ${lastStr}. ${why}: ${num(lo)}–${num(hi)} ${unit}.`};
+  }
+  return {value:round(lastV), text:`Last time ${lastStr}. Keep ${fmtW(round(lastV))} today: this phase keeps the load and trims the volume.`};
+}
+function plannedRepsFor(name, date){
+  const found = plannedWorkoutForDate(date); const d = found && found.day; if(!d) return null;
+  const line = [...(d.strengthExercises||[]), ...(d.strengthOptional||[])].map(parseStrengthLine).find(p=>p && p.name===name);
+  return line ? repsFromAmount(line.amount) : null;
+}
+function repsFromAmount(amount){ const m = String(amount||'').match(/^(\d+)(?:\/(?:leg|arm|side))?$/); return m ? Number(m[1]) : null; }
+function strengthLoadHtml(name, date, amount){
   const hist = (state.strengthLoads && state.strengthLoads[name]) || [];
   const today = hist.find(h=>h.date===date);
-  const last = [...hist].filter(h=>h.date!==date).sort((a,b)=>a.date<b.date?1:-1)[0];
+  // the most recent earlier session; weights saved before reps were recorded take the rep
+  // target from that day's plan
+  const prev = [...hist].filter(h=>h.date<date).sort((a,b)=>a.date<b.date?1:-1)[0];
+  const last = prev ? {...prev, reps: prev.reps || plannedRepsFor(name, prev.date)} : null;
   const unit = loadUnit();
-  const step = unit==='kg' ? '1–2.5 kg' : '2.5–5 lb';
+  const reps = repsFromAmount(amount);
+  const found = plannedWorkoutForDate(date); const tier = found && found.day ? found.day.strengthTier : null;
+  const sug = loadSuggestion(last, reps, tier, unit);
   return `<div style="display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap;">
     <label class="field-label" style="margin:0;">Weight</label>
-    <input class="input" type="number" inputmode="decimal" step="0.5" min="0" data-act="set-strength-load" data-name="${esc(name)}" data-date="${date}" value="${today ? today.value : ''}" placeholder="${last ? last.value : '—'}" style="width:88px; padding:7px 10px;">
-    <span class="hint" style="margin:0;">${unit}${last ? ` · last ${last.value} ${last.unit||unit} on ${niceDate(parseDate(last.date))}` : ''}</span>
-  </div>${last ? `<div class="hint" style="margin-top:6px;">If every set finished with reps to spare at ${last.value} ${last.unit||unit}, add ${step} this time.</div>` : ''}`;
+    <input class="input" type="number" inputmode="decimal" step="0.5" min="0" data-act="set-strength-load" data-name="${esc(name)}" data-date="${date}" data-reps="${reps||''}" value="${today ? today.value : ''}" placeholder="${sug ? sug.value : '—'}" style="width:88px; padding:7px 10px;">
+    <span class="hint" style="margin:0;">${unit}</span>
+  </div>${sug ? `<div class="hint" style="margin-top:6px;">${esc(sug.text)}</div>` : ''}`;
 }
 function strengthRowsHtml(lines, date, howTo, optional){
   const ticks = (state.strengthItems && state.strengthItems[date]) || [];
@@ -2577,7 +2621,7 @@ function strengthRowsHtml(lines, date, howTo, optional){
       <input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${ti}" ${done?'checked':''} aria-label="Done: ${esc(p.name)}">
       <details>
         <summary><span><span class="sx-name">${esc(p.name)}</span><div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
-        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${isLoadable(p.name, p.equip) ? strengthLoadHtml(p.name, date) : ''}</div>
+        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${isLoadable(p.name, p.equip) ? strengthLoadHtml(p.name, date, p.amount) : ''}</div>
         ${exerciseLibraryHtml(p.name)}
       </details>
     </div>`;
@@ -6071,7 +6115,8 @@ function onChange(e){
   if(e.target.dataset && e.target.dataset.act==='set-strength-load'){
     const name = e.target.dataset.name, date = e.target.dataset.date, v = Number(e.target.value);
     const loads = {...(state.strengthLoads||{})}; const hist = (loads[name]||[]).filter(h=>h.date!==date);
-    if(v>0) hist.push({date, value:v, unit:loadUnit()});
+    const reps = Number(e.target.dataset.reps)||null; // the rep target it was lifted for (defect 166)
+    if(v>0) hist.push({date, value:v, unit:loadUnit(), ...(reps ? {reps} : {})});
     loads[name] = hist; state.strengthLoads = loads; Store.setStrengthLoads(loads);
     // confirm in place: no re-render, the field keeps focus and the section stays open
     const note = e.target.parentElement && e.target.parentElement.querySelector('.hint'); if(note && v>0) note.textContent = `${loadUnit()} · saved`;

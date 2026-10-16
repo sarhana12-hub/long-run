@@ -392,6 +392,8 @@ Found by rendering every week and day of nine representative profiles (`node tes
 
 The read-through is now a standing pre-push step: `npm run readthrough` regenerates docs/readthrough.txt, and it is read in full before any plan-engine change is pushed.
 
+166. **Weight guidance ignored the rep target and could contradict the cue** (owner screenshot: single-arm row, "a little lighter, 2 reps left in the tank" alongside "go up a step"). The suggestion added a step to last time's weight whatever the reps, so a session with more reps than last time was told to go heavier, and a second pull's cue said "a little lighter" while the box recommended more. *Fix:* a saved weight is taken to mean the planned reps were done (otherwise the runner would have lowered it), so each weight now stores its reps, and older weights take the reps from that day's plan. When today's rep target differs, the suggestion is the same effort at the new reps (weight × (1 + reps/30) held constant, rounded to 2.5 lb or 1 kg) and says why. With the same reps, build weeks go up a step and peak and taper weeks keep the load. Cues describe effort only, never lighter or heavier. A test covers each case and checks that no cue says lighter or heavier.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy
