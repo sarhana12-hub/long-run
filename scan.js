@@ -32,6 +32,8 @@ const TIME_RE = /(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?![\d'"])/g;
 const PACE_RE = /(\d{1,2})\s*['’:]\s*(\d{2})\s*['"’”]*\s*\/?\s*(mi|km)\b/gi;
 // a distance with a unit: 3.52 MI, 10.0 km, 5.00mi
 const DIST_RE = /(\d{1,3}(?:\.\d{1,2})?)\s*(mi|km)\b/gi;
+// the status bar's clock at the start of a line: 4:23, 10:21 (also read as 4.23)
+const STATUS_CLOCK_RE = /^(?:1[0-2]|[1-9])[:.]\d{2}(?![\d'’"”:.])(?!\s*(?:\/|mi\b|km\b|am\b|pm\b))/i;
 
 function parseDate(text, today){
   today = today || new Date();
@@ -67,7 +69,12 @@ function addDays(d, n){ const x = new Date(d.getTime()); x.setDate(x.getDate()+n
 function parseWorkoutText(rawText, opts){
   opts = opts || {};
   const text = normalise(rawText);
-  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  // The phone's clock in the status bar ("4:23  5G  47") is the time the screenshot was
+  // taken, not part of the run: dropped before anything else is read (defect 167). It leads
+  // one of the first lines, has no leading zero and no unit; split times read "09:57".
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean)
+    .map((l,i)=> i<3 && !/time|pace|distance|duration|elapsed/i.test(l) ? l.replace(STATUS_CLOCK_RE, '').trim() : l)
+    .filter(Boolean);
   const out = {date:null, distanceKm:null, unit:null, durationSec:null, paceSecPerKm:null, splits:[], segments:[], kind:null, confidence:'low', notes:[]};
 
   // date and workout type
@@ -150,6 +157,8 @@ function parseWorkoutText(rawText, opts){
     // one time per split, in order: pair them up (a different count means a time was misread
     // or the phone's clock crept in, so the times are left out rather than guessed)
     if(splitTimes.length===out.splits.length) out.splits.forEach((sp,k)=>{ sp.timeSec = splitTimes[k]; });
+    // A full split's time is its pace, so it settles a misread pace (8'53" read as 8'63").
+    if(splitKm) out.splits.forEach((sp,k)=>{ if(sp.timeSec>0 && k<out.splits.length-1) sp.paceSecPerKm = sp.timeSec/splitKm; });
     // A splits screen on its own still gives the whole run: time is the sum of the splits,
     // distance is the full splits plus the partial last one (its time over its pace).
     if(out.splits.length && out.splits.every(s=>s.timeSec>0)){
