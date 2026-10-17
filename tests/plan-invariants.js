@@ -94,6 +94,31 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   const names = full[0].strengthExercises.map(l=>l.replace(/^\d+×\S+\s+/,'').split(' (')[0]); if(new Set(names).size!==names.length) bad.push('full upper session repeats an exercise: '+names.join(', '));
   console.log('\n=== upper session standard vs full ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 166 weight guidance follows the rep target and the phase, and never clashes with a cue
+{
+  const html = require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
+  const i = html.indexOf('function loadSuggestion('), j = html.indexOf('function plannedRepsFor(');
+  const { loadSuggestion } = new Function('parseDate','niceDate', html.slice(i,j)+'; return {loadSuggestion};')(g.parseDate, d=>d.toDateString());
+  const L = (v, r) => ({date:'2026-10-09', value:v, reps:r, unit:'lb'});
+  const bad = [];
+  const v = (last, reps, tier) => loadSuggestion(last, reps, tier, 'lb').value;
+  if(!(v(L(45,10),10,'heavy') > 45)) bad.push('same reps in a build week does not go up');
+  if(v(L(45,10),10,'maintain') !== 45) bad.push('same reps in a peak week does not hold');
+  if(!(v(L(45,8),10,'heavy') < 45)) bad.push('more reps does not read lighter');
+  if(!(v(L(45,10),8,'heavy') > 45)) bad.push('fewer reps in a build week does not read heavier');
+  if(v(L(185,5),4,'maintain') !== 185) bad.push('a peak week with fewer reps suggests a different load (it should keep it)');
+  if(!(v(L(30,8),12,'light') < 30)) bad.push('more reps in a taper week does not read lighter');
+  if(/same reps/i.test(loadSuggestion({date:'2026-10-09', value:45, unit:'lb'}, 10, 'heavy', 'lb').text)) bad.push('claims "same reps" without knowing last time\'s reps');
+  // no cue on a loaded lift tells the runner to go lighter or heavier: the weight box owns load
+  const pl = g.generatePlan({units:'mi', raceKey:'half', raceDistanceKm:21.0975, raceDate:'2026-12-20', currentWeeklyKm:30*MI, recentDistanceKm:5, recentTimeSec:23*60, longDow:0, weekStartDow:0, ...g.deriveScheduleFromLongDow(0,3), runsPerWeek:5, strengthPerWeek:3, longRunEmphasis:'balanced', speedEmphasis:'balanced', hillsMode:'flat', skipBase:false, taperMode:'full'}, g.parseDate('2026-08-15'));
+  const days = pl.weeks.flatMap(w=>w.days).filter(d=>d.strength && d.strengthExercises);
+  days.forEach(d=>{ g.refreshStrengthWorkouts([d], 'build', 3, {longDates:new Set([d.date])}); });
+  const lines = days.flatMap(d=>d.strengthExercises);
+  const clash = lines.filter(l=>/a little lighter|go lighter|lighter than last|heavier than last/i.test(l));
+  if(clash.length) bad.push('a cue still sets the load: '+clash[0]);
+  if(!days.every(d=>d.strengthTier)) bad.push('a strength day has no session type for the weight guidance');
+  console.log('\n=== weight guidance follows reps and phase ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
 {
   const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();
