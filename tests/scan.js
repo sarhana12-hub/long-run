@@ -166,6 +166,36 @@ console.log('4e. Apple Splits table with heart rate and cadence, in every readin
   }
 }
 
+console.log('4f. the phone clock is never part of the run (defect 167)');
+{
+  const rows = `1 Mile
+Time Pace
+1 09:57 9'567'"/mi
+2 09:10 9'10"/mi
+3 09:16 9'16"/mI
+4 09:04 9'04'/mi
+5 08:53 8'63"/mi
+6 08:25 8'25"/mi
+7 02:36 8'07"/mi`;
+  const cases = {
+    'as the app read it': `4:26 \\ all 56% C2 |\nSplits ) 4\n${rows}`,
+    'clock read just below the header': `Splits\n4:23 all 5G 47\n${rows}`,
+    'clock alone below the header': `Splits\n4:23\n${rows}`,
+    'clock read as 4.23': `4.23 all 5G 47\nSplits\n${rows}`,
+  };
+  for(const [k, t] of Object.entries(cases)){
+    const r = s.parseWorkoutText(t, {today});
+    check(`${k}: 57:21 over 6.32 mi`, r.durationSec===57*60+21 && Math.abs(r.distanceKm/1.609344-6.32)<0.01, `${r.durationSec} ${r.distanceKm}`);
+  }
+  const r = s.parseWorkoutText(`4:26 all 56%\nSplits\n${rows}`, {today});
+  check("misread pace 8'63\" settled by the split's own time, 8:53", Math.round(r.splits[4].paceSecPerKm*1.609344)===533, String(r.splits[4].paceSecPerKm*1.609344));
+  // a split time the reader missed: the clock must not stand in for it, nor for the total
+  const miss = s.parseWorkoutText(`Splits\n4:23 ull 5G\n1 Mile\nTime Pace\n1 9'57"/mi\n2 09:10 9'10"/mi\n3 09:16 9'16"/mi\n4 09:04 9'04"/mi\n5 08:53 8'53"/mi\n6 08:25 8'25"/mi\n7 02:36 8'07"/mi`, {today});
+  check('one split time missed: no total taken from the clock', miss.durationSec!==263 && !miss.splits.some(x=>x.timeSec===263), `${miss.durationSec}`);
+  const cols = s.parseWorkoutText(`4:23\nSplits\n1 Mile\nTime\n09:10\n09:16\n09:04\n08:53\n08:25\n02:36\nPace\n9'57"/mi\n9'10"/mi\n9'16"/mi\n9'04"/mi\n8'53"/mi\n8'25"/mi\n8'07"/mi`, {today});
+  check('columns with a time missed: the clock is not the total', cols.durationSec!==263, `${cols.durationSec}`);
+}
+
 console.log('5. Apple segments and rep time');
 {
   const r = s.parseWorkoutText(`Segments

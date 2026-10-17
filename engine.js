@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 32; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 33; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -768,9 +768,11 @@ function buildUpperStrengthWorkout(variant, avail, full){
     strengthSetLine(pull, 3, 8, 75, '1–2 reps left in the tank, squeeze the shoulder blades'),
     strengthSetLine(push, 3, pushReps, 75, 'same effort'),
   ];
-  // 'lighter' only means something on a loaded pull; pull-ups and inverted rows scale by help or lever
+  // The cue gives effort only; the weight comes from the weight box, which accounts for the
+  // rep target (defect 166: "a little lighter" sat beside advice to add weight). Pull-ups and
+  // inverted rows have no weight box, so they get how to make 10 reachable.
   const loadedPull = ex => /dumbbell|kettlebell|cable|pulldown|seated row|machine|barbell|assisted/i.test(ex.name+' '+(ex.equip||''));
-  if(pull2 && pull2.name!==pull.name) lines.push(strengthSetLine(pull2, 3, 10, 60, loadedPull(pull2) ? 'a little lighter, 2 reps left in the tank' : '2 reps left in the tank; make it easier (a band, or feet closer) if 10 is out of reach'));
+  if(pull2 && pull2.name!==pull.name) lines.push(strengthSetLine(pull2, 3, 10, 60, loadedPull(pull2) ? '2 reps left in the tank' : '2 reps left in the tank; make it easier (a band, or feet closer) if 10 is out of reach'));
   if(push2 && push2.name!==push.name) lines.push(strengthSetLine(push2, 3, isPushUp(push2) ? 15 : 10, 60, 'same effort'));
   lines.push(strengthSetLine(core, 3, core.unit==='hold'?40:10, 30, core.unit==='hold' ? 'hold with a neutral spine' : 'slow and controlled'));
   lines.push(isCarry(core2) && core2.name==='Farmer carry' ? strengthSetLine(core2, sets2, 1, 30, 'one walk per set, tall posture') : coreLine(core2, sets2, 30, 'steady'));
@@ -889,7 +891,7 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
   const avail = equipmentSet(opts.equipment);
   days.forEach(d=>{
     if(d.type==='rest') Object.assign(d, buildWorkoutMeta(d)); // rest-day text depends on whether strength landed there
-    if(!d.strength){ d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthAfterRun=false; d.strengthShort=false; d.strengthShortable=false; d.strengthLong=false; d.strengthLongable=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
+    if(!d.strength){ d.strengthTier=undefined; d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthAfterRun=false; d.strengthShort=false; d.strengthShortable=false; d.strengthLong=false; d.strengthLongable=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
     const tier = lowerStrengthTierForPhase(phase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace, opts.strengthCutoffDays);
     const variant = weekIndex*2 + (d.strengthOrdinal||0); // two sessions in a week draw different lifts
     _used.length = 0;
@@ -899,6 +901,7 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
       const long = longable && !!(opts.longDates && opts.longDates.has(d.date));
       d.strengthLong = long; d.strengthLongable = longable; d.strengthShort = false; d.strengthShortable = false;
       d.strengthExercises = buildUpperStrengthWorkout(variant, avail, long); d.strengthTimeMin = long ? STRENGTH_TIME_MIN.upperFull : STRENGTH_TIME_MIN.upper;
+      d.strengthTier = tier || 'light'; // build weeks progress the load; peak and taper hold it
       d.strengthLoadNote = STRENGTH_LOAD_NOTE.upper;
       const usedSoFar = _used.length; d.strengthOptional = buildUpperOptional(variant, avail); _used.length = usedSoFar; // extras need no how-to
     } else {
@@ -910,6 +913,7 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
       const useTier = express ? 'express' : short ? 'short' : tier;
       d.strengthShort = !!short; d.strengthShortable = tier==='heavy' && !express; d.strengthLong = false; d.strengthLongable = false;
       d.strengthExercises = buildLowerStrengthWorkout(useTier, variant, opts.weekInBlock, avail); d.strengthTimeMin = express ? STRENGTH_TIME_MIN.express : short ? STRENGTH_TIME_MIN.short : STRENGTH_TIME_MIN[tier];
+      d.strengthTier = useTier;
       d.strengthLoadNote = (_used.filter(x=>!x.bodyweight).length===0) ? STRENGTH_LOAD_NOTE.bodyweight : (STRENGTH_LOAD_NOTE[useTier] || STRENGTH_LOAD_NOTE.heavy);
       const usedSoFar = _used.length; d.strengthOptional = useTier==='heavy' ? buildLowerOptional(avail) : undefined; _used.length = usedSoFar;
     }

@@ -185,6 +185,20 @@ input,select,textarea{font-family:inherit; font-size:16px;}
 .btn-block{width:100%;}
 .btn-sm{padding:7px 12px; font-size:12.5px; border-radius:10px;}
 .btn-danger{color:#C4432E; border-color:#C4432E33;}
+.scan-read{margin-top:2px;}
+.scan-ok{display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--done); margin-bottom:4px;}
+.scan-ok svg{width:15px; height:15px;}
+.scan-row{display:grid; grid-template-columns:72px 1fr auto; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--line);}
+.scan-k{font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);}
+.scan-v .mono{font-size:15px; font-weight:600; color:var(--ink);}
+.scan-src{font-size:12px; color:var(--muted); margin-top:1px;}
+.scan-miss{font-size:13.5px; color:var(--muted);}
+.scan-splits{margin-top:10px; padding-top:10px; border-top:1px solid var(--line);}
+.scan-splits-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;}
+.scan-split-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(92px, 1fr)); gap:8px;}
+.scan-split{display:flex; flex-direction:column; gap:3px;}
+.scan-split-n{font-size:11.5px; color:var(--muted);}
+.scan-split .input{padding:7px 9px; font-size:14px;}
 label.field-label{display:block; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px;}
 .input, select.input, textarea.input{width:100%; min-width:0; max-width:100%; padding:11px 13px; border-radius:11px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink);}
 .input:focus, select.input:focus, textarea.input:focus{outline:2px solid var(--accent); outline-offset:1px;}
@@ -2553,17 +2567,61 @@ const KNOWN_KEYS = new Set(), LOADABLE_KEYS = new Set();
 (()=>{ const all = Object.assign({}, typeof STRENGTH_EXERCISES!=="undefined" ? STRENGTH_EXERCISES : {}, typeof OPTIONAL_EXTRAS!=="undefined" ? OPTIONAL_EXTRAS : {}); Object.entries(all).forEach(([id, def])=>(def.variants||[]).forEach(v=>{ const key = v.name+"|"+(v.equip||""); KNOWN_KEYS.add(key); if(id!=="invertedRow" && (v.needs||[]).some(eq=>LOAD_EQUIP_IDS.has(eq))) LOADABLE_KEYS.add(key); })); })(); // an inverted row under a Smith bar is still bodyweight
 function isLoadable(name, equip){ const key = name+"|"+(equip||""); return KNOWN_KEYS.has(key) ? LOADABLE_KEYS.has(key) : LOADABLE_EQUIP.test(equip||""); }
 function loadUnit(){ return (state.setup && state.setup.units)==='km' ? 'kg' : 'lb'; }
-function strengthLoadHtml(name, date){
+// Weight guidance (defect 166). A weight logged last time is taken to mean the target reps
+// were done at it (owner: otherwise the runner would have lowered it). The suggestion then
+// follows two things: the rep target, and the kind of session.
+// - Different rep target: the equivalent weight for today's reps, by Epley's estimate
+//   (weight x (1 + reps/30) is the same effort), so more reps reads lighter, fewer heavier.
+// - Same rep target in a build-week session: one step up (2.5-5 lb, 1-2.5 kg), the usual
+//   double-progression step. In peak and taper sessions the load is held: they keep the
+//   weight and drop the volume.
+// Rounded to 2.5 lb or 1 kg, the smallest plate or dumbbell step most gyms have.
+function loadSuggestion(last, todayReps, tier, unit){
+  if(!last || !(last.value>0)) return null;
+  const toUnit = v => (last.unit && last.unit!==unit) ? (unit==='kg' ? v/2.20462 : v*2.20462) : v;
+  const lastV = toUnit(last.value), step = unit==='kg' ? 1 : 2.5;
+  const round = v => Math.max(step, Math.round(v/step)*step);
+  const fmtW = v => `${Number.isInteger(v) ? v : v.toFixed(1).replace(/\.0$/,'')} ${unit}`;
+  const lastStr = `${fmtW(Math.round(lastV*10)/10)}${last.reps ? ` for ${last.reps} reps` : ''} on ${niceDate(parseDate(last.date))}`;
+  const progress = tier==='heavy' || tier==='short';
+  // Peak and taper sessions keep the load with fewer reps ("keep the load, drop the volume"),
+  // so fewer reps there is not a reason to go heavier; more reps still reads lighter.
+  const repsChanged = last.reps && todayReps && last.reps!==todayReps && (progress || todayReps>last.reps);
+  if(repsChanged){
+    const eq = round(lastV*(1+last.reps/30)/(1+todayReps/30));
+    const dir = todayReps>last.reps ? 'more' : 'fewer';
+    return {value:eq, text:`Last time ${lastStr}. Today's target is ${todayReps} reps, ${dir} than then, so about ${fmtW(eq)} is the same effort.`};
+  }
+  const num = v => Number.isInteger(v) ? String(v) : v.toFixed(1).replace(/\.0$/,'');
+  if(progress){
+    const lo = round(lastV+step), hi = round(lastV+step*2);
+    const why = (last.reps && todayReps) ? 'Same reps today, so go up a step' : 'Go up a step';
+    return {value:lo, text:`Last time ${lastStr}. ${why}: ${num(lo)}–${num(hi)} ${unit}.`};
+  }
+  return {value:round(lastV), text:`Last time ${lastStr}. Keep ${fmtW(round(lastV))} today: this phase keeps the load and trims the volume.`};
+}
+function plannedRepsFor(name, date){
+  const found = plannedWorkoutForDate(date); const d = found && found.day; if(!d) return null;
+  const line = [...(d.strengthExercises||[]), ...(d.strengthOptional||[])].map(parseStrengthLine).find(p=>p && p.name===name);
+  return line ? repsFromAmount(line.amount) : null;
+}
+function repsFromAmount(amount){ const m = String(amount||'').match(/^(\d+)(?:\/(?:leg|arm|side))?$/); return m ? Number(m[1]) : null; }
+function strengthLoadHtml(name, date, amount){
   const hist = (state.strengthLoads && state.strengthLoads[name]) || [];
   const today = hist.find(h=>h.date===date);
-  const last = [...hist].filter(h=>h.date!==date).sort((a,b)=>a.date<b.date?1:-1)[0];
+  // the most recent earlier session; weights saved before reps were recorded take the rep
+  // target from that day's plan
+  const prev = [...hist].filter(h=>h.date<date).sort((a,b)=>a.date<b.date?1:-1)[0];
+  const last = prev ? {...prev, reps: prev.reps || plannedRepsFor(name, prev.date)} : null;
   const unit = loadUnit();
-  const step = unit==='kg' ? '1–2.5 kg' : '2.5–5 lb';
+  const reps = repsFromAmount(amount);
+  const found = plannedWorkoutForDate(date); const tier = found && found.day ? found.day.strengthTier : null;
+  const sug = loadSuggestion(last, reps, tier, unit);
   return `<div style="display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap;">
     <label class="field-label" style="margin:0;">Weight</label>
-    <input class="input" type="number" inputmode="decimal" step="0.5" min="0" data-act="set-strength-load" data-name="${esc(name)}" data-date="${date}" value="${today ? today.value : ''}" placeholder="${last ? last.value : '—'}" style="width:88px; padding:7px 10px;">
-    <span class="hint" style="margin:0;">${unit}${last ? ` · last ${last.value} ${last.unit||unit} on ${niceDate(parseDate(last.date))}` : ''}</span>
-  </div>${last ? `<div class="hint" style="margin-top:6px;">If every set finished with reps to spare at ${last.value} ${last.unit||unit}, add ${step} this time.</div>` : ''}`;
+    <input class="input" type="number" inputmode="decimal" step="0.5" min="0" data-act="set-strength-load" data-name="${esc(name)}" data-date="${date}" data-reps="${reps||''}" value="${today ? today.value : ''}" placeholder="${sug ? sug.value : '—'}" style="width:88px; padding:7px 10px;">
+    <span class="hint" style="margin:0;">${unit}</span>
+  </div>${sug ? `<div class="hint" style="margin-top:6px;">${esc(sug.text)}</div>` : ''}`;
 }
 function strengthRowsHtml(lines, date, howTo, optional){
   const ticks = (state.strengthItems && state.strengthItems[date]) || [];
@@ -2577,7 +2635,7 @@ function strengthRowsHtml(lines, date, howTo, optional){
       <input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${ti}" ${done?'checked':''} aria-label="Done: ${esc(p.name)}">
       <details>
         <summary><span><span class="sx-name">${esc(p.name)}</span><div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
-        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${isLoadable(p.name, p.equip) ? strengthLoadHtml(p.name, date) : ''}</div>
+        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${isLoadable(p.name, p.equip) ? strengthLoadHtml(p.name, date, p.amount) : ''}</div>
         ${exerciseLibraryHtml(p.name)}
       </details>
     </div>`;
@@ -4663,7 +4721,7 @@ function scanBlockHtml(scan){
   const status = scan && scan.status;
   const body = status==='loading' ? `<div class="hint">Loading the text reader (first time only)…</div>`
     : status==='reading' ? `<div class="hint">Reading the screenshot… ${scan.progress!=null ? Math.round(scan.progress*100)+'%' : ''}</div>`
-    : status==='done' ? `<div class="hint" style="color:var(--done);">${esc(scan.summary)}</div>${scan.notes && scan.notes.length ? `<div class="hint">${scan.notes.map(esc).join(' ')}</div>` : ''}${scan.splits && scan.splits.length ? `<button class="btn btn-sm" data-act="remove-splits" style="margin-top:6px;">Remove splits</button>` : ''}<details style="margin-top:4px;"><summary class="hint" style="cursor:pointer;">What was read</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(scan.raw||'')}</pre></details>`
+    : status==='done' ? scanReadHtml(scan)
     : status==='error' ? `<div class="hint" style="color:var(--z-tempo);">${esc(scan.error||'Could not read that screenshot.')}</div>`
     : `<div class="hint">Screenshot the run summary or splits page from any app, then paste or choose it. The numbers fill in below and you can change any of them.</div>`;
   return `<div class="card" style="padding:12px 14px; margin-bottom:14px; background:var(--surface-2);">
@@ -4672,6 +4730,36 @@ function scanBlockHtml(scan){
       <div style="display:flex; gap:6px; flex:none;"><button class="btn btn-sm" data-act="scan-paste" ${status==='reading'||status==='loading' ? 'disabled' : ''}>Paste</button><label class="btn btn-sm btn-primary" style="cursor:pointer;">${status==='reading'||status==='loading' ? 'Working…' : 'Choose image'}<input type="file" id="lr-scan-file" accept="image/*" style="display:none;" ${status==='reading'||status==='loading' ? 'disabled' : ''}></label></div>
     </div>
     ${body}
+  </div>`;
+}
+// What the scan read, as a short table: each number, where it came from, and an Edit that
+// goes to its field in the form below; the splits are edited here, since they live nowhere
+// else (defect 168: one run-on sentence of numbers and notes was hard to read or fix).
+function scanReadHtml(scan){
+  const unit = state.setup.units, r = scan.read || {};
+  const d = state.modal && state.modal.data;
+  const timeField = d && d.by==='pace' ? 'lr-pace' : 'lr-time';
+  const row = (label, value, src, field) => `<div class="scan-row">
+      <div class="scan-k">${label}</div>
+      <div class="scan-v">${value!=null ? `<span class="mono">${esc(value)}</span>` : `<span class="scan-miss">Not on the screenshot</span>`}${src ? `<div class="scan-src">${esc(src)}</div>` : ''}</div>
+      <button class="btn btn-sm btn-ghost" data-act="scan-focus" data-field="${field}">${value!=null ? 'Edit' : 'Set'}</button>
+    </div>`;
+  const timeVal = r.sec ? (d && d.by==='pace' && r.km ? `${secToClock(r.sec)} · ${paceStr(r.sec/r.km, unit)}` : secToClock(r.sec)) : null;
+  const splits = scan.splits || [];
+  const splitsHtml = splits.length ? `<div class="scan-splits">
+      <div class="scan-splits-head"><span class="scan-k">Splits · pace per ${unit}</span><button class="btn btn-sm btn-ghost" data-act="remove-splits">Remove splits</button></div>
+      <div class="scan-split-grid">${splits.map((x,i)=>`<label class="scan-split"><span class="scan-split-n">${i===splits.length-1 && splits.length>1 ? 'Last' : (unit==='mi' ? 'Mile ' : 'Km ')+(i+1)}</span><input class="input mono" type="text" inputmode="numeric" data-act="scan-split" data-i="${i}" value="${esc(secToClock(Math.round(x.paceSecPerKm*(unit==='mi' ? KM_PER_MI : 1))))}" aria-label="Split ${i+1} pace"></label>`).join('')}</div>
+    </div>` : '';
+  const warn = (scan.notes||[]).filter(n=>/not agree|treadmill|segments|rep time|removed/i.test(n));
+  return `<div class="scan-read">
+    <div class="scan-ok">${ICONS.check}<span>Read from your screenshot</span></div>
+    ${row('Distance', r.km ? fmtDist(r.km, unit, 2) : null, r.distSrc, 'lr-dist')}
+    ${row('Time', timeVal, r.timeSrc, timeField)}
+    ${row('Date', r.date ? niceDate(parseDate(r.date)) : null, r.date ? null : 'Check the date below', 'lr-date')}
+    ${warn.map(n=>`<div class="hint" style="margin:8px 0 0;${/not agree/i.test(n) ? ' color:var(--z-tempo);' : ''}">${esc(n)}</div>`).join('')}
+    ${splitsHtml}
+    <div class="hint" style="margin:10px 0 0;">Everything is filled in below and can be changed before you save.</div>
+    <details style="margin-top:6px;"><summary class="hint" style="cursor:pointer;">Show the text as read</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(scan.raw||'')}</pre></details>
   </div>`;
 }
 // Paste a copied screenshot: the Paste button reads the clipboard (a tap is required on
@@ -4729,11 +4817,14 @@ async function scanWorkoutImage(file){
     const found = plannedWorkoutForDate(d.date); const repM = found ? repMetersForDay(found.day) : null;
     if(repM && parsed.segments.length){ const rs = repSecFromSegments(parsed.segments, repM); if(rs){ d.rep = secToClock(rs); notes.push(`Average rep time read from the segments: ${secToClock(rs)} per ${repM} m.`); } else notes.push('Segments were found but none match the planned rep distance; enter the rep time by hand.'); }
     else if(repM) notes.push('No segments in this screenshot; enter the average rep time by hand.');
-    if(parsed.splits.length) notes.push(`${parsed.splits.length} split${parsed.splits.length===1?"":"s"} read: ${parsed.splits.map(x=>paceOrSpeedStr(x.paceSecPerKm, unit, state.paceFormat)).join(', ')}. If these look wrong, "Remove splits" below keeps the run without them.`);
     const got = [parsed.date ? niceDate(parseDate(parsed.date)) : null, parsed.distanceKm ? fmtDist(parsed.distanceKm, unit, 2) : null, parsed.durationSec ? secToClock(parsed.durationSec) : null].filter(Boolean);
     const summary = got.length ? `Read: ${got.join(' · ')}. Check the fields (all of them can be edited), then save.` : 'Nothing usable was read. Try a clearer screenshot of the Splits page or the summary screen.';
     if(parsed.kind && /indoor|treadmill/.test(parsed.kind) && found && found.day && !found.day.treadmill) notes.push('Looks like a treadmill run.');
-    state.modal.scan = {status: got.length ? 'done' : 'error', summary, notes, raw:text, error: got.length ? null : summary, splits: parsed.splits};
+    const has = re => parsed.notes.some(n=>re.test(n));
+    const read = {date: parsed.date, km: parsed.distanceKm, sec: parsed.durationSec,
+      distSrc: parsed.distanceKm ? (has(/^Distance worked out from the splits/) ? 'Worked out from the splits' : null) : null,
+      timeSrc: parsed.durationSec ? (has(/^Time added up/) ? 'Added up from the splits' : has(/^Time worked out/) ? 'Worked out from distance and average pace' : null) : null};
+    state.modal.scan = {status: got.length ? 'done' : 'error', summary, notes, read, raw:text, error: got.length ? null : summary, splits: parsed.splits};
     render();
   }catch(e){
     setScan({status:'error', error:'Could not read that screenshot.'});
@@ -5550,7 +5641,13 @@ function onClick(e){
     rerenderKeepingPlace(); return;
   }
   if(act==='log-kind'){ state.modal.data.kind = el.dataset.kind; render(); return; }
-  if(act==='remove-splits'){ if(state.modal && state.modal.scan){ state.modal.scan.splits = []; state.modal.scan.notes = (state.modal.scan.notes||[]).filter(n=>!/split/i.test(n)).concat(['Splits removed; the run is kept as distance and time.']); } render(); return; }
+  if(act==='scan-focus'){
+    const id = el.dataset.field;
+    if(id==='lr-date'){ const cal = document.getElementById('cal-lr-date'); if(cal && cal.hidden){ dpRender('lr-date'); cal.hidden = false; } const b = document.querySelector('[data-dp="lr-date"] .datefield-btn'); if(b){ b.scrollIntoView({block:'center', behavior:'smooth'}); } return; }
+    const f = document.getElementById(id); if(f){ f.scrollIntoView({block:'center', behavior:'smooth'}); f.focus({preventScroll:true}); f.select && f.select(); }
+    return;
+  }
+  if(act==='remove-splits'){ if(state.modal && state.modal.scan){ state.modal.scan.splits = []; state.modal.scan.notes = (state.modal.scan.notes||[]).concat(['Splits removed; the run is kept as distance and time.']); } render(); return; }
   if(act==='log-mode-manual'){ state.modal.mode='manual'; render(); return; }
   if(act==='log-mode-strava'){ state.modal.mode='strava'; render(); return; }
   if(act==='connect-strava'){ window.location.href = stravaConnectUrl(); return; }
@@ -5982,6 +6079,11 @@ function onInput(e){
     if(e.target.id==='lr-dist'){ d.dist = e.target.value; if(d.by==='pace') d.time = timeFromPace(d.pace, d.dist); }
     if(e.target.id==='lr-pace'){ const f = formatDurationDigits(e.target.value); e.target.value = f; d.pace = f; d.time = timeFromPace(d.pace, d.dist); }
     if(e.target.id==='lr-notes'){ d.notes = e.target.value; }
+    if(e.target.dataset.act==='scan-split' && state.modal.scan && state.modal.scan.splits){
+      const f = formatDurationDigits(e.target.value); e.target.value = f;
+      const sec = parseDurationToSec(f); const sp = state.modal.scan.splits[Number(e.target.dataset.i)];
+      if(sp && sec>0) sp.paceSecPerKm = state.setup.units==='mi' ? sec/KM_PER_MI : sec;
+    }
     if(e.target.id==='lr-rep'){ const f = formatDurationDigits(e.target.value); e.target.value = f; d.rep = f; }
     if(e.target.id==='lr-strava-rep' && state.modal.strava && state.modal.strava.confirm){ const f = formatDurationDigits(e.target.value); e.target.value = f; state.modal.strava.confirm.rep = f; }
     // rep typed as a pace: the rep time follows from the rep distance
@@ -6071,7 +6173,8 @@ function onChange(e){
   if(e.target.dataset && e.target.dataset.act==='set-strength-load'){
     const name = e.target.dataset.name, date = e.target.dataset.date, v = Number(e.target.value);
     const loads = {...(state.strengthLoads||{})}; const hist = (loads[name]||[]).filter(h=>h.date!==date);
-    if(v>0) hist.push({date, value:v, unit:loadUnit()});
+    const reps = Number(e.target.dataset.reps)||null; // the rep target it was lifted for (defect 166)
+    if(v>0) hist.push({date, value:v, unit:loadUnit(), ...(reps ? {reps} : {})});
     loads[name] = hist; state.strengthLoads = loads; Store.setStrengthLoads(loads);
     // confirm in place: no re-render, the field keeps focus and the section stays open
     const note = e.target.parentElement && e.target.parentElement.querySelector('.hint'); if(note && v>0) note.textContent = `${loadUnit()} · saved`;
