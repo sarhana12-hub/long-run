@@ -398,6 +398,8 @@ The read-through is now a standing pre-push step: `npm run readthrough` regenera
 
 168. **The scan readout was hard to read and to correct** (owner: "very difficult to interpret ... needs to be readily editable"). One green sentence of numbers, a paragraph of notes with every split pace run together, and a Remove splits button; a wrong split could only be removed, not fixed. *Fix:* the readout is a short table in the app's own field style: distance, time and date, each with where it came from (worked out or added up from the splits, or not on the screenshot) and an Edit or Set button that goes to that field in the form. The splits are a grid of pace boxes, one per mile or km, that can be edited in place and are saved as edited. Warnings that matter (numbers that do not agree, treadmill, rep time) stay below; the raw text is folded away under "Show the text as read". Checked in light and dark themes with the owner's screenshot.
 
+169. **A clear Splits screenshot gave "Nothing usable was read" on the phone** (owner screenshot: Apple Splits, 4 miles with heart rate and power). The same image, at the size sent and at the phone's full 1179 px, reads as 3.47 mi in 29:10 in the parser and in the app in a browser, so the difference is in what the phone's text reader returned. That could not be seen: a failed scan showed only the message. *Fix:* a scan that gives nothing now says whether the reader found any text, with the image size, and the text it did find sits under "Show the text as read". A reader error shows its message. With that in hand the phone-only cause can be found.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy

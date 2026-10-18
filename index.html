@@ -4722,7 +4722,7 @@ function scanBlockHtml(scan){
   const body = status==='loading' ? `<div class="hint">Loading the text reader (first time only)…</div>`
     : status==='reading' ? `<div class="hint">Reading the screenshot… ${scan.progress!=null ? Math.round(scan.progress*100)+'%' : ''}</div>`
     : status==='done' ? scanReadHtml(scan)
-    : status==='error' ? `<div class="hint" style="color:var(--z-tempo);">${esc(scan.error||'Could not read that screenshot.')}</div>`
+    : status==='error' ? `<div class="hint" style="color:var(--z-tempo);">${esc(scan.error||'Could not read that screenshot.')}</div>${scanDiagnosticHtml(scan)}`
     : `<div class="hint">Screenshot the run summary or splits page from any app, then paste or choose it. The numbers fill in below and you can change any of them.</div>`;
   return `<div class="card" style="padding:12px 14px; margin-bottom:14px; background:var(--surface-2);">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
@@ -4731,6 +4731,15 @@ function scanBlockHtml(scan){
     </div>
     ${body}
   </div>`;
+}
+// When a scan gives nothing, what the reader did see, so a failure can be told apart from
+// an unreadable image and reported (defect 169: a clear Splits screen gave nothing on a phone).
+function scanDiagnosticHtml(scan){
+  const size = scan.size ? ` (image ${scan.size})` : '', sizeIn = scan.size ? `, image ${scan.size}` : '';
+  if(scan.raw==null) return scan.detail ? `<div class="hint" style="margin-top:4px;">${esc(scan.detail)}${esc(size)}</div>` : '';
+  const raw = String(scan.raw).trim();
+  if(!raw) return `<div class="hint" style="margin-top:4px;">The text reader found no text in the image${esc(size)}.</div>`;
+  return `<details style="margin-top:6px;"><summary class="hint" style="cursor:pointer;">Show the text as read (${raw.length} characters${esc(sizeIn)})</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(raw)}</pre></details>`;
 }
 // What the scan read, as a short table: each number, where it came from, and an Edit that
 // goes to its field in the form below; the splits are edited here, since they live nowhere
@@ -4794,12 +4803,12 @@ function loadTesseract(){
 async function scanWorkoutImage(file){
   const m = state.modal; if(!m || m.type!=='log-run') return;
   const setScan = (patch)=>{ if(state.modal && state.modal.type==='log-run'){ state.modal.scan = {...(state.modal.scan||{}), ...patch}; render(); } };
-  setScan({status:'loading', progress:null});
+  setScan({status:'loading', progress:null, raw:null, size:null, detail:null});
   let T;
   try{ T = await loadTesseract(); }catch(e){ setScan({status:'error', error:'Could not load the text reader. Check your connection and try again.'}); return; }
   try{
     setScan({status:'reading', progress:0});
-    const canvas = await prepareImage(file);
+    const canvas = await prepareImage(file); state.modal.scan.size = `${canvas.width}×${canvas.height}`;
     const worker = await T.createWorker('eng', 1, {logger: msg=>{ if(msg.status==='recognizing text' && state.modal && state.modal.scan){ state.modal.scan.progress = msg.progress; const el = document.querySelector('#lr-scan-progress'); } }});
     const res = await worker.recognize(canvas);
     await worker.terminate();
@@ -4824,10 +4833,10 @@ async function scanWorkoutImage(file){
     const read = {date: parsed.date, km: parsed.distanceKm, sec: parsed.durationSec,
       distSrc: parsed.distanceKm ? (has(/^Distance worked out from the splits/) ? 'Worked out from the splits' : null) : null,
       timeSrc: parsed.durationSec ? (has(/^Time added up/) ? 'Added up from the splits' : has(/^Time worked out/) ? 'Worked out from distance and average pace' : null) : null};
-    state.modal.scan = {status: got.length ? 'done' : 'error', summary, notes, read, raw:text, error: got.length ? null : summary, splits: parsed.splits};
+    state.modal.scan = {status: got.length ? 'done' : 'error', summary, notes, read, raw:text, size: state.modal.scan && state.modal.scan.size, error: got.length ? null : summary, splits: parsed.splits};
     render();
   }catch(e){
-    setScan({status:'error', error:'Could not read that screenshot.'});
+    setScan({status:'error', error:'Could not read that screenshot.', detail: String((e && e.message) || e || '').slice(0, 200)});
   }
 }
 // The parts block in the log form, for a planned day with a warm-up and cool-down. Folded
