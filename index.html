@@ -4747,13 +4747,16 @@ function scanDiagnosticHtml(scan){
 function scanReadHtml(scan){
   const unit = state.setup.units, r = scan.read || {};
   const d = state.modal && state.modal.data;
-  const timeField = d && d.by==='pace' ? 'lr-pace' : 'lr-time';
   const row = (label, value, src, field) => `<div class="scan-row">
       <div class="scan-k">${label}</div>
       <div class="scan-v">${value!=null ? `<span class="mono">${esc(value)}</span>` : `<span class="scan-miss">Not on the screenshot</span>`}${src ? `<div class="scan-src">${esc(src)}</div>` : ''}</div>
-      <button class="btn btn-sm btn-ghost" data-act="scan-focus" data-field="${field}">${value!=null ? 'Edit' : 'Set'}</button>
+      ${field ? `<button class="btn btn-sm btn-ghost" data-act="scan-focus" data-field="${field}">${value!=null ? 'Edit' : 'Set'}</button>` : '<span></span>'}
     </div>`;
-  const timeVal = r.sec ? (d && d.by==='pace' && r.km ? `${secToClock(r.sec)} · ${paceStr(r.sec/r.km, unit)}` : secToClock(r.sec)) : null;
+  const timeVal = r.sec ? secToClock(r.sec) : null;
+  // the pace the distance and time imply; editable where the form takes a pace
+  // from the distance as the form shows it (2 decimals), so the two paces agree
+  const distU = r.km ? Math.round(kmToUnit(r.km, unit)*100)/100 : 0;
+  const paceVal = r.sec && distU ? `${secToClock(Math.round(r.sec/distU))}/${unit}` : null;
   const splits = scan.splits || [];
   const splitsHtml = splits.length ? `<div class="scan-splits">
       <div class="scan-splits-head"><span class="scan-k">Splits · pace per ${unit}</span><button class="btn btn-sm btn-ghost" data-act="remove-splits">Remove splits</button></div>
@@ -4763,12 +4766,11 @@ function scanReadHtml(scan){
   return `<div class="scan-read">
     <div class="scan-ok">${ICONS.check}<span>Read from your screenshot</span></div>
     ${row('Distance', r.km ? fmtDist(r.km, unit, 2) : null, r.distSrc, 'lr-dist')}
-    ${row('Time', timeVal, r.timeSrc, timeField)}
-    ${row('Date', r.date ? niceDate(parseDate(r.date)) : null, r.date ? null : 'Check the date below', 'lr-date')}
+    ${row('Time', timeVal, r.timeSrc, d && d.by==='pace' ? null : 'lr-time')}
+    ${paceVal ? row('Pace', paceVal, 'From the distance and time', d && d.by==='pace' ? 'lr-pace' : null) : ''}
     ${warn.map(n=>`<div class="hint" style="margin:8px 0 0;${/not agree/i.test(n) ? ' color:var(--z-tempo);' : ''}">${esc(n)}</div>`).join('')}
     ${splitsHtml}
     <div class="hint" style="margin:10px 0 0;">Everything is filled in below and can be changed before you save.</div>
-    <details style="margin-top:6px;"><summary class="hint" style="cursor:pointer;">Show the text as read</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(scan.raw||'')}</pre></details>
   </div>`;
 }
 // Paste a copied screenshot: the Paste button reads the clipboard (a tap is required on
@@ -4817,7 +4819,7 @@ async function scanWorkoutImage(file){
     const unit = state.setup.units;
     const d = state.modal.data;
     const notes = parsed.notes.slice();
-    if(parsed.date) d.date = parsed.date;
+    // the date stays as the form has it: the run's day is chosen, not read (defect 170)
     if(parsed.distanceKm) d.dist = String(Math.round(kmToUnit(parsed.distanceKm, unit)*100)/100);
     if(parsed.durationSec) d.time = secToClock(parsed.durationSec);
     // the total entered as a pace shows the scan as a pace too (defect 165)
@@ -4826,7 +4828,7 @@ async function scanWorkoutImage(file){
     const found = plannedWorkoutForDate(d.date); const repM = found ? repMetersForDay(found.day) : null;
     if(repM && parsed.segments.length){ const rs = repSecFromSegments(parsed.segments, repM); if(rs){ d.rep = secToClock(rs); notes.push(`Average rep time read from the segments: ${secToClock(rs)} per ${repM} m.`); } else notes.push('Segments were found but none match the planned rep distance; enter the rep time by hand.'); }
     else if(repM) notes.push('No segments in this screenshot; enter the average rep time by hand.');
-    const got = [parsed.date ? niceDate(parseDate(parsed.date)) : null, parsed.distanceKm ? fmtDist(parsed.distanceKm, unit, 2) : null, parsed.durationSec ? secToClock(parsed.durationSec) : null].filter(Boolean);
+    const got = [parsed.distanceKm ? fmtDist(parsed.distanceKm, unit, 2) : null, parsed.durationSec ? secToClock(parsed.durationSec) : null].filter(Boolean);
     const summary = got.length ? `Read: ${got.join(' · ')}. Check the fields (all of them can be edited), then save.` : 'Nothing usable was read. Try a clearer screenshot of the Splits page or the summary screen.';
     if(parsed.kind && /indoor|treadmill/.test(parsed.kind) && found && found.day && !found.day.treadmill) notes.push('Looks like a treadmill run.');
     const has = re => parsed.notes.some(n=>re.test(n));

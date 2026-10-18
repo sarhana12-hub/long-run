@@ -400,6 +400,8 @@ The read-through is now a standing pre-push step: `npm run readthrough` regenera
 
 169. **A clear Splits screenshot gave "Nothing usable was read" on the phone** (owner screenshot: Apple Splits, 4 miles with heart rate and power). The same image, at the size sent and at the phone's full 1179 px, reads as 3.47 mi in 29:10 in the parser and in the app in a browser, so the difference is in what the phone's text reader returned. That could not be seen: a failed scan showed only the message. *Fix:* a scan that gives nothing now says whether the reader found any text, with the image size, and the text it did find sits under "Show the text as read". A reader error shows its message. With that in hand the phone-only cause can be found.
 
+170. **Scan readout: no pace shown, and a date row and text dropdown nobody needed** (owner). *Fix:* the readout shows the pace the distance and time imply, from the distance as the form shows it, so it matches the form's own pace (8:24/mi, where the unrounded distance gave 8:25). It is editable where the form takes a pace. The date is no longer read from the screenshot: the run's day is the one chosen in the form, so the Date row is gone. The "Show the text as read" dropdown is gone from a successful read and kept only when a scan gives nothing.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy
