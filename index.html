@@ -324,6 +324,12 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 /* strength rows */
 .sx-row{display:flex; align-items:flex-start; gap:10px; padding:9px 0; border-bottom:1px solid var(--line-soft);}
 .sx-row:last-child{border-bottom:none;}
+.sx-swap{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin:10px 0;}
+.sx-swap-menu{margin-top:10px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface-2);}
+.sx-swap-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;}
+.sx-swap-opt{display:flex; width:100%; align-items:baseline; justify-content:space-between; gap:10px; padding:9px 0; border:0; border-top:1px solid var(--line-soft); background:none; color:var(--ink); text-align:left; font:inherit; cursor:pointer;}
+.sx-swap-opt .sx-cue{display:block;}
+.sx-swapped, .sx-tag{display:inline-block; margin-left:6px; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:700; vertical-align:2px; background:var(--accent-soft); color:var(--accent-strong);}
 .sx-row input[type=checkbox]{width:22px; height:22px; flex:none; margin:2px 0 0; accent-color:var(--done);}
 .sx-row details{flex:1; min-width:0;}
 .sx-row summary{list-style:none; display:flex; align-items:baseline; justify-content:space-between; gap:10px; cursor:pointer; -webkit-tap-highlight-color:transparent;}
@@ -994,6 +1000,9 @@ const Store = {
   getPush(){ const p = this._get('lr_push', {}); return {enabled:false, morningOn:true, morningTime: p.time || '07:00', eveningOn:false, eveningTime:'20:00', syncedAt:0, ...p}; },
   setPush(v){ this._set('lr_push', v); },
   setStrengthLoads(v){ this._set('lr_strength_loads', v); },
+  // One-day exercise swaps: {date: {index: {from, line, how}}} (defect 171).
+  getStrengthSwaps(){ return this._get('lr_strength_swaps', {}); },
+  setStrengthSwaps(v){ this._set('lr_strength_swaps', v); },
   setCheckins(v){ this._set('lr_checkins', v); },
   setStrengthShort(v){ this._set('lr_strength_short', v); },
   // Per-exercise ticks inside a strength session: {date: [bool,...]} in exercise order.
@@ -1316,6 +1325,7 @@ function boot(){
   state.strengthLong = Store.getStrengthLong();
   state.checkins = Store.getCheckins();
   state.strengthLoads = Store.getStrengthLoads();
+  state.strengthSwaps = Store.getStrengthSwaps();
   state.push = Store.getPush();
   if(state.push.enabled && Date.now() - (state.push.syncedAt||0) > 20*3600*1000) setTimeout(()=>syncPush(), 3000);
   state.strengthItems = Store.getStrengthItems();
@@ -2600,9 +2610,20 @@ function loadSuggestion(last, todayReps, tier, unit){
   }
   return {value:round(lastV), text:`Last time ${lastStr}. Keep ${fmtW(round(lastV))} today: this phase keeps the load and trims the volume.`};
 }
+// A day's exercise lines with that day's swaps in place. A swap holds only while the planned
+// line it replaced is still there (a rebuilt plan can move exercises; the swap then lapses).
+function swapFor(date, i, lines){
+  const sw = state.strengthSwaps && state.strengthSwaps[date] && state.strengthSwaps[date][i];
+  const p = sw && lines && lines[i] ? parseStrengthLine(lines[i]) : null;
+  return sw && p && p.name===sw.from ? sw : null;
+}
+function strengthLinesFor(day){
+  const lines = day.strengthExercises || [];
+  return lines.map((l,i)=>{ const sw = swapFor(day.date, i, lines); return sw ? sw.line : l; });
+}
 function plannedRepsFor(name, date){
   const found = plannedWorkoutForDate(date); const d = found && found.day; if(!d) return null;
-  const line = [...(d.strengthExercises||[]), ...(d.strengthOptional||[])].map(parseStrengthLine).find(p=>p && p.name===name);
+  const line = [...strengthLinesFor(d), ...(d.strengthOptional||[])].map(parseStrengthLine).find(p=>p && p.name===name);
   return line ? repsFromAmount(line.amount) : null;
 }
 function repsFromAmount(amount){ const m = String(amount||'').match(/^(\d+)(?:\/(?:leg|arm|side))?$/); return m ? Number(m[1]) : null; }
@@ -2623,23 +2644,44 @@ function strengthLoadHtml(name, date, amount){
     <span class="hint" style="margin:0;">${unit}</span>
   </div>${sug ? `<div class="hint" style="margin-top:6px;">${esc(sug.text)}</div>` : ''}`;
 }
-function strengthRowsHtml(lines, date, howTo, optional){
+function strengthRowsHtml(planned, date, howTo, optional){
   const ticks = (state.strengthItems && state.strengthItems[date]) || [];
+  const lines = optional ? planned : planned.map((l,i)=>{ const sw = swapFor(date, i, planned); return sw ? sw.line : l; });
+  howTo = [...(howTo||[]), ...(optional ? [] : planned.map((l,i)=>swapFor(date, i, planned)).filter(sw=>sw && sw.how).map(sw=>({name: parseStrengthLine(sw.line).name, how: sw.how})))];
   return lines.map((line,i)=>{
     const p = parseStrengthLine(line);
     const how = p && (howTo||[]).find(h=>p.name.startsWith(h.name));
     const ti = optional ? 100+i : i; // extras tick like the main lines; their ticks sit past 100 so they never count toward the session
     const done = !!ticks[ti];
     if(!p) return `<div class="sx-row ${done?'done':''}"><input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${ti}" ${done?'checked':''}><div class="sx-name" style="font-weight:600;">${esc(line)}</div></div>`;
+    const key = `${date}:${i}`, sw = optional ? null : swapFor(date, i, planned);
+    const swapHtml = optional ? '' : strengthSwapHtml(planned, i, date, sw, key);
     return `<div class="sx-row ${done?'done':''}">
       <input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${ti}" ${done?'checked':''} aria-label="Done: ${esc(p.name)}">
-      <details>
-        <summary><span><span class="sx-name">${esc(p.name)}</span><div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
-        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${isLoadable(p.name, p.equip) ? strengthLoadHtml(p.name, date, p.amount) : ''}</div>
+      <details ${state.swapOpenKey===key ? 'open' : ''}>
+        <summary><span><span class="sx-name">${esc(p.name)}</span>${sw ? `<span class="sx-swapped">swapped</span>` : ''}<div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
+        <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${isLoadable(p.name, p.equip) ? strengthLoadHtml(p.name, date, p.amount) : ''}${swapHtml}</div>
         ${exerciseLibraryHtml(p.name)}
       </details>
     </div>`;
   }).join('');
+}
+// Swap one exercise for today only: alternatives that do the same job, from the runner's
+// equipment, with the sets, rest and effort carried over (defect 171).
+function strengthSwapHtml(planned, i, date, sw, key){
+  if(sw) return `<div class="sx-swap"><span class="hint" style="margin:0;">Swapped in for ${esc(sw.from)}, today only.</span><button class="btn btn-sm" data-act="swap-undo" data-date="${date}" data-i="${i}">Undo swap</button></div>`;
+  if(state.swapMenuKey!==key) return `<div class="sx-swap"><button class="btn btn-sm" data-act="swap-open" data-key="${key}">Swap exercise</button></div>`;
+  const session = planned.map((l,j)=>{ const x = swapFor(date, j, planned); return x ? x.line : l; });
+  const opts = strengthSwapOptions(planned[i], session, equipmentSet(state.setup && state.setup.equipment));
+  if(!opts.length) return `<div class="sx-swap"><span class="hint" style="margin:0;">No alternatives with your equipment.</span><button class="btn btn-sm btn-ghost" data-act="swap-close">Close</button></div>`;
+  const singleLeg = opts.some(o=>o.singleLeg) && opts.some(o=>!o.singleLeg);
+  return `<div class="sx-swap-menu">
+    <div class="sx-swap-head"><span class="scan-k">Swap for today</span><button class="btn btn-sm btn-ghost" data-act="swap-close">Cancel</button></div>
+    ${singleLeg ? `<div class="hint" style="margin:0 0 8px;">Single-leg options are closest to running; machines take the balance out of it.</div>` : ''}
+    ${opts.map((o,k)=>{ const q = parseStrengthLine(o.line); return `<button class="sx-swap-opt" data-act="swap-pick" data-date="${date}" data-i="${i}" data-k="${k}">
+      <span><span class="sx-name">${esc(o.name)}</span>${o.singleLeg ? `<span class="sx-tag">single-leg</span>` : ''}<span class="sx-cue">${esc(o.equip)}</span></span>
+      <span class="sx-sets">${q ? `${q.sets} × ${esc(q.amount)}` : ''}</span></button>`; }).join('')}
+  </div>`;
 }
 function renderTodayCard(plan){
   const ti = todayWeekIndex(plan);
@@ -4747,13 +4789,16 @@ function scanDiagnosticHtml(scan){
 function scanReadHtml(scan){
   const unit = state.setup.units, r = scan.read || {};
   const d = state.modal && state.modal.data;
-  const timeField = d && d.by==='pace' ? 'lr-pace' : 'lr-time';
   const row = (label, value, src, field) => `<div class="scan-row">
       <div class="scan-k">${label}</div>
       <div class="scan-v">${value!=null ? `<span class="mono">${esc(value)}</span>` : `<span class="scan-miss">Not on the screenshot</span>`}${src ? `<div class="scan-src">${esc(src)}</div>` : ''}</div>
-      <button class="btn btn-sm btn-ghost" data-act="scan-focus" data-field="${field}">${value!=null ? 'Edit' : 'Set'}</button>
+      ${field ? `<button class="btn btn-sm btn-ghost" data-act="scan-focus" data-field="${field}">${value!=null ? 'Edit' : 'Set'}</button>` : '<span></span>'}
     </div>`;
-  const timeVal = r.sec ? (d && d.by==='pace' && r.km ? `${secToClock(r.sec)} · ${paceStr(r.sec/r.km, unit)}` : secToClock(r.sec)) : null;
+  const timeVal = r.sec ? secToClock(r.sec) : null;
+  // the pace the distance and time imply; editable where the form takes a pace
+  // from the distance as the form shows it (2 decimals), so the two paces agree
+  const distU = r.km ? Math.round(kmToUnit(r.km, unit)*100)/100 : 0;
+  const paceVal = r.sec && distU ? `${secToClock(Math.round(r.sec/distU))}/${unit}` : null;
   const splits = scan.splits || [];
   const splitsHtml = splits.length ? `<div class="scan-splits">
       <div class="scan-splits-head"><span class="scan-k">Splits · pace per ${unit}</span><button class="btn btn-sm btn-ghost" data-act="remove-splits">Remove splits</button></div>
@@ -4763,12 +4808,11 @@ function scanReadHtml(scan){
   return `<div class="scan-read">
     <div class="scan-ok">${ICONS.check}<span>Read from your screenshot</span></div>
     ${row('Distance', r.km ? fmtDist(r.km, unit, 2) : null, r.distSrc, 'lr-dist')}
-    ${row('Time', timeVal, r.timeSrc, timeField)}
-    ${row('Date', r.date ? niceDate(parseDate(r.date)) : null, r.date ? null : 'Check the date below', 'lr-date')}
+    ${row('Time', timeVal, r.timeSrc, d && d.by==='pace' ? null : 'lr-time')}
+    ${paceVal ? row('Pace', paceVal, 'From the distance and time', d && d.by==='pace' ? 'lr-pace' : null) : ''}
     ${warn.map(n=>`<div class="hint" style="margin:8px 0 0;${/not agree/i.test(n) ? ' color:var(--z-tempo);' : ''}">${esc(n)}</div>`).join('')}
     ${splitsHtml}
     <div class="hint" style="margin:10px 0 0;">Everything is filled in below and can be changed before you save.</div>
-    <details style="margin-top:6px;"><summary class="hint" style="cursor:pointer;">Show the text as read</summary><pre class="hint" style="white-space:pre-wrap; margin:4px 0 0;">${esc(scan.raw||'')}</pre></details>
   </div>`;
 }
 // Paste a copied screenshot: the Paste button reads the clipboard (a tap is required on
@@ -4817,7 +4861,7 @@ async function scanWorkoutImage(file){
     const unit = state.setup.units;
     const d = state.modal.data;
     const notes = parsed.notes.slice();
-    if(parsed.date) d.date = parsed.date;
+    // the date stays as the form has it: the run's day is chosen, not read (defect 170)
     if(parsed.distanceKm) d.dist = String(Math.round(kmToUnit(parsed.distanceKm, unit)*100)/100);
     if(parsed.durationSec) d.time = secToClock(parsed.durationSec);
     // the total entered as a pace shows the scan as a pace too (defect 165)
@@ -4826,7 +4870,7 @@ async function scanWorkoutImage(file){
     const found = plannedWorkoutForDate(d.date); const repM = found ? repMetersForDay(found.day) : null;
     if(repM && parsed.segments.length){ const rs = repSecFromSegments(parsed.segments, repM); if(rs){ d.rep = secToClock(rs); notes.push(`Average rep time read from the segments: ${secToClock(rs)} per ${repM} m.`); } else notes.push('Segments were found but none match the planned rep distance; enter the rep time by hand.'); }
     else if(repM) notes.push('No segments in this screenshot; enter the average rep time by hand.');
-    const got = [parsed.date ? niceDate(parseDate(parsed.date)) : null, parsed.distanceKm ? fmtDist(parsed.distanceKm, unit, 2) : null, parsed.durationSec ? secToClock(parsed.durationSec) : null].filter(Boolean);
+    const got = [parsed.distanceKm ? fmtDist(parsed.distanceKm, unit, 2) : null, parsed.durationSec ? secToClock(parsed.durationSec) : null].filter(Boolean);
     const summary = got.length ? `Read: ${got.join(' · ')}. Check the fields (all of them can be edited), then save.` : 'Nothing usable was read. Try a clearer screenshot of the Splits page or the summary screen.';
     if(parsed.kind && /indoor|treadmill/.test(parsed.kind) && found && found.day && !found.day.treadmill) notes.push('Looks like a treadmill run.');
     const has = re => parsed.notes.some(n=>re.test(n));
@@ -5374,7 +5418,7 @@ function exportCalendar(){
       const d = day.date.replace(/-/g,''); const next = fmtDate(addDays(parseDate(day.date),1)).replace(/-/g,'');
       const title = day.km>0 ? `${day.label} ${fmtDist(day.km,unit)}` : 'Strength session';
       const parts = day.km>0 ? workoutPartsFor(day, paces, unit, dayFmt(day, fmt)) : [];
-      if(day.strength) parts.push(`Strength${day.strengthFocus==='upper'?' (upper body/core)':''}${day.strengthTimeMin?` — about ${day.strengthTimeMin} min`:''}${day.strengthExercises?': '+day.strengthExercises.join('; '):''}`);
+      if(day.strength) parts.push(`Strength${day.strengthFocus==='upper'?' (upper body/core)':''}${day.strengthTimeMin?` — about ${day.strengthTimeMin} min`:''}${day.strengthExercises?': '+strengthLinesFor(day).join('; '):''}`);
       lines.push('BEGIN:VEVENT', `UID:${day.id}@peak`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${next}`, icsFold(`SUMMARY:Peak: ${icsEscape(title)}`), icsFold(`DESCRIPTION:${icsEscape(parts.join('\n'))}`), 'END:VEVENT');
     });
   });
@@ -5506,6 +5550,27 @@ function onClick(e){
     Object.assign(day, {treadmill:on, treadmillHills:on, descBase:meta.descBase, paceKey:meta.paceKey, qualityKm: meta.qualityKm!=null ? meta.qualityKm : day.qualityKm});
     Store.setPlan(state.plan);
     const sheet = document.querySelector('.sheet'); const y = sheet ? sheet.scrollTop : 0;
+    render();
+    const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = y;
+    return;
+  }
+  if(act==='swap-open' || act==='swap-close' || act==='swap-pick' || act==='swap-undo'){
+    const sheet = document.querySelector('.sheet'); const y = sheet ? sheet.scrollTop : 0;
+    if(act==='swap-open'){ state.swapMenuKey = el.dataset.key; state.swapOpenKey = el.dataset.key; }
+    else if(act==='swap-close'){ state.swapMenuKey = null; }
+    else {
+      const date = el.dataset.date, i = Number(el.dataset.i), day = findPlanDay(state.plan, date);
+      const planned = (day && day.strengthExercises) || [];
+      const swaps = state.strengthSwaps || {}; const forDay = {...(swaps[date]||{})};
+      if(act==='swap-pick'){
+        const o = strengthSwapOptions(planned[i], strengthLinesFor(day), equipmentSet(state.setup && state.setup.equipment))[Number(el.dataset.k)];
+        const from = parseStrengthLine(planned[i] || '');
+        if(o && from) forDay[i] = {from: from.name, line: o.line, how: o.how};
+      } else delete forDay[i];
+      if(Object.keys(forDay).length) swaps[date] = forDay; else delete swaps[date];
+      state.strengthSwaps = swaps; Store.setStrengthSwaps(swaps);
+      state.swapMenuKey = null; state.swapOpenKey = `${date}:${i}`;
+    }
     render();
     const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = y;
     return;
