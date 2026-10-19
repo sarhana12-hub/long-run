@@ -119,6 +119,43 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   if(!days.every(d=>d.strengthTier)) bad.push('a strength day has no session type for the weight guidance');
   console.log('\n=== weight guidance follows reps and phase ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 171 one-day swaps: every alternative is the same job, from the runner's equipment, keeps
+// the sets, never repeats an exercise already in the session, and reads as a normal line
+{
+  const RE = /^(\d+)×(\S+) (.+?) \(([^)]*)\) — (.*?)\.?(?: Rest (.+?) between sets\.)?$/;
+  const base = n => n.replace(/ (each side|each hand|each way)$/, '');
+  const slotOf = (name, equip) => Object.keys(g.STRENGTH_EXERCISES).find(k=>g.STRENGTH_EXERCISES[k].variants.some(v=>v.name===name && v.equip===equip)) || Object.keys(g.STRENGTH_EXERCISES).find(k=>g.STRENGTH_EXERCISES[k].variants.some(v=>v.name===name));
+  const famOf = slot => g.SWAP_FAMILIES.findIndex(f=>f.includes(slot));
+  const bad = []; let checked = 0;
+  for(const equipment of [g.DEFAULT_EQUIPMENT.slice(), [], ['dumbbells','bench']]){
+    const avail = g.equipmentSet(equipment);
+    const pl = g.generatePlan({units:'mi', raceKey:'half', raceDistanceKm:21.0975, raceDate:'2027-01-31', currentWeeklyKm:30*MI, recentDistanceKm:5, recentTimeSec:23*60, longestRecentRunKm:10*MI, longDow:6, weekStartDow:0, ...g.deriveScheduleFromLongDow(6, 3), runsPerWeek:5, strengthPerWeek:3, equipment, goalTimeSec:null, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'flat', skipBase:false, taperMode:'full', buildPace:'standard'}, g.parseDate('2026-09-06'));
+    pl.weeks.flatMap(w=>w.days).filter(d=>d.strengthExercises).forEach(d=>{
+      const session = d.strengthExercises, names = new Set(session.map(l=>{ const m = l.match(RE); return m ? base(m[3]) : null; }));
+      session.forEach(l=>{
+        const m = l.match(RE); if(!m) return;
+        const fam = famOf(slotOf(base(m[3]), m[4]));
+        g.strengthSwapOptions(l, session, avail).forEach(o=>{
+          checked++;
+          const q = o.line.match(RE);
+          if(!q){ bad.push('unreadable swap line: '+o.line); return; }
+          if(q[1]!==m[1]) bad.push(`sets changed ${m[1]}→${q[1]}: ${o.line}`);
+          if(names.has(base(q[3]))) bad.push('swap repeats an exercise in the session: '+o.line);
+          if(famOf(slotOf(base(q[3]), q[4]))!==fam && !g.SWAP_FAMILIES[fam].some(k=>g.STRENGTH_EXERCISES[k].variants.some(v=>v.name===base(q[3])))) bad.push(`swap changes the job: ${m[3]} → ${q[3]}`);
+          const v = Object.values(g.STRENGTH_EXERCISES).flatMap(e=>e.variants).find(x=>x.name===base(q[3]) && x.equip===q[4]);
+          if(!v || !v.needs.every(id=>avail.has(id))) bad.push('swap needs equipment the runner lacks: '+o.line);
+          if(/bodyweight/i.test(q[4]) && /^heavy/.test(q[5])) bad.push('bodyweight swap told to go heavy: '+o.line);
+          if(/undefined|NaN/.test(o.line)) bad.push('broken swap line: '+o.line);
+        });
+      });
+    });
+  }
+  // the owner's case: a barbell squat traded for the leg press
+  const sq = '4×5 Back squat (barbell across the upper back) — heavy — 1–2 reps left in the tank. Rest 2–3 min between sets.';
+  const lp = g.strengthSwapOptions(sq, [sq]).find(o=>o.name==='Leg press');
+  if(!lp || !/^4×5 Leg press \(machine\) — heavy — 1–2 reps left in the tank\. Rest 2 min between sets\.$/.test(lp.line)) bad.push('back squat does not offer the leg press as 4×5: '+(lp && lp.line));
+  console.log(`\n=== one-day exercise swaps (${checked} alternatives) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,10).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
 {
   const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();

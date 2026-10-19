@@ -790,6 +790,66 @@ function buildLowerOptional(avail){
   const r = resolveExercise(OPTIONAL_EXTRAS.legExtension, avail);
   return r ? [strengthSetLine(r, 2, 12, 45, 'moderate, slow lowering — easy on the knees')] : [];
 }
+// One-day swaps (defect 171): an exercise can be traded for another that does the same job,
+// from the runner's own equipment. Families group the slots that can stand in for each
+// other; a swap keeps the sets, rest and effort, and only changes the amount where the new
+// exercise counts differently (per leg, a hold, a carry, or bodyweight needing more reps).
+const SWAP_FAMILIES = [
+  ['backSquat','legPress','gobletSquat','bulgarianSplitSquat','stepUps','walkingLunges'],
+  ['romanianDeadlift','hipThrust','singleLegRDL','kettlebellSwing','hamstringCurl'],
+  ['calfRaiseStraight','calfRaiseBent'],
+  ['pogoHops','boxJumps'],
+  ['benchPress','pushUps','shoulderPress'],
+  ['pullUps','invertedRow','singleArmRow'],
+  ['plank','deadBug','birdDog','hangingKneeRaise','sidePlank','bandWalk','suitcaseCarry','farmerCarry'],
+];
+const SWAP_LINE_RE = /^(\d+)×(\S+) (.+?) \(([^)]*)\) — (.*?)\.?(?: Rest (.+?) between sets\.)?$/;
+function swapBaseName(name){ return String(name).replace(/ (each side|each hand|each way)$/, ''); }
+function restSecFromStr(r){
+  if(!r) return 0;
+  let m = r.match(/^(\d+)–(\d+) min$/); if(m) return Math.round((Number(m[1])+Number(m[2]))*30);
+  m = r.match(/^(\d+) min$/); if(m) return Number(m[1])*60;
+  m = r.match(/^(\d+)s$/); return m ? Number(m[1]) : 0;
+}
+function strengthSwapOptions(line, sessionLines, avail){
+  avail = avail || equipmentSet();
+  const m = String(line).match(SWAP_LINE_RE); if(!m) return [];
+  const name = swapBaseName(m[3]);
+  const slot = Object.keys(STRENGTH_EXERCISES).find(k=>STRENGTH_EXERCISES[k].variants.some(v=>v.name===name && v.equip===m[4]))
+    || Object.keys(STRENGTH_EXERCISES).find(k=>STRENGTH_EXERCISES[k].variants.some(v=>v.name===name));
+  const family = slot && SWAP_FAMILIES.find(f=>f.includes(slot));
+  if(!family) return [];
+  const inSession = new Set((sessionLines||[]).map(l=>{ const x = String(l).match(SWAP_LINE_RE); return x ? swapBaseName(x[3]) : null; }).filter(Boolean));
+  const sets = Number(m[1]), amt = m[2], cue = m[5], rest = restSecFromStr(m[6]);
+  const origHold = /^\d+s/.test(amt), origCarry = /m$/.test(amt), origReps = origCarry ? 10 : (parseInt(amt, 10) || 0), origBody = /bodyweight/i.test(m[4]);
+  const coreFamily = family.includes('plank');
+  const seen = new Set(), out = [];
+  for(const key of [slot, ...family.filter(k=>k!==slot)]){
+    const def = STRENGTH_EXERCISES[key];
+    for(const v of def.variants){
+      if(!v.needs.every(id=>avail.has(id)) || v.name===name || inSession.has(v.name) || seen.has(v.name)) continue;
+      seen.add(v.name);
+      const ex = {name:v.name, equip:v.equip, unit:v.unit||def.unit, per:('per' in v) ? v.per : def.per, how:('how' in v) ? v.how : def.how, bodyweight: v.needs.length===0 || /bodyweight/i.test(v.equip)};
+      const usedSoFar = _used.length; let newLine;
+      if(coreFamily){
+        // core and carries: each has its own amount and cue, as the session builder phrases them
+        newLine = coreLine(ex, sets, rest || 30, ex.unit==='hold' ? 'hold with good form' : isCarry(ex) ? (ex.name==='Farmer carry' ? 'one walk per set, tall posture' : 'one walk per hand, stay level') : 'slow and controlled');
+      } else {
+        let n = ex.unit==='hold' ? (origHold ? origReps : 30) : (origHold ? 10 : origReps);
+        if(key==='boxJumps') n = 5; else if(key==='pogoHops') n = 20;
+        const toBody = ex.bodyweight && !origBody && key!=='boxJumps' && key!=='pogoHops';
+        if(ex.unit!=='hold' && toBody && n<8) n = 8;
+        const effort = toBody ? cue.replace(/^heavy( but crisp)?\s*—\s*/, 'slow, three seconds down — ').replace(/^moderate-heavy, /, 'slow and controlled, ') : cue;
+        // heavy rest follows the builder: barbell lifts 2–3 min, other heavy lifts 2 min
+        const heavyRest = (rest===120 || rest===150) ? (/barbell/i.test(ex.equip) ? 150 : 120) : rest;
+        newLine = strengthSetLine(ex, sets, n, toBody ? Math.min(rest, 60) : heavyRest, effort);
+      }
+      _used.length = usedSoFar;
+      out.push({line:newLine, name:ex.name, equip:ex.equip, how:ex.how||null, singleLeg: ex.per==='leg', machine: /machine/i.test(ex.equip)});
+    }
+  }
+  return out.slice(0, 8);
+}
 const STRENGTH_TIME_MIN = {heavy:40, short:25, maintain:28, express:20, light:15, upper:22, upperFull:35};
 // Load is set by effort, not by a number the app can't know: "N reps left in the tank"
 // means the set ends N reps before you would fail. These notes tell a runner how to pick a
@@ -2276,7 +2336,7 @@ return {
   raceLabelKm, runsPerWeekFor,
   QUALITY_TYPES, WARMUP_ELIGIBLE_TYPES, STRIDES_ELIGIBLE_TYPES, STRIDES_REPS, STRIDES_EXTRA_KM, HILL_STRIDES_EXTRA_KM, QUALITY_WARMUP_KM, QUALITY_COOLDOWN_KM,
   TYPE_LABELS, isLegDemandingDay, isKeySessionDay, structuredEffort, buildWorkoutMeta,
-  STRENGTH_EXERCISES, OPTIONAL_EXTRAS, EQUIPMENT, DEFAULT_EQUIPMENT, equipmentSet, resolveExercise, STRENGTH_TIME_MIN, lowerStrengthTierForPhase, buildLowerStrengthWorkout, buildUpperStrengthWorkout,
+  STRENGTH_EXERCISES, OPTIONAL_EXTRAS, strengthSwapOptions, SWAP_FAMILIES, EQUIPMENT, DEFAULT_EQUIPMENT, equipmentSet, resolveExercise, STRENGTH_TIME_MIN, lowerStrengthTierForPhase, buildLowerStrengthWorkout, buildUpperStrengthWorkout,
   placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts,
   qualityDowsFor, deriveScheduleFromLongDow, evenlySpacedPositions, scheduleWarnings,
   raceClass, taperDaysFor, taperVolumeFactor, taperLongFactor, targetPeakWeeklyKm, peakLongTargetKm, longFracCap, longTimeCapMin,
