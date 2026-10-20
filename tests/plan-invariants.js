@@ -201,7 +201,7 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
 {
   const html = require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
   const i = html.indexOf('function keepHistoryAndEdits('), j = html.indexOf('/* ============================= strava');
-  const keep = new Function('fmtDate','todayDate','round1', html.slice(i,j)+'; return keepHistoryAndEdits;')(g.fmtDate, ()=>g.parseDate('2026-10-20'), g.round1);
+  const keep = new Function('fmtDate','todayDate','round1','startedStrengthDates', html.slice(html.indexOf('function keepHistoryAndEdits('), j)+'; return keepHistoryAndEdits;')(g.fmtDate, ()=>g.parseDate('2026-10-20'), g.round1, ()=>new Set());
   const st = {units:'mi', raceKey:'half', raceDistanceKm:21.0975, raceDate:'2027-01-31', currentWeeklyKm:20*MI, recentDistanceKm:5, recentTimeSec:23*60, longestRecentRunKm:10*MI, longDow:0, weekStartDow:0, ...g.deriveScheduleFromLongDow(0, 3), runsPerWeek:5, strengthPerWeek:3, equipment:g.DEFAULT_EQUIPMENT.slice(), goalTimeSec:null, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'flat', skipBase:false, taperMode:'full', buildPace:'standard'};
   const old = g.generatePlan(st, g.parseDate('2026-09-06')), fresh = g.generatePlan(st, g.parseDate('2026-09-06'));
   const od = old.weeks.flatMap(w=>w.days);
@@ -221,6 +221,18 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   g.refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, {equipment:st.equipment, fromDate: sd[1].date});
   if(JSON.stringify(sd[0])!==marked) bad.push('a refresh from today rewrote an earlier session');
   if(/Marker/.test(sd[1].strengthExercises.join())) bad.push('a refresh from today did not rebuild the session on that day');
+  sd[1].strengthExercises = ['3×8 Marker lift (none) — x.'];
+  g.refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, {equipment:st.equipment, fromDate: sd[1].date, keepDates:new Set([sd[1].date])});
+  if(!/Marker/.test(sd[1].strengthExercises.join())) bad.push("a refresh rebuilt today's session after it was started");
+  g.refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, {equipment:st.equipment, fromDate: sd[1].date, rebuildDates:new Set([sd[0].date])});
+  if(/Marker/.test(sd[0].strengthExercises.join())) bad.push('an explicit change to a past day did not rebuild it');
+  // 175 a past day with weights logged but no session is rebuilt from them
+  const r = g.rebuildLoggedSession({date:'2026-10-16', dow:5, type:'rest', km:0, daysToRace:60}, ['Dumbbell bench press','Single-arm dumbbell row'], 'build', 6, {keepDates:new Set(['2026-10-16'])});
+  const rn = (r.strengthExercises||[]).join(' | ');
+  if(!(r.strength && r.strengthFocus==='upper' && /Dumbbell bench press/.test(rn) && /Single-arm dumbbell row/.test(rn) && r.strengthRestored)) bad.push('session not rebuilt from logged weights: '+rn);
+  const rl = g.rebuildLoggedSession({date:'2026-10-16', dow:5, type:'rest', km:0, daysToRace:60}, ['Back squat'], 'build', 6, {});
+  const main = (rl.strengthExercises||[]).find(l=>/^\d+×5 /.test(l)) || '';
+  if(rl.strengthFocus!=='lower' || !/Back squat/.test(main)) bad.push('a logged back squat is not the main lift of the rebuilt session: '+rl.strengthExercises.join(' | '));
   console.log('\n=== history kept through rebuilds and refreshes ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
 // 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
