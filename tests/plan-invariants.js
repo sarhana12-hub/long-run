@@ -196,6 +196,33 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   }
   console.log('\n=== full upper session: second pull and push in the other plane ==='); if(bad.length){ failures++; bad.slice(0,6).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 174 history is never rewritten: a rebuild keeps every past day and the runner's own edits
+// ahead, and a strength refresh from today leaves earlier sessions exactly as they were
+{
+  const html = require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
+  const i = html.indexOf('function keepHistoryAndEdits('), j = html.indexOf('/* ============================= strava');
+  const keep = new Function('fmtDate','todayDate','round1', html.slice(i,j)+'; return keepHistoryAndEdits;')(g.fmtDate, ()=>g.parseDate('2026-10-20'), g.round1);
+  const st = {units:'mi', raceKey:'half', raceDistanceKm:21.0975, raceDate:'2027-01-31', currentWeeklyKm:20*MI, recentDistanceKm:5, recentTimeSec:23*60, longestRecentRunKm:10*MI, longDow:0, weekStartDow:0, ...g.deriveScheduleFromLongDow(0, 3), runsPerWeek:5, strengthPerWeek:3, equipment:g.DEFAULT_EQUIPMENT.slice(), goalTimeSec:null, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'flat', skipBase:false, taperMode:'full', buildPace:'standard'};
+  const old = g.generatePlan(st, g.parseDate('2026-09-06')), fresh = g.generatePlan(st, g.parseDate('2026-09-06'));
+  const od = old.weeks.flatMap(w=>w.days);
+  od.forEach(d=>{ d.mark = 'old'; });
+  const edited = od.find(d=>d.date>'2026-10-20' && d.type==='easy'); edited.userEdited = true;
+  keep(old, fresh);
+  const fd = fresh.weeks.flatMap(w=>w.days);
+  const bad = [];
+  if(fd.some(d=>d.date<'2026-10-20' && d.mark!=='old')) bad.push('a past day was replaced by the rebuild');
+  if(fd.find(d=>d.date===edited.date).mark!=='old') bad.push("the runner's edited day ahead was lost");
+  if(fd.some(d=>d.date>='2026-10-20' && d.date!==edited.date && d.mark==='old')) bad.push('an unedited day ahead kept the old rules');
+  // refresh from a date: earlier days untouched, later ones rebuilt
+  const w = fresh.weeks.find(x=>x.days.filter(d=>d.strength).length>=2);
+  const sd = w.days.filter(d=>d.strength);
+  sd[0].strengthExercises = ['3×8 Marker lift (none) — x.']; const marked = JSON.stringify(sd[0]);
+  sd[1].strengthExercises = ['3×8 Marker lift (none) — x.'];
+  g.refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, {equipment:st.equipment, fromDate: sd[1].date});
+  if(JSON.stringify(sd[0])!==marked) bad.push('a refresh from today rewrote an earlier session');
+  if(/Marker/.test(sd[1].strengthExercises.join())) bad.push('a refresh from today did not rebuild the session on that day');
+  console.log('\n=== history kept through rebuilds and refreshes ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
 {
   const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();

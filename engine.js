@@ -982,6 +982,9 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
   const namesOf = d => (d && d.strengthExercises || []).map(l=>{ const m = String(l).match(SWAP_LINE_RE); return m ? swapBaseName(m[3]) : null; }).filter(Boolean);
   const builtNames = new Set(opts.prevNames || []); // the day before this week, when it held a session
   days.forEach(d=>{
+    // Days before opts.fromDate are history: left exactly as they were, but still counted
+    // for the rotation and the neighbour check (defect 174).
+    if(opts.fromDate && d.date < opts.fromDate){ namesOf(d).forEach(n=>builtNames.add(n)); return; }
     if(d.type==='rest') Object.assign(d, buildWorkoutMeta(d)); // rest-day text depends on whether strength landed there
     if(!d.strength){ d.strengthTier=undefined; d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthAfterRun=false; d.strengthShort=false; d.strengthShortable=false; d.strengthLong=false; d.strengthLongable=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
     const tier = lowerStrengthTierForPhase(phase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace, opts.strengthCutoffDays);
