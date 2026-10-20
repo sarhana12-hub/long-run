@@ -181,6 +181,15 @@ const EXERCISE_LIBRARY = {
     link: L(154, 'seated-leg-press'),
     art: {start:{x:150, y:140, torso:-40, legs:[{thigh:70, shin:30}], arms:[{upper:20, fore:60}]}, finish:{x:150, y:140, torso:-40, legs:[{thigh:120, shin:-20}], arms:[{upper:20, fore:60}]}, scene:['floor', {bar:[40,96,70]}, {post:[56,96]}, {text:[20,88,'plate']}]},
   },
+  'Single-leg leg press': {
+    summary: 'The leg press one leg at a time: each leg does its own work, and the machine does the balancing.',
+    setup: ['One foot in the middle of the plate, in line with the hip; the other foot off to the side or on the frame.', 'Back and head on the pad. Start well lighter than your two-leg weight.'],
+    move: ['Lower the plate until the knee is near a right angle.', 'Press back out without locking the knee. Finish the reps, then switch legs.'],
+    cues: ['Hips stay level and on the seat; the pelvis does not twist.', 'Knee tracks over the middle of the foot.', 'Weaker leg first, and the other leg matches its reps.'],
+    mistake: 'Going too deep, so the hip rolls off the seat and the lower back lifts.',
+    link: L(154, 'seated-leg-press', 'ACE has no single-leg page; the leg press page covers the same movement.'),
+    art: {start:{x:150, y:140, torso:-40, legs:[{thigh:70, shin:30}], arms:[{upper:20, fore:60}]}, finish:{x:150, y:140, torso:-40, legs:[{thigh:120, shin:-20}], arms:[{upper:20, fore:60}]}, scene:['floor', {bar:[40,96,70]}, {post:[56,96]}, {text:[20,88,'plate']}]},
+  },
   'Romanian deadlift': {
     summary: 'A hip hinge with a flat back. The main hamstring and glute lift.',
     setup: ['Stand tall holding the bar or dumbbells against the thighs, feet hip-width.', 'Soft knees, shoulders back.'],

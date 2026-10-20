@@ -454,6 +454,8 @@ const STRENGTH_EXERCISES = {
   ]},
   legPress: {unit:'reps', how:'Feet shoulder-width on the plate, lower until the knees are near a right angle without the lower back peeling off the pad, then press back without locking the knees out.', variants:[
     {needs:['legPress'], name:'Leg press', equip:'machine'},
+    // never the default (the two-leg press always comes first); offered as a swap (defect 176)
+    {needs:['legPress'], name:'Single-leg leg press', equip:'machine, one leg at a time', per:'leg', how:'One foot in the middle of the plate, the other off to the side; lower until the knee is near a right angle with the hips staying on the seat, press back without locking the knee. Same reps on each leg, weaker leg first.'},
   ]},
   romanianDeadlift: {unit:'reps', how:'Stand tall holding the weight against the thighs, push the hips back and hinge forward with a flat back until the weight reaches mid-shin, then stand up by squeezing the glutes. The knees stay slightly bent throughout.', variants:[
     {needs:['barbell'], name:'Romanian deadlift', equip:'barbell'},
@@ -866,10 +868,13 @@ function strengthSwapOptions(line, sessionLines, avail, onlySlots){
         newLine = strengthSetLine(ex, sets, n, toBody ? Math.min(rest, 60) : heavyRest, effort);
       }
       _used.length = usedSoFar;
-      out.push({line:newLine, name:ex.name, equip:ex.equip, how:ex.how||null, singleLeg: ex.per==='leg', machine: /machine/i.test(ex.equip)});
+      out.push({line:newLine, name:ex.name, equip:ex.equip, how:ex.how||null, singleLeg: ex.per==='leg', bodyweight: !!ex.bodyweight, machine: /machine/i.test(ex.equip)});
     }
   }
-  return onlySlots ? out : out.slice(0, 8);
+  if(onlySlots) return out;
+  // up to six of each kind, in order, so neither single-leg nor two-leg options get cut off
+  const two = out.filter(o=>!o.singleLeg).slice(0, 6), one = out.filter(o=>o.singleLeg).slice(0, 6);
+  return out.filter(o=>two.includes(o) || one.includes(o));
 }
 const STRENGTH_TIME_MIN = {heavy:40, short:25, maintain:28, express:20, light:15, upper:22, upperFull:35};
 // Load is set by effort, not by a number the app can't know: "N reps left in the tank"
@@ -998,6 +1003,15 @@ function rebuildLoggedSession(day, loggedNames, phase, weekIndex, opts){
   d.strengthExercises = lines;
   d.strengthRestored = true;
   return d;
+}
+// What job a lower-body line does in its session, for the swap menu (defect 176): 'main' is
+// the session's heavy lift, 'single' its one-leg work; null for anything else.
+function strengthSlotRole(line){
+  const m = String(line).match(SWAP_LINE_RE); if(!m) return null;
+  const name = swapBaseName(m[3]);
+  const slot = Object.keys(STRENGTH_EXERCISES).find(k=>STRENGTH_EXERCISES[k].variants.some(v=>v.name===name && v.equip===m[4]))
+    || Object.keys(STRENGTH_EXERCISES).find(k=>STRENGTH_EXERCISES[k].variants.some(v=>v.name===name));
+  return PRIMARY_LOWER_POOL.includes(slot) ? 'main' : UNILATERAL_POOL.includes(slot) ? 'single' : null;
 }
 // The exercises on the last day of a week, for the next week's first session to avoid.
 function strengthNamesBefore(prevWeek){
@@ -2413,7 +2427,7 @@ return {
   QUALITY_TYPES, WARMUP_ELIGIBLE_TYPES, STRIDES_ELIGIBLE_TYPES, STRIDES_REPS, STRIDES_EXTRA_KM, HILL_STRIDES_EXTRA_KM, QUALITY_WARMUP_KM, QUALITY_COOLDOWN_KM,
   TYPE_LABELS, isLegDemandingDay, isKeySessionDay, structuredEffort, buildWorkoutMeta,
   STRENGTH_EXERCISES, OPTIONAL_EXTRAS, strengthSwapOptions, SWAP_FAMILIES, EQUIPMENT, DEFAULT_EQUIPMENT, equipmentSet, resolveExercise, STRENGTH_TIME_MIN, lowerStrengthTierForPhase, buildLowerStrengthWorkout, buildUpperStrengthWorkout,
-  placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts, strengthNamesBefore, rebuildLoggedSession,
+  placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts, strengthNamesBefore, rebuildLoggedSession, strengthSlotRole,
   qualityDowsFor, deriveScheduleFromLongDow, evenlySpacedPositions, scheduleWarnings,
   raceClass, taperDaysFor, taperVolumeFactor, taperLongFactor, targetPeakWeeklyKm, peakLongTargetKm, longFracCap, longTimeCapMin,
   qualityMinutes, floorMinutesFor, sizeQuality, buildWeekDays, generatePlan,
