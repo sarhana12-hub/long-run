@@ -577,6 +577,15 @@ const EXERCISE_LIBRARY = {
     link: L(191, 'pull-ups'),
     art: {start:{x:120, y:130, torso:0, legs:[{thigh:90, shin:-90}], arms:[{upper:180, fore:180}]}, finish:{x:120, y:88, torso:-5, legs:[{thigh:90, shin:-90}], arms:[{upper:170, fore:-130}]}, scene:[{bar:[60,20,180]}, {arrow:[200,150,200,100]}]},
   },
+  'Straight-arm pulldown': {
+    summary: 'Sweep a cable handle from head height down to the thighs with straight arms. It works the lats on their own, because bent arms are what let the biceps help.',
+    setup: ['Straight bar or rope on the high cable attachment (or a long band anchored high). Stand facing it, a big step back.', 'Feet hip-width, knees soft, hinge forward a little from the hips with a flat back. Arms straight out in front, hands at about head height.'],
+    move: ['Keeping the elbows straight (a slight bend is fine, but it never changes), sweep the hands down in an arc to the front of the thighs.', 'Squeeze for a second, then let the hands rise slowly back to head height.'],
+    cues: ['Pull from the armpits, not the hands: the arms are just levers.', 'Shoulders down away from the ears the whole time.', 'Torso stays still; no rocking to swing the weight.', 'Light enough that the elbows never bend to help. Start well lighter than your lat pulldown weight.'],
+    mistake: 'Bending the elbows as it gets hard, which turns it into a triceps press and hands the work back to the arms.',
+    link: null,
+    art: {start:{x:130, y:140, torso:-15, legs:[{thigh:-5, shin:-5}], arms:[{upper:150, fore:150}]}, finish:{x:130, y:140, torso:-15, legs:[{thigh:-5, shin:-5}], arms:[{upper:20, fore:20}]}, scene:['floor', {post:[200,140]}]},
+  },
   'Lat pulldown': {
     summary: 'Pull a bar down to the upper chest. The pull-up with the weight chosen for you.',
     setup: ['Thighs under the pads, hands a little wider than the shoulders, lean back a touch.'],
