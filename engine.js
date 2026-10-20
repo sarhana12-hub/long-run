@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 34; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 35; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -761,8 +761,15 @@ function buildUpperStrengthWorkout(variant, avail, full, avoid){
   const pullAt = variant + 1 + Math.floor(variant/3);
   const pull = pickFromPool(UPPER_PULL_POOL, pullAt, avail, taken, avoid);
   const push = pickFromPool(UPPER_PUSH_POOL, variant, avail, taken, avoid);
-  const pull2 = full ? pickFromPool(UPPER_PULL_POOL, pullAt+1, avail, taken, avoid) : null;
-  const push2 = full ? pickFromPool(UPPER_PUSH_POOL, variant+1, avail, taken, avoid) : null;
+  // The full session's second pull and push work the other plane (defect 173: a row and an
+  // inverted row, then a bench press and push-ups): a row pairs with a pull-up or pulldown,
+  // a horizontal press with an overhead one, and the other way round.
+  const VERTICAL_PULL = ['pullUps'], HORIZONTAL_PULL = ['singleArmRow','invertedRow'];
+  const VERTICAL_PUSH = ['shoulderPress'], HORIZONTAL_PUSH = ['benchPress','pushUps'];
+  const otherPlane = (ex, vertical, horizontal, all, at) => !ex ? null
+    : pickFromPool(vertical.includes(ex.id) ? horizontal : horizontal.includes(ex.id) ? vertical : all, at, avail, taken, avoid);
+  const pull2 = full ? otherPlane(pull, VERTICAL_PULL, HORIZONTAL_PULL, UPPER_PULL_POOL, pullAt+1) : null;
+  const push2 = full ? otherPlane(push, VERTICAL_PUSH, HORIZONTAL_PUSH, UPPER_PUSH_POOL, variant+1) : null;
   const core = pickFromPool(UPPER_CORE_POOL, variant, avail, taken, avoid);
   const core2 = pickFromPool(UPPER_CORE2_POOL, variant+2, avail, taken, avoid);
   const isPushUp = ex => ex.name==='Push-ups' || ex.name==='Pike push-ups';

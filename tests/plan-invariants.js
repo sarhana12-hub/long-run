@@ -184,6 +184,18 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   }
   console.log(`\n=== strength variety, one lower and two upper a week ===`); if(bad.length){ failures++; bad.slice(0,8).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 173 the full upper session's second pull and push work the other plane from the first
+{
+  const nm = l => l.replace(/^\S+\s+/,'').split(' (')[0];
+  const vPull = /Pull-ups|pulldown|Assisted pull-ups/i, vPush = /shoulder press|Overhead press|Kettlebell press|Pike push-ups|^Shoulder press$/i;
+  const bad = [];
+  for(let v=0; v<18; v++){
+    const n = g.buildUpperStrengthWorkout(v, g.equipmentSet(), true).map(nm);
+    if(vPull.test(n[0])===vPull.test(n[2])) bad.push(`variant ${v}: both pulls in one plane: ${n[0]}, ${n[2]}`);
+    if(vPush.test(n[1])===vPush.test(n[3])) bad.push(`variant ${v}: both pushes in one plane: ${n[1]}, ${n[3]}`);
+  }
+  console.log('\n=== full upper session: second pull and push in the other plane ==='); if(bad.length){ failures++; bad.slice(0,6).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
 {
   const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();
