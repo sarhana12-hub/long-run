@@ -823,20 +823,22 @@ function restSecFromStr(r){
   m = r.match(/^(\d+) min$/); if(m) return Number(m[1])*60;
   m = r.match(/^(\d+)s$/); return m ? Number(m[1]) : 0;
 }
-function strengthSwapOptions(line, sessionLines, avail){
+// onlySlots: the slots to draw from in place of the line's family (used to put a logged lift
+// back in its own slot when rebuilding a session).
+function strengthSwapOptions(line, sessionLines, avail, onlySlots){
   avail = avail || equipmentSet();
   const m = String(line).match(SWAP_LINE_RE); if(!m) return [];
   const name = swapBaseName(m[3]);
   const slot = Object.keys(STRENGTH_EXERCISES).find(k=>STRENGTH_EXERCISES[k].variants.some(v=>v.name===name && v.equip===m[4]))
     || Object.keys(STRENGTH_EXERCISES).find(k=>STRENGTH_EXERCISES[k].variants.some(v=>v.name===name));
-  const family = slot && SWAP_FAMILIES.find(f=>f.includes(slot));
+  const family = onlySlots || (slot && SWAP_FAMILIES.find(f=>f.includes(slot)));
   if(!family) return [];
   const inSession = new Set((sessionLines||[]).map(l=>{ const x = String(l).match(SWAP_LINE_RE); return x ? swapBaseName(x[3]) : null; }).filter(Boolean));
   const sets = Number(m[1]), amt = m[2], cue = m[5], rest = restSecFromStr(m[6]);
   const origHold = /^\d+s/.test(amt), origCarry = /m$/.test(amt), origReps = origCarry ? 10 : (parseInt(amt, 10) || 0), origBody = /bodyweight/i.test(m[4]);
   const coreFamily = family.includes('plank');
   const seen = new Set(), out = [];
-  for(const key of [slot, ...family.filter(k=>k!==slot)]){
+  for(const key of onlySlots ? family : [slot, ...family.filter(k=>k!==slot)]){
     const def = STRENGTH_EXERCISES[key];
     for(const v of def.variants){
       if(!v.needs.every(id=>avail.has(id)) || v.name===name || inSession.has(v.name) || seen.has(v.name)) continue;
@@ -856,6 +858,8 @@ function strengthSwapOptions(line, sessionLines, avail){
         if(key==='boxJumps') n = 5; else if(key==='pogoHops') n = 20;
         const toBody = ex.bodyweight && !origBody && key!=='boxJumps' && key!=='pogoHops';
         if(ex.unit!=='hold' && toBody && n<8) n = 8;
+        // bodyweight to loaded: the loaded lift's own rep range (push-ups 12 → a press for 8)
+        if(ex.unit!=='hold' && origBody && !ex.bodyweight && key!=='boxJumps' && key!=='pogoHops') n = n>=15 ? 10 : n>10 ? 8 : n;
         const effort = toBody ? cue.replace(/^heavy( but crisp)?\s*—\s*/, 'slow, three seconds down — ').replace(/^moderate-heavy, /, 'slow and controlled, ') : cue;
         // heavy rest follows the builder: barbell lifts 2–3 min, other heavy lifts 2 min
         const heavyRest = (rest===120 || rest===150) ? (/barbell/i.test(ex.equip) ? 150 : 120) : rest;
@@ -865,7 +869,7 @@ function strengthSwapOptions(line, sessionLines, avail){
       out.push({line:newLine, name:ex.name, equip:ex.equip, how:ex.how||null, singleLeg: ex.per==='leg', machine: /machine/i.test(ex.equip)});
     }
   }
-  return out.slice(0, 8);
+  return onlySlots ? out : out.slice(0, 8);
 }
 const STRENGTH_TIME_MIN = {heavy:40, short:25, maintain:28, express:20, light:15, upper:22, upperFull:35};
 // Load is set by effort, not by a number the app can't know: "N reps left in the tank"
@@ -963,6 +967,38 @@ function recomputeStrengthFocus(days){
 // Attaches exercise content to every strength day for the runner's equipment
 // (opts.equipment, defaulting to DEFAULT_EQUIPMENT). Called at generation and after any
 // edit, swap, or equipment change.
+// A past day the runner trained on whose session the plan no longer holds (defect 175: an
+// edit wiped by a rebuild): rebuilt from the weights logged that day. The logged exercises
+// say whether it was a lower or upper session and are put back in their own slots; the
+// rest of the session is the app's match for that day. Returns the rebuilt day.
+function rebuildLoggedSession(day, loggedNames, phase, weekIndex, opts){
+  opts = opts||{};
+  const avail = equipmentSet(opts.equipment);
+  const slotOf = n => Object.keys(STRENGTH_EXERCISES).find(k=>STRENGTH_EXERCISES[k].variants.some(v=>v.name===n));
+  const lowerSlots = new Set([...SWAP_FAMILIES[0], ...SWAP_FAMILIES[1], ...SWAP_FAMILIES[2], ...SWAP_FAMILIES[3]]);
+  const focus = loggedNames.some(n=>lowerSlots.has(slotOf(n))) ? 'lower' : 'upper';
+  const d = {...day, strength:true, strengthFocus:focus, strengthFocusPinned:true};
+  refreshStrengthWorkouts([d], phase, weekIndex, {...opts, fromDate:null, rebuildDates:new Set([d.date])});
+  const lines = d.strengthExercises.slice();
+  const nameOf = l => { const m = String(l).match(SWAP_LINE_RE); return m ? swapBaseName(m[3]) : null; };
+  // the slot a lift fills in a session: its own pool first (a logged back squat replaces the
+  // main lift, not the single-leg one), then anything in its family
+  const POOLS = [PRIMARY_LOWER_POOL, UNILATERAL_POOL, POSTERIOR_POOL, LOWER_CORE_POOL, PLYO_POOL_INTRO, UPPER_PULL_POOL, UPPER_PUSH_POOL, UPPER_CORE_POOL, UPPER_CORE2_POOL];
+  const poolOf = n => POOLS.find(p=>p.includes(slotOf(n)));
+  for(const n of loggedNames){
+    if(lines.some(l=>nameOf(l)===n) || !slotOf(n)) continue;
+    const free = i => !loggedNames.includes(nameOf(lines[i])); // never displace another logged lift
+    const idx = lines.map((l,i)=>i).filter(free);
+    const samePool = idx.filter(i=>poolOf(nameOf(lines[i]))===poolOf(n));
+    let o = null, at = -1;
+    for(const i of samePool){ o = strengthSwapOptions(lines[i], lines, avail, [slotOf(n)]).find(x=>x.name===n); if(o){ at = i; break; } }
+    if(!o) for(const i of idx){ const fam = SWAP_FAMILIES.find(f=>f.includes(slotOf(nameOf(lines[i])))); o = fam ? strengthSwapOptions(lines[i], lines, avail, fam).find(x=>x.name===n) : null; if(o){ at = i; break; } }
+    if(o){ lines[at] = o.line; if(o.how) d.strengthHowTo = [...(d.strengthHowTo||[]).filter(h=>h.name!==n), {name:n, how:o.how}]; }
+  }
+  d.strengthExercises = lines;
+  d.strengthRestored = true;
+  return d;
+}
 // The exercises on the last day of a week, for the next week's first session to avoid.
 function strengthNamesBefore(prevWeek){
   const last = prevWeek && prevWeek.days && prevWeek.days[prevWeek.days.length-1];
@@ -984,7 +1020,10 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
   days.forEach(d=>{
     // Days before opts.fromDate are history: left exactly as they were, but still counted
     // for the rotation and the neighbour check (defect 174).
-    if(opts.fromDate && d.date < opts.fromDate){ namesOf(d).forEach(n=>builtNames.add(n)); return; }
+    // keepDates: a day already under way (today, once a session is started); rebuildDates: a
+    // day the runner just changed, rebuilt even if it is in the past.
+    const asked = opts.rebuildDates && opts.rebuildDates.has(d.date);
+    if(!asked && ((opts.fromDate && d.date < opts.fromDate) || (opts.keepDates && opts.keepDates.has(d.date)))){ namesOf(d).forEach(n=>builtNames.add(n)); return; }
     if(d.type==='rest') Object.assign(d, buildWorkoutMeta(d)); // rest-day text depends on whether strength landed there
     if(!d.strength){ d.strengthTier=undefined; d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthAfterRun=false; d.strengthShort=false; d.strengthShortable=false; d.strengthLong=false; d.strengthLongable=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
     const tier = lowerStrengthTierForPhase(phase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace, opts.strengthCutoffDays);
@@ -2374,7 +2413,7 @@ return {
   QUALITY_TYPES, WARMUP_ELIGIBLE_TYPES, STRIDES_ELIGIBLE_TYPES, STRIDES_REPS, STRIDES_EXTRA_KM, HILL_STRIDES_EXTRA_KM, QUALITY_WARMUP_KM, QUALITY_COOLDOWN_KM,
   TYPE_LABELS, isLegDemandingDay, isKeySessionDay, structuredEffort, buildWorkoutMeta,
   STRENGTH_EXERCISES, OPTIONAL_EXTRAS, strengthSwapOptions, SWAP_FAMILIES, EQUIPMENT, DEFAULT_EQUIPMENT, equipmentSet, resolveExercise, STRENGTH_TIME_MIN, lowerStrengthTierForPhase, buildLowerStrengthWorkout, buildUpperStrengthWorkout,
-  placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts, strengthNamesBefore,
+  placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts, strengthNamesBefore, rebuildLoggedSession,
   qualityDowsFor, deriveScheduleFromLongDow, evenlySpacedPositions, scheduleWarnings,
   raceClass, taperDaysFor, taperVolumeFactor, taperLongFactor, targetPeakWeeklyKm, peakLongTargetKm, longFracCap, longTimeCapMin,
   qualityMinutes, floorMinutesFor, sizeQuality, buildWeekDays, generatePlan,

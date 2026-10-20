@@ -1368,6 +1368,7 @@ function boot(){
     let idx = plan.weeks.findIndex(w=>{ const ws=parseDate(w.weekStart); return today>=ws && today<addDays(ws,7); });
     state.currentWeekIndex = idx===-1?0:idx;
     state.view = 'app'; state.tab='plan';
+    restoreLoggedSessions();
   } else {
     state.view = 'onboarding';
     state.onboardDraft = defaultDraft();
@@ -1384,12 +1385,29 @@ function boot(){
 // strength day must still find that session), and a day ahead that the runner changed
 // (edited, moved, swapped, or set to treadmill) keeps their change (defect 174).
 // edits:false (a settings change) keeps the past only: the new settings rework every day ahead.
+// A past day with weights logged on it but no strength session in the plan (an edit that a
+// rebuild dropped, before rebuilds kept edits): the session is rebuilt from those weights
+// and kept as the runner's own (defect 175).
+function restoreLoggedSessions(){
+  const plan = state.plan; if(!plan || !plan.weeks) return;
+  const today = fmtDate(todayDate()), byDate = {};
+  Object.entries(state.strengthLoads||{}).forEach(([name, arr])=>(arr||[]).forEach(e=>{ if(e && e.date && e.date<today && e.value>0) (byDate[e.date] = byDate[e.date]||[]).includes(name) || byDate[e.date].push(name); }));
+  let changed = false;
+  plan.weeks.forEach(w=>w.days.forEach((d,i)=>{
+    const names = byDate[d.date]; if(!names || d.strength) return;
+    const opts = strengthOptsFor(w); delete opts.fromDate;
+    w.days[i] = {...rebuildLoggedSession(d, names, w.phase, w.weekIndex, opts), userEdited:true};
+    changed = true;
+  }));
+  if(changed) Store.setPlan(plan);
+}
 function keepHistoryAndEdits(old, fresh, edits){
   const today = fmtDate(todayDate());
   const oldDays = new Map(); old.weeks.forEach(w=>w.days.forEach(d=>oldDays.set(d.date, d)));
   fresh.weeks.forEach(w=>{
     let kept = false;
-    w.days = w.days.map(d=>{ const o = oldDays.get(d.date); if(o && (d.date < today || (edits!==false && o.userEdited))){ kept = true; return {...o, daysToRace: d.daysToRace}; } return d; });
+    const started = startedStrengthDates();
+    w.days = w.days.map(d=>{ const o = oldDays.get(d.date); if(o && (d.date < today || (d.date===today && started.has(today)) || (edits!==false && o.userEdited))){ kept = true; return {...o, daysToRace: d.daysToRace}; } return d; });
     if(kept) w.targetKm = round1(w.days.reduce((s,d)=>s+(d.km||0),0));
   });
 }
@@ -2354,11 +2372,21 @@ function equipmentChipsHtml(selected, act){
 }
 // Options every post-generation strength refresh needs (edits, swaps, equipment changes).
 const STRENGTH_TIME_MIN_PAGE = {full:40, short:25, upper:22, upperFull:35};
-function strengthOptsFor(week){
+// Dates with strength work already recorded on them (ticks, weights, a swap, marked done):
+// once today's session is under way, a rebuild or refresh leaves it alone.
+function startedStrengthDates(){
+  const out = new Set();
+  Object.entries(state.strengthItems||{}).forEach(([d, arr])=>{ if((arr||[]).some(Boolean)) out.add(d); });
+  Object.values(state.strengthLoads||{}).forEach(arr=>(arr||[]).forEach(e=>{ if(e && e.date) out.add(e.date); }));
+  Object.keys(state.strengthSwaps||{}).forEach(d=>out.add(d));
+  (state.strengthDone||[]).forEach(d=>out.add(d));
+  return out;
+}
+function strengthOptsFor(week, rebuildDates){
   const mode = (state.setup && state.setup.taperMode) || 'full';
   const prev = state.plan && state.plan.weeks ? state.plan.weeks.find(w=>w.weekIndex===week.weekIndex-1) : null;
   // fromDate: sessions before today are history and are never rebuilt (defect 174)
-  return {fromDate: fmtDate(todayDate()), prevNames: strengthNamesBefore(prev), equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none', shortDates: new Set(state.strengthShort||[]), longDates: new Set(state.strengthLong||[])};
+  return {fromDate: fmtDate(todayDate()), keepDates: startedStrengthDates(), rebuildDates: new Set(rebuildDates||[]), prevNames: strengthNamesBefore(prev), equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none', shortDates: new Set(state.strengthShort||[]), longDates: new Set(state.strengthLong||[])};
 }
 function refreshStrengthFromThisWeek(){
   const plan = state.plan; if(!plan) return;
@@ -2497,7 +2525,7 @@ function swapDayContents(wa, ia, wb, ib){
   // userEdited: the runner's own change, kept when a new engine rebuilds the plan (defect 174)
   A.days[ia] = {...db_, ...keepA, userEdited:true};
   B.days[ib] = {...da, ...keepB, userEdited:true};
-  [A, B].forEach(w=>{ w.targetKm = round1(w.days.reduce((s,d)=>s+d.km,0)); recomputeStrengthFocus(w.days); refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); });
+  [A, B].forEach(w=>{ w.targetKm = round1(w.days.reduce((s,d)=>s+d.km,0)); recomputeStrengthFocus(w.days); refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w, [da.date, db_.date])); });
   Store.setPlan(plan);
 }
 // Where a missed session could go, within seven days of the day it was due: the first rest
@@ -2540,7 +2568,7 @@ function moveMissedSession(wi, di, twi, tdi){
   plan.weeks[twi].days[tdi] = {...src, ...keepT, strength:target.strength, strengthFocus:target.strengthFocus||null, userEdited:true};
   const restMeta = buildWorkoutMeta({type:'rest', km:0, strength:src.strength}, plan.raceDistanceKm);
   plan.weeks[wi].days[di] = {...src, userEdited:true, type:'rest', km:0, label:TYPE_META.rest.label, strides:false, hillStrides:false, easyRole:null, terrain:null, warmupKm:0, cooldownKm:0, qualityKm:0, structuredKm:0, workKm:0, easyVariety:false, progressionEasy:false, racePaceKm:0, paceKey:null, paceKey2:null, desc2:null, paceOverrideSecPerKm:null, treadmill:false, treadmillHills:false, ...restMeta};
-  [plan.weeks[wi], plan.weeks[twi]].forEach(w=>{ w.targetKm = round1(w.days.reduce((s,d)=>s+d.km,0)); recomputeStrengthFocus(w.days); refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); });
+  [plan.weeks[wi], plan.weeks[twi]].forEach(w=>{ w.targetKm = round1(w.days.reduce((s,d)=>s+d.km,0)); recomputeStrengthFocus(w.days); refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w, [src.date, target.date])); });
   Store.setPlan(plan);
 }
 function todayWeekIndex(plan){
@@ -5269,9 +5297,10 @@ function renderDayDetail(){
     <details class="card settings-details" id="strength-details" style="padding:0 14px; margin-bottom:14px;" ${(day.km>0 && !(state.modal && state.modal.strengthOpen)) ? '' : 'open'}>
       <summary><span><div class="lbl" style="font-weight:700; font-size:14.5px;">Strength${day.strengthFocus==='upper' ? ' — upper body & core' : ''}</div><div class="sub" style="font-size:12.5px; color:var(--muted); margin-top:2px;">${day.strengthTimeMin ? `About ${day.strengthTimeMin} min` : ''}${day.km>0 ? (day.strengthAfterRun ? ' · after the run, not before it' : ' · after the run') : ''}${isStrengthDone ? ' · done' : ''}</div></span><span class="chev">${ICONS.chevron}</span></summary>
       <div style="padding-bottom:14px;">
-        ${day.strengthShortable ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthShort?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-short="0">Full · ${STRENGTH_TIME_MIN_PAGE.full} min</button><button class="chip ${day.strengthShort?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-short="1">Shorter · ${STRENGTH_TIME_MIN_PAGE.short} min</button></div>` : ''}
-        ${day.strengthLongable ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthLong?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-long="0">Standard · ${STRENGTH_TIME_MIN_PAGE.upper} min</button><button class="chip ${day.strengthLong?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-long="1">Full · ${STRENGTH_TIME_MIN_PAGE.upperFull} min</button></div>` : ''}
+        ${day.strengthShortable && day.date>=fmtDate(todayDate()) ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthShort?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-short="0">Full · ${STRENGTH_TIME_MIN_PAGE.full} min</button><button class="chip ${day.strengthShort?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-short="1">Shorter · ${STRENGTH_TIME_MIN_PAGE.short} min</button></div>` : ''}
+        ${day.strengthLongable && day.date>=fmtDate(todayDate()) ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthLong?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-long="0">Standard · ${STRENGTH_TIME_MIN_PAGE.upper} min</button><button class="chip ${day.strengthLong?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-long="1">Full · ${STRENGTH_TIME_MIN_PAGE.upperFull} min</button></div>` : ''}
         ${strengthFocusNote ? `<div class="hint" style="margin:0 0 8px;">${esc(strengthFocusNote)}</div>` : ''}
+        ${day.strengthRestored ? `<div class="hint" style="margin:0 0 8px;">Rebuilt from the weights you logged this day: those exercises are as you did them; the rest is the app's best match for the session.</div>` : ''}
         ${strengthRowsHtml(day.strengthExercises, day.date, day.strengthHowTo, false)}
         <div class="hint" style="margin:8px 0 12px;">Tap an exercise for the effort, rest and how to do it. Tick each one as you go.</div>
         ${day.strengthOptional && day.strengthOptional.length ? `
@@ -5941,7 +5970,7 @@ function onClick(e){
     if(el.dataset.long!=null){ const list = (state.strengthLong||[]).filter(d=>d!==date); if(el.dataset.long==='1') list.push(date); state.strengthLong = list; Store.setStrengthLong(list); }
     else { const short = el.dataset.short==='1'; const list = (state.strengthShort||[]).filter(d=>d!==date); if(short) list.push(date); state.strengthShort = list; Store.setStrengthShort(list); }
     const wi = state.plan.weeks.findIndex(w=>w.days.some(d=>d.date===date));
-    if(wi>=0){ const w = state.plan.weeks[wi]; refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); Store.setPlan(state.plan); }
+    if(wi>=0){ const w = state.plan.weeks[wi]; refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w, [date])); Store.setPlan(state.plan); }
     if(state.modal) state.modal.strengthOpen = true;
     // Swap only the strength section inside the open sheet: no page rebuild, no flash, no scroll jump.
     const live = document.getElementById('strength-details');
@@ -6029,7 +6058,7 @@ function onClick(e){
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     recomputeStrengthFocus(week.days);
-    refreshStrengthWorkouts(week.days, week.phase, week.weekIndex, strengthOptsFor(week));
+    refreshStrengthWorkouts(week.days, week.phase, week.weekIndex, strengthOptsFor(week, [day.date]));
     Store.setPlan(state.plan);
     state.modal=null; showToast('Day updated'); return;
   }
