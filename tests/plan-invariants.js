@@ -162,6 +162,11 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   if(!sl.some(o=>o.name==='Single-leg leg press' && o.singleLeg)) bad.push('single-leg leg press not offered for a squat');
   if(!(sl.some(o=>o.singleLeg) && sl.some(o=>!o.singleLeg && !o.bodyweight))) bad.push('squat swap does not offer both kinds');
   if(g.resolveExercise(g.STRENGTH_EXERCISES.legPress, g.equipmentSet()).name!=='Leg press') bad.push('single-leg leg press became the planned default');
+  // 177 an arm exercise's amount ("8/arm") is reps, not a carry distance; the pulldown is offered
+  const rowL = '3×8/arm Single-arm dumbbell row (dumbbell, hand and knee on a bench) — 1–2 reps left in the tank, squeeze the shoulder blades. Rest 75s between sets.';
+  const ro = g.strengthSwapOptions(rowL, [rowL]);
+  if(ro.some(o=>!/^3×8(\/arm)? /.test(o.line))) bad.push('a row swap changed the reps: '+ro.find(o=>!/^3×8(\/arm)? /.test(o.line)).line);
+  if(!ro.some(o=>o.name==='Straight-arm pulldown')) bad.push('straight-arm pulldown not offered for a row');
   console.log(`\n=== one-day exercise swaps (${checked} alternatives) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,10).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
 // 172 variety: the owner's layout (one lower day, an upper day the day after, a second

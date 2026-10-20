@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 35; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 36; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -578,6 +578,12 @@ const STRENGTH_EXERCISES = {
     {needs:['cable'], name:'Single-arm cable row', equip:'cable machine, low attachment'},
     {needs:[], name:'Inverted row under a table', equip:'a sturdy table edge', how:'Lie under the edge, grip it, pull the chest up to the edge by squeezing the shoulder blades, lower slowly.', per:null},
   ]},
+  // Lats with the arms kept straight, so the biceps cannot take over (defect 177: the owner's
+  // overhand pull-ups trail their neutral-grip ones by 5-6 reps, weak lats against strong arms).
+  straightArmPulldown: {unit:'reps', how:'Stand facing the cable a step back, hinge forward slightly, arms straight out in front holding the bar or rope; sweep the hands down to the thighs by pulling the arms back from the shoulders, elbows staying straight, then let them rise slowly back to head height.', variants:[
+    {needs:['cable'], name:'Straight-arm pulldown', equip:'cable machine, high attachment'},
+    {needs:['longBand'], name:'Straight-arm pulldown', equip:'long band anchored high'},
+  ]},
   shoulderPress: {unit:'reps', variants:[
     {needs:['dumbbells'], name:'Dumbbell shoulder press', equip:'dumbbells, seated or standing'},
     {needs:['shoulderPressMachine'], name:'Shoulder press', equip:'machine'},
@@ -614,6 +620,10 @@ const OPTIONAL_EXTRAS = {
     {needs:['armMachines'], name:'Triceps extensions', equip:'triceps machine'},
     {needs:['dumbbells'], name:'Overhead triceps extension', equip:'one dumbbell, both hands'},
     {needs:['bench'], name:'Bench dips', equip:'bench, feet on the floor'},
+  ]},
+  straightArmPulldown: {unit:'reps', how:'Stand facing the cable a step back, hinge forward slightly, arms straight out in front holding the bar or rope; sweep the hands down to the thighs by pulling the arms back from the shoulders, elbows staying straight, then let them rise slowly back to head height.', variants:[
+    {needs:['cable'], name:'Straight-arm pulldown', equip:'cable machine, high attachment'},
+    {needs:['longBand'], name:'Straight-arm pulldown', equip:'long band anchored high'},
   ]},
   lateralRaise: {unit:'reps', variants:[
     {needs:['dumbbells'], name:'Lateral raises', equip:'light dumbbells'},
@@ -794,10 +804,13 @@ function buildUpperStrengthWorkout(variant, avail, full, avoid){
 }
 function buildUpperOptional(variant, avail){
   avail = avail || equipmentSet();
+  // the straight-arm pulldown comes first when the runner has a cable or band: it is the one
+  // extra with a running purpose (lats for posture) and the owner's weak link (defect 177)
   const keys = ['curls','triceps','lateralRaise'];
   const picks = [];
+  const sap = resolveExercise(OPTIONAL_EXTRAS.straightArmPulldown, avail); if(sap) picks.push(sap);
   for(let k=0;k<3 && picks.length<2;k++){ const r = resolveExercise(OPTIONAL_EXTRAS[keys[(variant+k)%3]], avail); if(r) picks.push(r); }
-  return picks.map(ex=>strengthSetLine(ex, 2, 12, 45, 'moderate, 2 reps left in the tank'));
+  return picks.map(ex=>strengthSetLine(ex, 2, 12, 45, ex.name==='Straight-arm pulldown' ? 'arms straight, feel it in the lats, slow on the way up' : 'moderate, 2 reps left in the tank'));
 }
 function buildLowerOptional(avail){
   avail = avail || equipmentSet();
@@ -814,7 +827,7 @@ const SWAP_FAMILIES = [
   ['calfRaiseStraight','calfRaiseBent'],
   ['pogoHops','boxJumps'],
   ['benchPress','pushUps','shoulderPress'],
-  ['pullUps','invertedRow','singleArmRow'],
+  ['pullUps','invertedRow','singleArmRow','straightArmPulldown'],
   ['plank','deadBug','birdDog','hangingKneeRaise','sidePlank','bandWalk','suitcaseCarry','farmerCarry'],
 ];
 const SWAP_LINE_RE = /^(\d+)×(\S+) (.+?) \(([^)]*)\) — (.*?)\.?(?: Rest (.+?) between sets\.)?$/;
@@ -837,9 +850,9 @@ function strengthSwapOptions(line, sessionLines, avail, onlySlots){
   if(!family) return [];
   const inSession = new Set((sessionLines||[]).map(l=>{ const x = String(l).match(SWAP_LINE_RE); return x ? swapBaseName(x[3]) : null; }).filter(Boolean));
   const sets = Number(m[1]), amt = m[2], cue = m[5], rest = restSecFromStr(m[6]);
-  const origHold = /^\d+s/.test(amt), origCarry = /m$/.test(amt), origReps = origCarry ? 10 : (parseInt(amt, 10) || 0), origBody = /bodyweight/i.test(m[4]);
+  const origHold = /^\d+s/.test(amt), origCarry = /^\d+(?:–\d+)?m$/.test(amt), origReps = origCarry ? 10 : (parseInt(amt, 10) || 0), origBody = /bodyweight/i.test(m[4]);
   const coreFamily = family.includes('plank');
-  const seen = new Set(), out = [];
+  const seen = new Set(); let out = [];
   for(const key of onlySlots ? family : [slot, ...family.filter(k=>k!==slot)]){
     const def = STRENGTH_EXERCISES[key];
     for(const v of def.variants){
@@ -868,12 +881,17 @@ function strengthSwapOptions(line, sessionLines, avail, onlySlots){
         newLine = strengthSetLine(ex, sets, n, toBody ? Math.min(rest, 60) : heavyRest, effort);
       }
       _used.length = usedSoFar;
-      out.push({line:newLine, name:ex.name, equip:ex.equip, how:ex.how||null, singleLeg: ex.per==='leg', bodyweight: !!ex.bodyweight, machine: /machine/i.test(ex.equip)});
+      out.push({line:newLine, name:ex.name, equip:ex.equip, how:ex.how||null, singleLeg: ex.per==='leg', bodyweight: !!ex.bodyweight, machine: /machine/i.test(ex.equip), slot:key});
     }
   }
   if(onlySlots) return out;
-  // up to six of each kind, in order, so neither single-leg nor two-leg options get cut off
-  const two = out.filter(o=>!o.singleLeg).slice(0, 6), one = out.filter(o=>o.singleLeg).slice(0, 6);
+  // every movement in the family gets a place before any one fills the list: the first three
+  // of the exercise's own movement and two of each other, then the rest in order
+  const firstPass = [], counts = {};
+  out.forEach(o=>{ counts[o.slot] = (counts[o.slot]||0)+1; if(counts[o.slot] <= (o.slot===slot ? 3 : 2)) firstPass.push(o); });
+  out = [...firstPass, ...out.filter(o=>!firstPass.includes(o))];
+  // up to eight two-leg (or upper) and six single-leg options, in order, so neither kind is cut off
+  const two = out.filter(o=>!o.singleLeg).slice(0, 8), one = out.filter(o=>o.singleLeg).slice(0, 6);
   return out.filter(o=>two.includes(o) || one.includes(o));
 }
 const STRENGTH_TIME_MIN = {heavy:40, short:25, maintain:28, express:20, light:15, upper:22, upperFull:35};
