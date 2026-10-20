@@ -2337,7 +2337,8 @@ function equipmentChipsHtml(selected, act){
 const STRENGTH_TIME_MIN_PAGE = {full:40, short:25, upper:22, upperFull:35};
 function strengthOptsFor(week){
   const mode = (state.setup && state.setup.taperMode) || 'full';
-  return {equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none', shortDates: new Set(state.strengthShort||[]), longDates: new Set(state.strengthLong||[])};
+  const prev = state.plan && state.plan.weeks ? state.plan.weeks.find(w=>w.weekIndex===week.weekIndex-1) : null;
+  return {prevNames: strengthNamesBefore(prev), equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none', shortDates: new Set(state.strengthShort||[]), longDates: new Set(state.strengthLong||[])};
 }
 function refreshStrengthFromThisWeek(){
   const plan = state.plan; if(!plan) return;

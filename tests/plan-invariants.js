@@ -156,6 +156,34 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   if(!lp || !/^4×5 Leg press \(machine\) — heavy — 1–2 reps left in the tank\. Rest 2 min between sets\.$/.test(lp.line)) bad.push('back squat does not offer the leg press as 4×5: '+(lp && lp.line));
   console.log(`\n=== one-day exercise swaps (${checked} alternatives) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,10).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 172 variety: the owner's layout (one lower day, an upper day the day after, a second
+// upper day) never repeats an exercise on back-to-back days, meets every pull and push
+// pairing, and walks every lift in the lower pools even at one lower session a week
+{
+  const nm = l => l.replace(/^\S+\s+/,'').split(' (')[0];
+  const st = {units:'mi', raceKey:'half', raceDistanceKm:21.0975, raceDate:'2027-03-14', currentWeeklyKm:22*MI, recentDistanceKm:5, recentTimeSec:24*60, longestRecentRunKm:7*MI, longDow:0, weekStartDow:0, ...g.deriveScheduleFromLongDow(0, 3), runsPerWeek:5, strengthPerWeek:3, equipment:g.DEFAULT_EQUIPMENT.slice(), goalTimeSec:null, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'flat', skipBase:false, taperMode:'full', buildPace:'standard'};
+  const pl = g.generatePlan(st, g.parseDate('2026-09-06'));
+  const weeks = pl.weeks.filter(w=>w.phase==='base'||w.phase==='build').slice(0,12);
+  const bad = [];
+  // Mon lower, Tue upper, Sat upper (the owner's); and Sun upper, Wed lower, Sat upper, so a
+  // Saturday session meets the next week's Sunday one across the week boundary
+  for(const layout of [[[1,'lower'],[2,'upper'],[6,'upper']], [[0,'upper'],[3,'lower'],[6,'upper']]]){
+  const seq = [];
+  weeks.forEach((w,k)=>{
+    w.days.forEach(d=>{ d.strength=false; d.strengthFocus=null; });
+    layout.forEach(([i,f])=>{ w.days[i].strength=true; w.days[i].strengthFocus=f; });
+    g.refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, {equipment:st.equipment, weekInBlock:w.weekIndex%4, prevNames: g.strengthNamesBefore(weeks[k-1])});
+    w.days.filter(d=>d.strengthExercises).forEach(d=>seq.push({date:d.date, focus:d.strengthFocus, names:d.strengthExercises.map(nm)}));
+  });
+  for(let i=1;i<seq.length;i++){ const gap = (g.parseDate(seq[i].date)-g.parseDate(seq[i-1].date))/864e5; const rep = seq[i].names.filter(n=>seq[i-1].names.includes(n) && !/calf/i.test(n)); if(gap<=1 && rep.length) bad.push(`${seq[i-1].date} → ${seq[i].date} repeat ${rep.join(', ')}`); }
+  const up = seq.filter(x=>x.focus==='upper'), lo = seq.filter(x=>x.focus!=='upper');
+  const pairs = new Set(up.map(x=>x.names.slice(0,2).join('+'))).size;
+  if(pairs < 9) bad.push(`only ${pairs} pull+push pairings in ${up.length} upper sessions`);
+  for(const n of ['Kettlebell swing','Single-leg Romanian deadlift','Hamstring curl']) if(!lo.some(x=>x.names.includes(n))) bad.push(`${n} never comes up at one lower session a week`);
+  for(const n of ['Back squat','Leg press','Romanian deadlift','Barbell hip thrust']) if(!lo.some(x=>x.names.includes(n))) bad.push(`${n} never comes up at one lower session a week`);
+  }
+  console.log(`\n=== strength variety, one lower and two upper a week ===`); if(bad.length){ failures++; bad.slice(0,8).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
 {
   const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();
