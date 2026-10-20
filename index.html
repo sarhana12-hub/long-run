@@ -1358,6 +1358,7 @@ function boot(){
       if(!setup.planStartDate && setup.trackingStartDate){ const ts = parseDate(setup.trackingStartDate), w0 = parseDate(plan.weeks[0].weekStart); if(ts>w0 && ts<addDays(w0,7)){ setup.planStartDate = setup.trackingStartDate; Store.setSetup(setup); } }
       const dayOne = parseDate(plan.weeks[0].weekStart);
       const fresh = isGeneralPlan(setup) ? generateGeneralPlan(setup, dayOne) : generatePlan(setup, dayOne);
+      keepHistoryAndEdits(plan, fresh);
       Store.setPlan(fresh); plan = fresh; rebuilt = true;
     }catch(err){ console.error('plan rebuild failed', err); }
   }
@@ -1373,8 +1374,24 @@ function boot(){
     state.onboardStep = 1;
   }
   render();
+  if(rebuilt && state.view==='app'){ refreshStrengthFromThisWeek(); render(); } // the runner's Full/Shorter choices and the new rules, today on
   if(rebuilt) showToast('Your plan was rebuilt with the updated training engine');
   handleStravaRedirect();
+}
+
+// A rebuild applies new rules to the days still ahead, never to the past: every day before
+// today stays exactly as it was (it is what the runner trained against; a weight logged on a
+// strength day must still find that session), and a day ahead that the runner changed
+// (edited, moved, swapped, or set to treadmill) keeps their change (defect 174).
+// edits:false (a settings change) keeps the past only: the new settings rework every day ahead.
+function keepHistoryAndEdits(old, fresh, edits){
+  const today = fmtDate(todayDate());
+  const oldDays = new Map(); old.weeks.forEach(w=>w.days.forEach(d=>oldDays.set(d.date, d)));
+  fresh.weeks.forEach(w=>{
+    let kept = false;
+    w.days = w.days.map(d=>{ const o = oldDays.get(d.date); if(o && (d.date < today || (edits!==false && o.userEdited))){ kept = true; return {...o, daysToRace: d.daysToRace}; } return d; });
+    if(kept) w.targetKm = round1(w.days.reduce((s,d)=>s+(d.km||0),0));
+  });
 }
 
 /* ============================= strava ============================= */
@@ -1654,6 +1671,8 @@ function submitOnboarding(){
       const oldByStart = Object.fromEntries(oldPlan.weeks.map(w=>[w.weekStart, w]));
       const todayWeekStart = startOfWeek(today, setup.weekStartDow);
       plan.weeks = plan.weeks.map(w => (parseDate(w.weekStart)<todayWeekStart && oldByStart[w.weekStart]) ? oldByStart[w.weekStart] : w);
+      // and the days of this week already lived (defect 174)
+      keepHistoryAndEdits(oldPlan, plan, false);
     }
   }
   // Whether "on track" stats (adherence, mi ahead/behind, % of training miles logged) count
@@ -2337,7 +2356,9 @@ function equipmentChipsHtml(selected, act){
 const STRENGTH_TIME_MIN_PAGE = {full:40, short:25, upper:22, upperFull:35};
 function strengthOptsFor(week){
   const mode = (state.setup && state.setup.taperMode) || 'full';
-  return {equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none', shortDates: new Set(state.strengthShort||[]), longDates: new Set(state.strengthLong||[])};
+  const prev = state.plan && state.plan.weeks ? state.plan.weeks.find(w=>w.weekIndex===week.weekIndex-1) : null;
+  // fromDate: sessions before today are history and are never rebuilt (defect 174)
+  return {fromDate: fmtDate(todayDate()), prevNames: strengthNamesBefore(prev), equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none', shortDates: new Set(state.strengthShort||[]), longDates: new Set(state.strengthLong||[])};
 }
 function refreshStrengthFromThisWeek(){
   const plan = state.plan; if(!plan) return;
@@ -2473,8 +2494,9 @@ function swapDayContents(wa, ia, wb, ib){
   const plan = state.plan; const A = plan.weeks[wa], B = plan.weeks[wb];
   const da = A.days[ia], db_ = B.days[ib];
   const keepA = {date:da.date, dow:da.dow, id:da.id, daysToRace:da.daysToRace}, keepB = {date:db_.date, dow:db_.dow, id:db_.id, daysToRace:db_.daysToRace};
-  A.days[ia] = {...db_, ...keepA};
-  B.days[ib] = {...da, ...keepB};
+  // userEdited: the runner's own change, kept when a new engine rebuilds the plan (defect 174)
+  A.days[ia] = {...db_, ...keepA, userEdited:true};
+  B.days[ib] = {...da, ...keepB, userEdited:true};
   [A, B].forEach(w=>{ w.targetKm = round1(w.days.reduce((s,d)=>s+d.km,0)); recomputeStrengthFocus(w.days); refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); });
   Store.setPlan(plan);
 }
@@ -2515,9 +2537,9 @@ function moveMissedSession(wi, di, twi, tdi){
   const src = plan.weeks[wi].days[di];
   const keepT = {date:target.date, dow:target.dow, id:target.id, daysToRace:target.daysToRace};
   // strength belongs to the date, not the run: the target keeps its session, the vacated day keeps its own
-  plan.weeks[twi].days[tdi] = {...src, ...keepT, strength:target.strength, strengthFocus:target.strengthFocus||null};
+  plan.weeks[twi].days[tdi] = {...src, ...keepT, strength:target.strength, strengthFocus:target.strengthFocus||null, userEdited:true};
   const restMeta = buildWorkoutMeta({type:'rest', km:0, strength:src.strength}, plan.raceDistanceKm);
-  plan.weeks[wi].days[di] = {...src, type:'rest', km:0, label:TYPE_META.rest.label, strides:false, hillStrides:false, easyRole:null, terrain:null, warmupKm:0, cooldownKm:0, qualityKm:0, structuredKm:0, workKm:0, easyVariety:false, progressionEasy:false, racePaceKm:0, paceKey:null, paceKey2:null, desc2:null, paceOverrideSecPerKm:null, treadmill:false, treadmillHills:false, ...restMeta};
+  plan.weeks[wi].days[di] = {...src, userEdited:true, type:'rest', km:0, label:TYPE_META.rest.label, strides:false, hillStrides:false, easyRole:null, terrain:null, warmupKm:0, cooldownKm:0, qualityKm:0, structuredKm:0, workKm:0, easyVariety:false, progressionEasy:false, racePaceKm:0, paceKey:null, paceKey2:null, desc2:null, paceOverrideSecPerKm:null, treadmill:false, treadmillHills:false, ...restMeta};
   [plan.weeks[wi], plan.weeks[twi]].forEach(w=>{ w.targetKm = round1(w.days.reduce((s,d)=>s+d.km,0)); recomputeStrengthFocus(w.days); refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, strengthOptsFor(w)); });
   Store.setPlan(plan);
 }
@@ -5547,7 +5569,7 @@ function onClick(e){
     const day = state.plan.weeks[wi].days[di];
     const on = !day.treadmill;
     const meta = buildWorkoutMeta({...day, treadmillHills:on}, state.plan.raceDistanceKm);
-    Object.assign(day, {treadmill:on, treadmillHills:on, descBase:meta.descBase, paceKey:meta.paceKey, qualityKm: meta.qualityKm!=null ? meta.qualityKm : day.qualityKm});
+    Object.assign(day, {userEdited:true, treadmill:on, treadmillHills:on, descBase:meta.descBase, paceKey:meta.paceKey, qualityKm: meta.qualityKm!=null ? meta.qualityKm : day.qualityKm});
     Store.setPlan(state.plan);
     const sheet = document.querySelector('.sheet'); const y = sheet ? sheet.scrollTop : 0;
     render();
@@ -6003,7 +6025,7 @@ function onClick(e){
     // instead of carrying it forward onto a workout it no longer describes.
     const terrainEligible = draft.type==='long' || (draft.type==='easy' && day.easyRole==='aerobic');
     const hillStridesEligible = draft.type==='easy' && day.easyRole==='aerobic' && strides;
-    state.plan.weeks[wi].days[di] = {...day, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strengthFocus: draft.strength ? draft.strengthFocus : null, strengthFocusPinned: !!draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0, easyVariety:false, terrain: terrainEligible ? day.terrain : null, hillStrides: hillStridesEligible ? day.hillStrides : false, treadmillHills, treadmill: treadmillHills};
+    state.plan.weeks[wi].days[di] = {...day, userEdited:true, type:draft.type, km:round1(draft.km), label:TYPE_META[draft.type].label, strength:draft.strength, strengthFocus: draft.strength ? draft.strengthFocus : null, strengthFocusPinned: !!draft.strength, strides, progressionEasy, paceOverrideSecPerKm: meta.paceKey?draft.paceOverrideSecPerKm:null, ...meta, warmupKm: meta.warmupKm||0, cooldownKm: meta.cooldownKm||0, easyVariety:false, terrain: terrainEligible ? day.terrain : null, hillStrides: hillStridesEligible ? day.hillStrides : false, treadmillHills, treadmill: treadmillHills};
     const week = state.plan.weeks[wi];
     week.targetKm = round1(week.days.reduce((s,d)=>s+d.km,0));
     recomputeStrengthFocus(week.days);

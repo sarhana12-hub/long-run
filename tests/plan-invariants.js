@@ -156,6 +156,73 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   if(!lp || !/^4×5 Leg press \(machine\) — heavy — 1–2 reps left in the tank\. Rest 2 min between sets\.$/.test(lp.line)) bad.push('back squat does not offer the leg press as 4×5: '+(lp && lp.line));
   console.log(`\n=== one-day exercise swaps (${checked} alternatives) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,10).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 172 variety: the owner's layout (one lower day, an upper day the day after, a second
+// upper day) never repeats an exercise on back-to-back days, meets every pull and push
+// pairing, and walks every lift in the lower pools even at one lower session a week
+{
+  const nm = l => l.replace(/^\S+\s+/,'').split(' (')[0];
+  const st = {units:'mi', raceKey:'half', raceDistanceKm:21.0975, raceDate:'2027-03-14', currentWeeklyKm:22*MI, recentDistanceKm:5, recentTimeSec:24*60, longestRecentRunKm:7*MI, longDow:0, weekStartDow:0, ...g.deriveScheduleFromLongDow(0, 3), runsPerWeek:5, strengthPerWeek:3, equipment:g.DEFAULT_EQUIPMENT.slice(), goalTimeSec:null, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'flat', skipBase:false, taperMode:'full', buildPace:'standard'};
+  const pl = g.generatePlan(st, g.parseDate('2026-09-06'));
+  const weeks = pl.weeks.filter(w=>w.phase==='base'||w.phase==='build').slice(0,12);
+  const bad = [];
+  // Mon lower, Tue upper, Sat upper (the owner's); and Sun upper, Wed lower, Sat upper, so a
+  // Saturday session meets the next week's Sunday one across the week boundary
+  for(const layout of [[[1,'lower'],[2,'upper'],[6,'upper']], [[0,'upper'],[3,'lower'],[6,'upper']]]){
+  const seq = [];
+  weeks.forEach((w,k)=>{
+    w.days.forEach(d=>{ d.strength=false; d.strengthFocus=null; });
+    layout.forEach(([i,f])=>{ w.days[i].strength=true; w.days[i].strengthFocus=f; });
+    g.refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, {equipment:st.equipment, weekInBlock:w.weekIndex%4, prevNames: g.strengthNamesBefore(weeks[k-1])});
+    w.days.filter(d=>d.strengthExercises).forEach(d=>seq.push({date:d.date, focus:d.strengthFocus, names:d.strengthExercises.map(nm)}));
+  });
+  for(let i=1;i<seq.length;i++){ const gap = (g.parseDate(seq[i].date)-g.parseDate(seq[i-1].date))/864e5; const rep = seq[i].names.filter(n=>seq[i-1].names.includes(n) && !/calf/i.test(n)); if(gap<=1 && rep.length) bad.push(`${seq[i-1].date} → ${seq[i].date} repeat ${rep.join(', ')}`); }
+  const up = seq.filter(x=>x.focus==='upper'), lo = seq.filter(x=>x.focus!=='upper');
+  const pairs = new Set(up.map(x=>x.names.slice(0,2).join('+'))).size;
+  if(pairs < 9) bad.push(`only ${pairs} pull+push pairings in ${up.length} upper sessions`);
+  for(const n of ['Kettlebell swing','Single-leg Romanian deadlift','Hamstring curl']) if(!lo.some(x=>x.names.includes(n))) bad.push(`${n} never comes up at one lower session a week`);
+  for(const n of ['Back squat','Leg press','Romanian deadlift','Barbell hip thrust']) if(!lo.some(x=>x.names.includes(n))) bad.push(`${n} never comes up at one lower session a week`);
+  }
+  console.log(`\n=== strength variety, one lower and two upper a week ===`); if(bad.length){ failures++; bad.slice(0,8).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
+// 173 the full upper session's second pull and push work the other plane from the first
+{
+  const nm = l => l.replace(/^\S+\s+/,'').split(' (')[0];
+  const vPull = /Pull-ups|pulldown|Assisted pull-ups/i, vPush = /shoulder press|Overhead press|Kettlebell press|Pike push-ups|^Shoulder press$/i;
+  const bad = [];
+  for(let v=0; v<18; v++){
+    const n = g.buildUpperStrengthWorkout(v, g.equipmentSet(), true).map(nm);
+    if(vPull.test(n[0])===vPull.test(n[2])) bad.push(`variant ${v}: both pulls in one plane: ${n[0]}, ${n[2]}`);
+    if(vPush.test(n[1])===vPush.test(n[3])) bad.push(`variant ${v}: both pushes in one plane: ${n[1]}, ${n[3]}`);
+  }
+  console.log('\n=== full upper session: second pull and push in the other plane ==='); if(bad.length){ failures++; bad.slice(0,6).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
+// 174 history is never rewritten: a rebuild keeps every past day and the runner's own edits
+// ahead, and a strength refresh from today leaves earlier sessions exactly as they were
+{
+  const html = require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
+  const i = html.indexOf('function keepHistoryAndEdits('), j = html.indexOf('/* ============================= strava');
+  const keep = new Function('fmtDate','todayDate','round1', html.slice(i,j)+'; return keepHistoryAndEdits;')(g.fmtDate, ()=>g.parseDate('2026-10-20'), g.round1);
+  const st = {units:'mi', raceKey:'half', raceDistanceKm:21.0975, raceDate:'2027-01-31', currentWeeklyKm:20*MI, recentDistanceKm:5, recentTimeSec:23*60, longestRecentRunKm:10*MI, longDow:0, weekStartDow:0, ...g.deriveScheduleFromLongDow(0, 3), runsPerWeek:5, strengthPerWeek:3, equipment:g.DEFAULT_EQUIPMENT.slice(), goalTimeSec:null, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'flat', skipBase:false, taperMode:'full', buildPace:'standard'};
+  const old = g.generatePlan(st, g.parseDate('2026-09-06')), fresh = g.generatePlan(st, g.parseDate('2026-09-06'));
+  const od = old.weeks.flatMap(w=>w.days);
+  od.forEach(d=>{ d.mark = 'old'; });
+  const edited = od.find(d=>d.date>'2026-10-20' && d.type==='easy'); edited.userEdited = true;
+  keep(old, fresh);
+  const fd = fresh.weeks.flatMap(w=>w.days);
+  const bad = [];
+  if(fd.some(d=>d.date<'2026-10-20' && d.mark!=='old')) bad.push('a past day was replaced by the rebuild');
+  if(fd.find(d=>d.date===edited.date).mark!=='old') bad.push("the runner's edited day ahead was lost");
+  if(fd.some(d=>d.date>='2026-10-20' && d.date!==edited.date && d.mark==='old')) bad.push('an unedited day ahead kept the old rules');
+  // refresh from a date: earlier days untouched, later ones rebuilt
+  const w = fresh.weeks.find(x=>x.days.filter(d=>d.strength).length>=2);
+  const sd = w.days.filter(d=>d.strength);
+  sd[0].strengthExercises = ['3×8 Marker lift (none) — x.']; const marked = JSON.stringify(sd[0]);
+  sd[1].strengthExercises = ['3×8 Marker lift (none) — x.'];
+  g.refreshStrengthWorkouts(w.days, w.phase, w.weekIndex, {equipment:st.equipment, fromDate: sd[1].date});
+  if(JSON.stringify(sd[0])!==marked) bad.push('a refresh from today rewrote an earlier session');
+  if(/Marker/.test(sd[1].strengthExercises.join())) bad.push('a refresh from today did not rebuild the session on that day');
+  console.log('\n=== history kept through rebuilds and refreshes ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
 {
   const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();
