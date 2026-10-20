@@ -154,6 +154,14 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   const sq = '4×5 Back squat (barbell across the upper back) — heavy — 1–2 reps left in the tank. Rest 2–3 min between sets.';
   const lp = g.strengthSwapOptions(sq, [sq]).find(o=>o.name==='Leg press');
   if(!lp || !/^4×5 Leg press \(machine\) — heavy — 1–2 reps left in the tank\. Rest 2 min between sets\.$/.test(lp.line)) bad.push('back squat does not offer the leg press as 4×5: '+(lp && lp.line));
+  // 176 the slot's job decides which kind is the better replacement; one-leg leg press is offered
+  if(g.strengthSlotRole(sq)!=='main') bad.push('back squat not read as the main lift');
+  const bss = '3×6/leg Bulgarian split squat (dumbbells in hand) — moderate-heavy, 2 left in the tank. Rest 75s between sets.';
+  if(g.strengthSlotRole(bss)!=='single') bad.push('Bulgarian split squat not read as the single-leg lift');
+  const sl = g.strengthSwapOptions(sq, [sq]);
+  if(!sl.some(o=>o.name==='Single-leg leg press' && o.singleLeg)) bad.push('single-leg leg press not offered for a squat');
+  if(!(sl.some(o=>o.singleLeg) && sl.some(o=>!o.singleLeg && !o.bodyweight))) bad.push('squat swap does not offer both kinds');
+  if(g.resolveExercise(g.STRENGTH_EXERCISES.legPress, g.equipmentSet()).name!=='Leg press') bad.push('single-leg leg press became the planned default');
   console.log(`\n=== one-day exercise swaps (${checked} alternatives) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,10).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
 // 172 variety: the owner's layout (one lower day, an upper day the day after, a second

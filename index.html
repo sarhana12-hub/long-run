@@ -329,6 +329,8 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .sx-swap-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;}
 .sx-swap-opt{display:flex; width:100%; align-items:baseline; justify-content:space-between; gap:10px; padding:9px 0; border:0; border-top:1px solid var(--line-soft); background:none; color:var(--ink); text-align:left; font:inherit; cursor:pointer;}
 .sx-swap-opt .sx-cue{display:block;}
+.sx-swap-group{font-size:12.5px; line-height:1.4; color:var(--ink-soft); font-weight:600; padding:10px 0 6px; border-top:1px solid var(--line-soft);}
+.sx-swap-head + .sx-swap-group{border-top:none; padding-top:2px;}
 .sx-swapped, .sx-tag{display:inline-block; margin-left:6px; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:700; vertical-align:2px; background:var(--accent-soft); color:var(--accent-strong);}
 .sx-row input[type=checkbox]{width:22px; height:22px; flex:none; margin:2px 0 0; accent-color:var(--done);}
 .sx-row details{flex:1; min-width:0;}
@@ -2724,13 +2726,32 @@ function strengthSwapHtml(planned, i, date, sw, key){
   const session = planned.map((l,j)=>{ const x = swapFor(date, j, planned); return x ? x.line : l; });
   const opts = strengthSwapOptions(planned[i], session, equipmentSet(state.setup && state.setup.equipment));
   if(!opts.length) return `<div class="sx-swap"><span class="hint" style="margin:0;">No alternatives with your equipment.</span><button class="btn btn-sm btn-ghost" data-act="swap-close">Close</button></div>`;
-  const singleLeg = opts.some(o=>o.singleLeg) && opts.some(o=>!o.singleLeg);
+  // Both kinds on offer: the kind that keeps this slot's job is listed first as the better
+  // replacement, the other after it with what changes (defect 176). Either can be picked.
+  const both = opts.some(o=>o.singleLeg) && opts.some(o=>!o.singleLeg);
+  const role = strengthSlotRole(planned[i]);
+  const fromSingle = /\/leg$/.test((parseStrengthLine(planned[i])||{}).amount||'');
+  const optHtml = (o,k) => { const q = parseStrengthLine(o.line); return `<button class="sx-swap-opt" data-act="swap-pick" data-date="${date}" data-i="${i}" data-k="${k}">
+      <span><span class="sx-name">${esc(o.name)}</span><span class="sx-cue">${esc(o.equip)}</span></span>
+      <span class="sx-sets">${q ? `${q.sets} × ${esc(q.amount)}` : ''}</span></button>`; };
+  const indexed = opts.map((o,k)=>({o,k}));
+  let body;
+  // the main lift's job is heavy loading: only a loaded two-leg lift keeps it
+  const keeps = x => fromSingle ? x.o.singleLeg : role==='main' ? (!x.o.singleLeg && !x.o.bodyweight) : !x.o.singleLeg;
+  const best = indexed.filter(keeps), other = indexed.filter(x=>!keeps(x));
+  if(both && best.length && other.length){
+    const bestWhy = fromSingle ? 'Best replacement: single-leg. This is the session’s one-leg-at-a-time work, so another single-leg lift keeps it.'
+      : role==='main' ? 'Best replacement: a loaded two-leg lift. This is the session’s heavy lift, and these keep it heavy.'
+      : 'Best replacement: two-leg, like the exercise it replaces.';
+    const otherWhy = fromSingle ? 'Also possible: two-leg. Heavier, but the session loses its one-leg work.'
+      : role==='main' ? 'Also possible: single-leg or bodyweight. Lighter, so the session loses its heavy lift; the single-leg ones add balance work but double up on the session’s single-leg slot.'
+      : 'Also possible: single-leg. More balance work, lighter load.';
+    body = `<div class="sx-swap-group">${esc(bestWhy)}</div>${best.map(x=>optHtml(x.o,x.k)).join('')}
+    <div class="sx-swap-group">${esc(otherWhy)}</div>${other.map(x=>optHtml(x.o,x.k)).join('')}`;
+  } else body = indexed.map(x=>optHtml(x.o,x.k)).join('');
   return `<div class="sx-swap-menu">
     <div class="sx-swap-head"><span class="scan-k">Swap for today</span><button class="btn btn-sm btn-ghost" data-act="swap-close">Cancel</button></div>
-    ${singleLeg ? `<div class="hint" style="margin:0 0 8px;">Single-leg options are closest to running; machines take the balance out of it.</div>` : ''}
-    ${opts.map((o,k)=>{ const q = parseStrengthLine(o.line); return `<button class="sx-swap-opt" data-act="swap-pick" data-date="${date}" data-i="${i}" data-k="${k}">
-      <span><span class="sx-name">${esc(o.name)}</span>${o.singleLeg ? `<span class="sx-tag">single-leg</span>` : ''}<span class="sx-cue">${esc(o.equip)}</span></span>
-      <span class="sx-sets">${q ? `${q.sets} × ${esc(q.amount)}` : ''}</span></button>`; }).join('')}
+    ${body}
   </div>`;
 }
 function renderTodayCard(plan){
