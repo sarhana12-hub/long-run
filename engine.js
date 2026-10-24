@@ -908,6 +908,7 @@ const STRENGTH_LOAD_NOTE = {
 };
 
 // Decide which days of an already-typed week carry strength, and what focus.
+const LONG_RUN_REAL_MIN = 75; // below this a long run loads the legs like an easy one
 function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex, opts){
   opts = opts||{};
   days.forEach(d=>{ d.strength=false; d.strengthFocus=null; d.strengthExpress=false; d.strengthAfterRun=false; d.strengthOrdinal=undefined; d.strengthExercises=undefined; d.strengthTimeMin=undefined; });
@@ -930,7 +931,10 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex
     let sc = 0;
     if(hard(i)) sc -= 6;
     if(d.type==='rest') sc -= 1.5; // an empty day: below a clean easy run, well above a hard day
-    if(next.type==='long') sc -= 1; // allowed before a plain long run (owner decision), but a day with rest after it is better
+    // allowed before a plain long run (owner decision), but a day with rest after it is
+    // better - for a long run of 75 minutes or more. A shorter one is an easy hour, no harder
+    // the day after legs than any easy run (owner, defect 178).
+    if(next.type==='long' && !(opts.longPerKm && minutesForKm(next.km, opts.longPerKm) < LONG_RUN_REAL_MIN)) sc -= 1;
     if(d.type==='easy' || d.easyVariety) sc += 2;
     if(d.easyRole==='recovery') sc += 1;
     if(d.easyRole==='aerobic') sc -= 1.5; // medium-long run: a plain easy day is the better home for heavy legs
@@ -1830,7 +1834,7 @@ function generatePlan(setup, dayOneOverride){
     }
     finishWeekDays(days, raceKm);
     const minDaysToRace = Math.min(...days.map(d=>d.daysToRace));
-    placeStrengthDays(days, setup.strengthDows, setup.strengthPerWeek, phase, w, {minDaysToRace, weekInBlock, strengthCutoffDays, trainThrough: taperMode==='none', equipment: setup.equipment, prevNames: strengthNamesBefore(weeks[weeks.length-1])});
+    placeStrengthDays(days, setup.strengthDows, setup.strengthPerWeek, phase, w, {minDaysToRace, weekInBlock, strengthCutoffDays, trainThrough: taperMode==='none', equipment: setup.equipment, longPerKm: paces.longPerKm, prevNames: strengthNamesBefore(weeks[weeks.length-1])});
 
     weeks.push({weekIndex:w, runsPerWeek: runsW, levelKm: w<nTrain ? levels[w] : peakBase, phase, danielsPhase: w<nTrain ? danielsPhaseFor(w) : 'IV', isCutback: isCutback && !heldCutback, beginnerStructure: beginnerWeek, weekStart:fmtDate(weekStart), targetKm:round1(days.reduce((s,d)=>s+d.km,0)), plannedKm: weekHasRace ? round1(days.reduce((s,d)=>s+(d.type==='race'?0:d.km),0)) : weeklyKm, nominalKm: (w<nTrain && !beginnerWeek && !heldCutback) ? vols[w] : weeklyKm, paces, days, baselineVdot:weekVdot, daysToRaceAtStart: daysBetween(weekStart, raceDate)});
   }
@@ -1957,7 +1961,7 @@ function generateSpeedPlan(setup, dayOneOverride){
     let built = buildWeekDays({weekStart, weeklyKm, longKm:longKmAdj, longDow:c.longDow, phase:'build', isCutback, weekIndex:w, quality, runsPerWeek:runs, promisedRuns:c.runsPerWeek, strides:beginnerStructure?2:1, raceKm:10, paces, medLong:false, unit:c.unit});
     if(quality.length>1 && built.days.filter(d=>d.km>0).length < runs){ quality.pop(); built = buildWeekDays({weekStart, weeklyKm, longKm:longKmAdj, longDow:c.longDow, phase:'build', isCutback, weekIndex:w, quality, runsPerWeek:runs, promisedRuns:c.runsPerWeek, strides:1, raceKm:10, paces, medLong:false, unit:c.unit}); } // a promised day outranks the second session (defect 149)
     finishWeekDays(built.days, 10);
-    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?2:setup.strengthPerWeek, isCutback?'cutback':'build', w, {weekInBlock:inCycle, equipment: setup.equipment, prevNames: strengthNamesBefore(list[list.length-1])});
+    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?2:setup.strengthPerWeek, isCutback?'cutback':'build', w, {weekInBlock:inCycle, equipment: setup.equipment, longPerKm: paces.longPerKm, prevNames: strengthNamesBefore(list[list.length-1])});
     list.push({weekIndex:w, runsPerWeek: built.days.filter(d=>d.km>0).length, phase:isCutback?'cutback':'build', isCutback, beginnerStructure, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:vdot});
   }
   const beginnerNote = list.some(x=>x.beginnerStructure) ? [`At ${fmtDist(c.currentKm, c.unit, 0)}/week some weeks follow a beginner structure — easy runs of about 30 minutes with strides, no separate speed session — because a session with its warm-up and cool-down would leave the other runs too short.`] : [];
@@ -1992,7 +1996,7 @@ function generateDistancePlan(setup, dayOneOverride){
     if(metric!=='longest') longKm = round1(Math.min(weeklyKm*(runs<=4 ? 0.33 : DISTANCE_LONG_FRACTION), kmForMinutes(150, paces.longPerKm)));
     const built = buildWeekDays({weekStart, weeklyKm, longKm, longDow:c.longDow, phase:'base', isCutback, weekIndex:w, quality:[], runsPerWeek:runs, promisedRuns:c.runsPerWeek, strides:1, raceKm:10, paces, medLong:runs>=5, unit:c.unit});
     finishWeekDays(built.days, 10);
-    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?1:setup.strengthPerWeek, isCutback?'cutback':'base', w, {weekInBlock:w%4, equipment: setup.equipment, prevNames: strengthNamesBefore(list[list.length-1])});
+    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?1:setup.strengthPerWeek, isCutback?'cutback':'base', w, {weekInBlock:w%4, equipment: setup.equipment, longPerKm: paces.longPerKm, prevNames: strengthNamesBefore(list[list.length-1])});
     list.push({weekIndex:w, runsPerWeek: built.days.filter(d=>d.km>0).length, beginnerStructure: weeklyKm/runs < c.minEasyKm, phase:isCutback?'cutback':'base', isCutback, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
   }
   const extraWarnings = [];
@@ -2019,7 +2023,7 @@ function generateMaintenancePlan(setup, dayOneOverride){
     if((c.currentKm - longKmAdj - s.km)/Math.max(1, c.runsPerWeek-2) < c.minEasyKm*0.9){ quality = []; longKmAdj = longKm; }
     const built = buildWeekDays({weekStart, weeklyKm:c.currentKm, longKm:longKmAdj, longDow:c.longDow, phase:'maintenance', isCutback:false, weekIndex:w, quality, runsPerWeek:c.runsPerWeek, promisedRuns:c.runsPerWeek, strides:quality.length?1:2, raceKm:10, paces, medLong:false, unit:c.unit});
     finishWeekDays(built.days, 10);
-    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?1:setup.strengthPerWeek, 'maintenance', w, {weekInBlock:w%4, equipment: setup.equipment, prevNames: strengthNamesBefore(list[list.length-1])});
+    placeStrengthDays(built.days, setup.strengthDows, setup.strengthPerWeek==null?1:setup.strengthPerWeek, 'maintenance', w, {weekInBlock:w%4, equipment: setup.equipment, longPerKm: paces.longPerKm, prevNames: strengthNamesBefore(list[list.length-1])});
     list.push({weekIndex:w, runsPerWeek: c.runsPerWeek, phase:'maintenance', isCutback:false, beginnerStructure: quality.length===0, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:c.currentKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
   }
   return finishGeneralPlan(setup, list, c.athlete.vdot, c.athlete.vdot, {runsWeekOne: c.runsPerWeek});
