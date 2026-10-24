@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 36; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 37; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -378,7 +378,8 @@ function buildWorkoutMeta(day, raceDistanceKm){
       }
       const surges = clamp(Math.round(day.km/1.5), 4, 8);
       return {
-        descBase: `${surges} surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort, {pace2}), 2 min easy jog between; the rest of the run stays easy at {pace}`,
+        // two paces only (defect 179: "2 min easy jog between" read as a third, slower pace)
+        descBase: `${surges} surges in a continuous run: each about 1–2 min quick but controlled (roughly 5K effort, {pace2}), then 2 min easy before the next. All the running between and around the surges is easy at {pace}`,
         paceKey: 'easyPerKm', paceKey2: 'intervalPerKm', desc2: 'each surge',
       };
     }

@@ -68,7 +68,7 @@ peak 25 mi/wk, long up to 8 mi; weeks 12
   Tu Rest                      No running — strength session today  [+upper 22min: 3×8 Inverted row; 3×8 Dumbbell bench press; 3×10 Bird dog each side; 2×30–40m Suitcase carry each hand]
        · No running — strength session today, plus mobility
   We Fartlek           3.2 mi  Easy run with surges (9:42/mi)
-       · 4 surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort, 7:16/mi), 2 min easy jog between; the rest of the run stays easy at 9:42/mi
+       · 4 surges in a continuous run: each about 1–2 min quick but controlled (roughly 5K effort, 7:16/mi), then 2 min easy before the next. All the running between and around the surges is easy at 9:42/mi
   Th Easy Run          3.1 mi  Conversational (9:42/mi) · + strides  [+lower 40min: 2×5 Squat jumps; 3×5 Back squat; 3×6/leg Walking lunges; 3×12 Kettlebell swing; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×10 Dead bug each side]
        · Conversational, easy effort (9:42/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
@@ -88,7 +88,7 @@ peak 25 mi/wk, long up to 8 mi; weeks 12
   Tu Rest                      No running — strength session today  [+upper 22min: 3×8 Pull-ups; 3×12 Push-ups; 3×40s Plank; 2×30s Side plank each side]
        · No running — strength session today, plus mobility
   We Fartlek           4.0 mi  Easy run with surges (9:40/mi)
-       · 4 surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort, 7:15/mi), 2 min easy jog between; the rest of the run stays easy at 9:40/mi
+       · 4 surges in a continuous run: each about 1–2 min quick but controlled (roughly 5K effort, 7:15/mi), then 2 min easy before the next. All the running between and around the surges is easy at 9:40/mi
   Th Easy Run          6.2 mi  Conversational (9:40/mi) · + strides  [+lower 40min: 3×5 Romanian deadlift; 3×6/leg Bulgarian split squat; 3×8/leg Single-leg Romanian deadlift; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×30–40m Suitcase carry each hand]
        · Conversational, easy effort (9:40/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
@@ -215,7 +215,7 @@ peak 25 mi/wk, long up to 8 mi; weeks 12
   Tu Rest                      No running — strength session today  [+upper 22min: 3×8 Inverted row; 3×12 Push-ups; 3×10 Hanging knee raise; 2×30s Side plank each side]
        · No running — strength session today, plus mobility
   We Fartlek           3.5 mi  Easy run with surges (9:30/mi)
-       · 4 surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort, 7:06/mi), 2 min easy jog between; the rest of the run stays easy at 9:30/mi
+       · 4 surges in a continuous run: each about 1–2 min quick but controlled (roughly 5K effort, 7:06/mi), then 2 min easy before the next. All the running between and around the surges is easy at 9:30/mi
   Th Easy Run          4.7 mi  Conversational (9:30/mi) · + strides
        · Conversational, easy effort (9:30/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
@@ -593,7 +593,7 @@ NOTE: From week 9 on, 35 mi/week on 5 running days doesn't fit: easy runs stay b
   We Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
   Th Fartlek           4.8 mi  Easy run with surges (10:34/mi)
-       · 5 surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort, 7:56/mi), 2 min easy jog between; the rest of the run stays easy at 10:34/mi
+       · 5 surges in a continuous run: each about 1–2 min quick but controlled (roughly 5K effort, 7:56/mi), then 2 min easy before the next. All the running between and around the surges is easy at 10:34/mi
   Fr Easy Run          6.2 mi  Conversational (10:34/mi) · + strides  [+lower 40min: 3×5 Romanian deadlift; 3×6/leg Bulgarian split squat; 3×8/leg Single-leg Romanian deadlift; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×30–40m Suitcase carry each hand]
        · Conversational, easy effort (10:34/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
@@ -676,7 +676,7 @@ NOTE: From week 9 on, 35 mi/week on 5 running days doesn't fit: easy runs stay b
   We Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
   Th Fartlek           5.3 mi  Easy run with surges (10:26/mi)
-       · 6 surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort, 7:49/mi), 2 min easy jog between; the rest of the run stays easy at 10:26/mi
+       · 6 surges in a continuous run: each about 1–2 min quick but controlled (roughly 5K effort, 7:49/mi), then 2 min easy before the next. All the running between and around the surges is easy at 10:26/mi
   Fr Easy Run          6.3 mi  Conversational (10:26/mi) · + strides  [+lower 40min: 3×5 Barbell hip thrust; 3×6/leg Walking lunges; 3×8/leg Single-leg Romanian deadlift; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×10 Dead bug each side]
        · Conversational, easy effort (10:26/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
@@ -759,7 +759,7 @@ NOTE: From week 9 on, 35 mi/week on 5 running days doesn't fit: easy runs stay b
   We Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
   Th Fartlek           5.5 mi  Easy run with surges (10:17/mi)
-       · 6 surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort, 7:43/mi), 2 min easy jog between; the rest of the run stays easy at 10:17/mi
+       · 6 surges in a continuous run: each about 1–2 min quick but controlled (roughly 5K effort, 7:43/mi), then 2 min easy before the next. All the running between and around the surges is easy at 10:17/mi
   Fr Easy Run          6.5 mi  Conversational (10:17/mi) · + strides  [+lower 40min: 3×5 Back squat; 3×6/leg Weighted step-ups; 3×8/leg Single-leg Romanian deadlift; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×15 Mini-band side steps each way]
        · Conversational, easy effort (10:17/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
@@ -799,7 +799,7 @@ NOTE: From week 9 on, 35 mi/week on 5 running days doesn't fit: easy runs stay b
   We Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
   Th Fartlek           5.5 mi  Easy run with surges (10:13/mi)
-       · 6 surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort, 7:40/mi), 2 min easy jog between; the rest of the run stays easy at 10:13/mi
+       · 6 surges in a continuous run: each about 1–2 min quick but controlled (roughly 5K effort, 7:40/mi), then 2 min easy before the next. All the running between and around the surges is easy at 10:13/mi
   Fr Easy Run          6.5 mi  Conversational (10:13/mi) · + strides  [+lower 28min: 2×20 Pogo hops; 3×4 Leg press; 2×6/leg Bulgarian split squat; 2×10/leg Standing single-leg calf raise; 2×30–40m Suitcase carry each hand]
        · Conversational, easy effort (10:13/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
@@ -2460,7 +2460,7 @@ peak 29 mi/wk, long up to 8 mi; weeks 8
   We Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
   Th Fartlek           4.2 mi  Easy run with surges (10:45/mi)
-       · 4 surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort, 8:05/mi), 2 min easy jog between; the rest of the run stays easy at 10:45/mi
+       · 4 surges in a continuous run: each about 1–2 min quick but controlled (roughly 5K effort, 8:05/mi), then 2 min easy before the next. All the running between and around the surges is easy at 10:45/mi
   Fr Easy Run          5.6 mi  Conversational (10:45/mi) · + strides  [+lower 40min: 3×5 Squat jumps; 4×5 Barbell hip thrust; 3×6/leg Weighted step-ups; 3×12 Kettlebell swing; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×15 Mini-band side steps each way]
        · Conversational, easy effort (10:45/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
@@ -2542,7 +2542,7 @@ peak 29 mi/wk, long up to 8 mi; weeks 8
   We Rest                      Full rest, or easy cross-training
        · Full rest — or easy cross-training (bike, swim, elliptical) if you want to move
   Th Fartlek           4.3 mi  Easy run with surges (10:35/mi)
-       · 5 surges woven into a continuous run — about 1–2 min quick but controlled (roughly 5K effort, 7:57/mi), 2 min easy jog between; the rest of the run stays easy at 10:35/mi
+       · 5 surges in a continuous run: each about 1–2 min quick but controlled (roughly 5K effort, 7:57/mi), then 2 min easy before the next. All the running between and around the surges is easy at 10:35/mi
   Fr Easy Run          5.7 mi  Conversational (10:35/mi) · + strides  [+lower 40min: 3×5 Squat jumps; 4×5 Back squat; 3×6/leg Weighted step-ups; 3×12 Kettlebell swing; 3×10/leg Standing single-leg calf raise; 2×15 Calf press on the leg press; 3×30s Side plank each side]
        · Conversational, easy effort (10:35/mi)
        · Finish with strides — 6 × 20s relaxed, full recovery, about 0.3 mi of the total above
