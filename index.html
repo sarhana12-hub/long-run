@@ -288,6 +288,11 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .day-pace{font-family:var(--font-mono); font-size:11.5px; color:var(--muted);}
 .day-check{width:19px; height:19px; border-radius:50%; background:var(--done); color:var(--done-ink); display:flex; align-items:center; justify-content:center; flex:none;}
 .day-check svg{width:11px; height:11px;}
+/* logged but well short of the plan: the ring fills to the share run (defect 180) */
+.day-part{position:relative; width:19px; height:19px; flex:none; color:var(--done);}
+.day-part::before{content:''; position:absolute; inset:0; border-radius:50%; background:conic-gradient(var(--done) calc(var(--p) * 360deg), var(--line) 0); -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 2.6px), #000 calc(100% - 2px)); mask:radial-gradient(farthest-side, transparent calc(100% - 2.6px), #000 calc(100% - 2px));}
+.day-part svg{position:absolute; left:4px; top:4px; width:11px; height:11px;}
+.day-of{font-size:11.5px; color:var(--muted); margin-top:-4px;}
 .strength-badge{display:inline-flex; align-items:center; gap:4px; height:20px; font-size:10.5px; font-weight:700; color:var(--muted); background:var(--surface-2); border-radius:6px; padding:0 6px; line-height:1;}
 .strength-badge svg{width:11px; height:11px; flex:none;}
 .ibadge{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:6px; font-size:11.5px; line-height:1;}
@@ -2764,10 +2769,11 @@ function renderTodayCard(plan){
   const unit = state.setup.units, fmt = dayFmt(day, state.paceFormat);
   const weekPaces = getWeekPaces(plan, week, state.logs);
   const logged = state.logs.some(l=>l.date===day.date);
+  const todaySf = logged ? dayShortfall(day, state.logs) : null;
   const parts = day.km>0 ? workoutPartsFor(day, weekPaces, unit, fmt) : [day.strength ? 'No running — strength session today.' : 'Full rest, or easy cross-training if you want to move.'];
   const tm = treadmillNote(day); if(tm) parts.push(tm);
   return `<div class="card today-card">
-    <div class="tc-head"><span class="tc-label">Today</span><span class="tc-date">${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}${logged?' · logged':''}</span></div>
+    <div class="tc-head"><span class="tc-label">Today</span><span class="tc-date">${DOW_LABELS[day.dow]}, ${niceDate(parseDate(day.date))}${logged ? (todaySf ? ` · logged ${esc(fmtDist(todaySf.doneKm, state.setup.units))} of ${esc(fmtDist(todaySf.plannedKm, state.setup.units))}` : ' · logged') : ''}</span></div>
     <div class="tc-title">${dayPill(day)}${day.km>0?`<span class="mono">${fmtDist(day.km,unit)}</span>`:''}${strengthBadgeHtml(day)}${day.treadmill?'<span class="strength-badge">Treadmill</span>':''}</div>
     <ul>${parts.slice(0,4).map(p=>`<li>${esc(p)}</li>`).join('')}</ul>
     <div class="row">
@@ -2816,6 +2822,7 @@ function renderPlanTab(week, plan){
     const isMoveTarget = state.moveFrom && !isMoveSrc && day.type!=='race'; // race day never trades
     const dt = parseDate(day.date);
     const notLogged = day.km>0 && day.type!=='race' && !match && dt < todayDate() && !beforeTrackingStart(day);
+    const sf = match ? dayShortfall(day, loggedThisWeek) : null;
     return `
     <button class="card day-card ${match?'logged':''} ${(match && state.justLogged===day.date)?'just-logged':''} ${isToday?'today':''} ${isMoveSrc?'move-source':''} ${isMoveTarget?'move-target':''}" data-act="${isMoveTarget ? 'move-target' : 'open-day'}" data-i="${di}">
       <div class="day-date"><div class="dow">${DOW_LABELS[day.dow]}</div><div class="dom mono">${dt.getDate()}</div></div>
@@ -2829,8 +2836,10 @@ function renderPlanTab(week, plan){
         <div class="day-desc">${esc(daySummaryText(day, weekPaces, unit, cardFmt))}</div>
       </div>
       <div class="day-side">
-        ${match?`<div class="day-check">${ICONS.check}</div>`:(notLogged?`<div class="day-ring" title="Not logged"></div>`:'')}
-        ${day.km>0?`<div class="day-dist mono">${fmtDist(day.km,unit)}</div>`:''}
+        ${sf ? `<div class="day-part" style="--p:${sf.frac.toFixed(3)}" title="Logged ${esc(fmtDist(sf.doneKm,unit))} of ${esc(fmtDist(sf.plannedKm,unit))}" aria-label="Logged ${esc(fmtDist(sf.doneKm,unit))} of ${esc(fmtDist(sf.plannedKm,unit))}">${ICONS.check}</div>`
+          : match?`<div class="day-check">${ICONS.check}</div>`:(notLogged?`<div class="day-ring" title="Not logged"></div>`:'')}
+        ${sf ? `<div class="day-dist mono">${fmtDist(sf.doneKm,unit)}</div><div class="day-of mono">of ${fmtDist(sf.plannedKm,unit)}</div>`
+          : day.km>0?`<div class="day-dist mono">${fmtDist(day.km,unit)}</div>`:''}
       </div>
     </button>`;
   }).join('');
@@ -5074,6 +5083,24 @@ function setEntryBy(place, by){ try{ localStorage.setItem('lr_entry_by_'+place, 
 function timeFromPace(paceStr, dist){ const ps = parseDurationToSec(paceStr), v = Number(dist); return (ps>0 && v>0) ? secToClock(Math.round(ps*v)) : ''; }
 function paceFromTime(timeStr, dist){ const ts = parseDurationToSec(timeStr), v = Number(dist); return (ts>0 && v>0) ? secToClock(Math.round(ts/v)) : ''; }
 function entryByChipsHtml(act, by, extra){ return `<div class="chip-select" style="margin:0 0 10px;"><button class="chip ${by==='time'?'active':''}" data-act="${act}" data-by="time"${extra||''}>Enter times</button><button class="chip ${by==='pace'?'active':''}" data-act="${act}" data-by="pace"${extra||''}>Enter paces</button></div>`; }
+// A day logged well short of the plan (defect 180): under 85% of the planned distance and at
+// least 0.3 mi (about 0.5 km) short, so watch-against-plan rounding never counts. Runs on the
+// same day count together. On a day with a warm-up and cool-down, a main set logged in full
+// is the session done, whatever the total. Still green: it was run; the mark shows how much.
+const SHORT_FRAC = 0.85, SHORT_MIN_KM = 0.483;
+function dayShortfall(day, logs){
+  if(!day || !(day.km>0) || day.type==='race') return null;
+  const ls = (logs||[]).filter(l=>l.date===day.date && l.kind!=='race');
+  if(!ls.length) return null;
+  const doneKm = ls.reduce((s,l)=>s+(l.distanceKm||0),0);
+  if(!(doneKm < day.km*SHORT_FRAC && day.km-doneKm >= SHORT_MIN_KM)) return null;
+  if(dayHasParts(day)){
+    const unit = state.setup.units, plannedMain = unitToKm(shownPartsFor(day, unit).main||0, unit);
+    const mainKm = ls.reduce((s,l)=>{ const m = logMainPart(l); return s+(m ? m.km : 0); }, 0);
+    if(plannedMain>0 && mainKm>0 && plannedMain-mainKm <= Math.max(0.16, plannedMain*0.05)) return null;
+  }
+  return {doneKm, plannedKm: day.km, shortKm: day.km-doneKm, frac: Math.max(0, Math.min(1, doneKm/day.km)), runs: ls.length};
+}
 function dayHasParts(day){ return !!day && day.type!=='race' && ((day.warmupKm||0)+(day.cooldownKm||0))>0.15; }
 const MAIN_PART_LABEL = {tempo:'Tempo', racepace:'Race pace', overunder:'Over-unders', cruise:'Cruise intervals', intervals:'Reps and jogs', reps:'Reps and jogs', hills:'Hill reps and jogs'};
 function partLabel(part, day){ return part==='warmup' ? 'Warm-up' : part==='cooldown' ? 'Cool-down' : (MAIN_PART_LABEL[day && day.type] || 'Main set'); }
@@ -5305,6 +5332,9 @@ function renderDayDetail(){
     ${missedHtml}
     ${day.type==='race' ? `<button class="btn btn-primary btn-block" data-act="open-pacing-sheet" style="margin-bottom:16px;">${ICONS.flag} View pacing sheet</button>` : ''}
     ${matchedLogs.map(log=>renderLoggedComparisonHtml(day, log, state.plan, week, state.logs, unit, fmt)).join('')}
+    ${(()=>{ const sf = dayShortfall(day, state.logs); if(!sf) return '';
+      const gap = fmtDist(sf.shortKm, unit);
+      return `<div class="hint" style="margin:-4px 0 14px;">${sf.runs>1 ? `Your runs this day add up to ${esc(fmtDist(sf.doneKm,unit))} of ${esc(fmtDist(sf.plannedKm,unit))}: ${esc(gap)} short of the plan.` : `${esc(gap)} short of the plan.`}</div>`; })()}
     ${purpose ? `
     <div class="field">
       <label class="field-label">Purpose</label>

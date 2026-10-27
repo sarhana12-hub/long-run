@@ -248,6 +248,29 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   if(rl.strengthFocus!=='lower' || !/Back squat/.test(main)) bad.push('a logged back squat is not the main lift of the rebuilt session: '+rl.strengthExercises.join(' | '));
   console.log('\n=== history kept through rebuilds and refreshes ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 180 a day logged well short of the plan is marked as short; rounding, a full main set and
+// two runs that add up are not
+{
+  const html = require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
+  const i = html.indexOf('const SHORT_FRAC'), j = html.indexOf('function dayHasParts(day)');
+  const dayShortfall = new Function('state','unitToKm','shownPartsFor','logMainPart','dayHasParts', html.slice(i,j)+'; return dayShortfall;')(
+    {setup:{units:'mi'}}, g.unitToKm, g.shownPartsFor, g.logMainPart, d=>!!d && d.type!=='race' && ((d.warmupKm||0)+(d.cooldownKm||0))>0.15);
+  const easy = {date:'2026-10-26', type:'easy', km:3.3*MI};
+  const L = (km, extra) => ({date:'2026-10-26', distanceKm:km, durationSec:km*360, ...(extra||{})});
+  const bad = [];
+  if(!dayShortfall(easy, [L(2.0*MI)])) bad.push('2.0 of 3.3 mi not marked short');
+  if(dayShortfall(easy, [L(3.1*MI)])) bad.push('0.2 mi short (rounding) marked short');
+  if(dayShortfall(easy, [L(1.6*MI), L(1.6*MI)])) bad.push('two runs adding up to the plan marked short');
+  if(!dayShortfall(easy, [L(1.0*MI), L(1.0*MI)])) bad.push('two runs together well short not marked');
+  if(dayShortfall({...easy, km:1.0*MI}, [L(0.8*MI)])) bad.push('0.2 mi short of a 1 mi run marked short (under the 0.3 mi floor)');
+  if(dayShortfall({...easy, type:'race'}, [L(1.0*MI)])) bad.push('a race day marked short');
+  const pl = g.generatePlan({units:'mi', raceKey:'half', raceDistanceKm:21.0975, raceDate:'2027-01-31', currentWeeklyKm:22*MI, recentDistanceKm:5, recentTimeSec:23*60, longestRecentRunKm:10*MI, longDow:0, weekStartDow:0, ...g.deriveScheduleFromLongDow(0, 2), runsPerWeek:5, strengthPerWeek:2, equipment:g.DEFAULT_EQUIPMENT.slice(), goalTimeSec:null, longRunEmphasis:'balanced', speedEmphasis:'high', hillsMode:'flat', skipBase:false, taperMode:'full', buildPace:'standard'}, g.parseDate('2026-09-06'));
+  const q = pl.weeks.flatMap(w=>w.days).find(d=>d.warmupKm>0 && d.km>4*MI);
+  const mainKm = g.shownPartsFor(q,'mi').main*MI;
+  if(dayShortfall({...q, date:'2026-10-26'}, [L(mainKm+0.3*MI, {parts:[{part:'main', km:mainKm, sec:mainKm*270}]})])) bad.push('a quality day with the main set run in full marked short');
+  if(!dayShortfall({...q, date:'2026-10-26'}, [L(mainKm*0.5, {parts:[{part:'main', km:mainKm*0.5, sec:mainKm*135}]})])) bad.push('a quality day with half the main set not marked short');
+  console.log('\n=== short days marked, rounding and full main sets not ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
 {
   const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();
