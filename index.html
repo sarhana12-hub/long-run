@@ -2780,10 +2780,13 @@ function strengthSwapHtml(planned, i, date, sw, key){
 // Machine and rack settings (defect 181: the owner kept seat, pin and rack heights in a phone
 // note). A setting has a name ("Squat rack") and the settings themselves, and shows with each
 // exercise it is linked to; one setting can serve several exercises. Edited here or in Settings.
-// Every exercise name in the plan, for linking a setting from the Settings tab.
+// Every exercise the runner could meet, for linking a setting from the Settings tab: the
+// plan's own, plus every version their equipment allows (defect 182: a barbell bench press,
+// only ever reached by a swap, could not be picked).
 function planExerciseNames(){
-  const out = new Set();
+  const out = new Set(), avail = equipmentSet(state.setup && state.setup.equipment);
   (state.plan && state.plan.weeks || []).forEach(w=>w.days.forEach(d=>[...(d.strengthExercises||[]), ...(d.strengthOptional||[])].forEach(l=>{ const p = parseStrengthLine(l); if(p) out.add(p.name); })));
+  [STRENGTH_EXERCISES, OPTIONAL_EXTRAS].forEach(cat=>Object.values(cat).forEach(def=>def.variants.forEach(v=>{ if(v.needs.every(id=>avail.has(id))) out.add(v.name); })));
   return [...out].sort((a,b)=>a.localeCompare(b));
 }
 function gymFormHtml(ed){

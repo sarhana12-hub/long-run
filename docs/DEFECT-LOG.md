@@ -424,6 +424,8 @@ The read-through is now a standing pre-push step: `npm run readthrough` regenera
 
 181. **Nowhere to keep machine and rack settings** (owner screenshot: a phone note "Weight room" with squat rack 18, bench rack 12, leg extension and hamstring machine seat, wheel and bar positions). *Feature:* a setting has a name ("Squat rack") and the settings themselves, and shows under "My settings" in the details of each exercise it is linked to. One setting can serve several exercises. Each exercise can add a new setting or use a saved one ("Use a saved setting…"). Settings → Strength → Machine settings lists them all, where they are added, edited, linked to exercises from the plan, or deleted (two taps). They are kept in backups, and Start over leaves them, as it leaves logged weights. Checked in the browser: added from Settings with exercises picked, added from an exercise, linked, deleted.
 
+182. **Barbell bench press could not be picked for a machine setting** (owner: "Is there no barbell bench press exercise?"). It is in the library, but the bench press slot uses dumbbells whenever the runner has them, so the barbell version only comes up through a swap. The Machine settings picker listed only exercises already in the plan. *Fix:* the picker lists the plan's exercises plus every version the runner's equipment allows (76 with the default equipment), so the bench rack can be linked to Barbell bench press ahead of a swap. Checked in the browser.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy
