@@ -368,6 +368,19 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .sx-warm-k{font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:3px;}
 .sx-warm-list{margin:0 0 4px; padding-left:18px; font-size:14px; color:var(--ink-soft); line-height:1.45;}
 .sx-warm-t{font-size:14px; color:var(--ink-soft); line-height:1.45;}
+.sx-hist-link{color:var(--muted); font-weight:600;}
+.lh-card{padding:0 14px; margin-bottom:10px;}
+.lh-card summary{list-style:none; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 0; cursor:pointer;}
+.lh-card summary::-webkit-details-marker{display:none;}
+.lh-head{display:flex; flex-direction:column; gap:2px; min-width:0;}
+.lh-head .lbl{font-weight:700; font-size:15px;}
+.lh-head .sub{font-size:12.5px; color:var(--muted);}
+.lh-card .chev{color:var(--muted); transition:transform .15s ease;}
+.lh-card .chev svg{width:16px; height:16px;}
+.lh-card[open] .chev{transform:rotate(90deg);}
+.lh-rows{padding-bottom:10px;}
+.lh-rows > div{display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-top:1px solid var(--line-soft); font-size:14px;}
+.lh-rows .mono{font-weight:700;}
 .sx-open{display:flex; align-items:center; gap:12px; width:100%; text-align:left; padding:14px; margin-bottom:14px; font:inherit; color:var(--ink); cursor:pointer;}
 .sx-open.done{border-color:var(--done); background:var(--done-bg);}
 .sx-open-ico{width:34px; height:34px; border-radius:10px; background:var(--surface-2); color:var(--ink-soft); display:flex; align-items:center; justify-content:center; flex:none;}
@@ -1342,7 +1355,7 @@ function rerenderSheet(){ const sh = document.querySelector('.sheet'); const top
 // Replaces the open sheet's contents with a fresh render of the same sheet: no page rebuild,
 // no dimmer flash, no entrance animation, scroll position kept.
 function swapSheetContents(){ const sh = document.querySelector('.sheet'); if(!sh || !state.modal){ render(); return; } const top = sh.scrollTop; const tmp = document.createElement('div'); tmp.innerHTML = renderModal(); const fresh = tmp.querySelector('.sheet'); if(!fresh){ render(); return; } sh.innerHTML = fresh.innerHTML; sh.scrollTop = top; }
-function closeModal(){ if(state.modal && state.modal.type==='strength'){ state.builder = null; if(state.modal.back){ state.modal = state.modal.back; render(); return; } } if(state.modal && state.modal.type==='log-parts' && state.modal.back){ state.modal = state.modal.back; render(); return; } const held = state.modal && state.modal.type==='milestone' ? state.pendingToast : null; state.modal=null; state.moveFrom=null; state.pendingToast=null; if(held) showToast(held.msg, held.undo, held.ms); else render(); }
+function closeModal(){ if(state.modal && state.modal.type==='lift-history' && state.modal.back){ const b = state.modal.back; state.modal = b; render(); const s2 = document.querySelector('.sheet'); if(s2 && b.scrollY!=null) s2.scrollTop = b.scrollY; return; } if(state.modal && state.modal.type==='strength'){ state.builder = null; if(state.modal.back){ state.modal = state.modal.back; render(); return; } } if(state.modal && state.modal.type==='log-parts' && state.modal.back){ state.modal = state.modal.back; render(); return; } const held = state.modal && state.modal.type==='milestone' ? state.pendingToast : null; state.modal=null; state.moveFrom=null; state.pendingToast=null; if(held) showToast(held.msg, held.undo, held.ms); else render(); }
 // Flashes a message inline next to the "Your name" label (the lexi-badge span) instead of
 // a floating toast — a fixed-position popup kept landing either behind the Dynamic Island
 // or under the keyboard depending on how far up the screen it sat. Bypasses render()
@@ -2758,7 +2771,28 @@ function strengthLoadHtml(name, date, amount){
     <label class="field-label" style="margin:0;">Weight</label>
     <input class="input" type="number" inputmode="decimal" step="0.5" min="0" data-act="set-strength-load" data-name="${esc(name)}" data-date="${date}" data-reps="${reps||''}" value="${today ? today.value : ''}" placeholder="${sug ? sug.value : '—'}" style="width:88px; padding:7px 10px;">
     <span class="hint" style="margin:0;">${unit}</span>
+    ${hist.some(h=>h.value>0) ? `<button class="btn btn-sm btn-ghost sx-hist-link" data-act="open-lift-history" data-name="${esc(name)}">History</button>` : ''}
   </div>${sug ? `<div class="hint" style="margin-top:6px;">${esc(sug.text)}</div>` : ''}`;
+}
+// Weight history (defect 189): every weight logged, per exercise, newest first, with the
+// latest and the heaviest. Kept through Start over and a plan change, and in backups.
+function liftEntryText(e){ const v = Number.isInteger(e.value) ? e.value : Number(e.value).toFixed(1).replace(/\.0$/,''); return `${v} ${e.unit || loadUnit()}${e.reps ? ` × ${e.reps}` : ''}`; }
+function renderLiftHistory(){
+  const m = state.modal, loads = state.strengthLoads || {};
+  const names = (m.name ? [m.name] : Object.keys(loads)).filter(n=>(loads[n]||[]).some(e=>e.value>0));
+  const latestDate = n => (loads[n]||[]).reduce((a,e)=>e.date>a ? e.date : a, '');
+  names.sort((a,b)=> latestDate(b).localeCompare(latestDate(a)));
+  const toLb = e => e.unit==='kg' ? e.value*2.20462 : e.value;
+  const cards = names.map(n=>{
+    const es = (loads[n]||[]).filter(e=>e.value>0).sort((a,b)=>b.date.localeCompare(a.date));
+    const best = es.reduce((a,e)=>!a || toLb(e)>toLb(a) ? e : a, null);
+    return `<details class="card lh-card" ${m.name ? 'open' : ''}>
+      <summary><span class="lh-head"><span class="lbl">${esc(n)}</span><span class="sub">Last ${esc(liftEntryText(es[0]))} · ${esc(niceDate(parseDate(es[0].date)))}${es.length>1 ? ` · heaviest ${esc(liftEntryText(best))}` : ''}</span></span><span class="chev">${ICONS.chevron}</span></summary>
+      <div class="lh-rows">${es.map(e=>`<div><span>${esc(niceDate(parseDate(e.date)))}</span><span class="mono">${esc(liftEntryText(e))}${e===best && es.length>1 ? ' · heaviest' : ''}</span></div>`).join('')}</div>
+    </details>`;
+  }).join('');
+  return pageShell(m.name ? esc(m.name) : 'Weight history', m.name ? 'Weight history' : `${names.length} exercise${names.length===1?'':'s'}, newest first`,
+    cards || '<div class="hint">No weights logged yet. They appear here as you fill in the weight box on a strength session.</div>');
 }
 function strengthRowsHtml(planned, date, howTo, optional){
   const ticks = (state.strengthItems && state.strengthItems[date]) || [];
@@ -4507,6 +4541,7 @@ function renderSettingsTab(){
         <summary><span><div class="lbl" style="font-size:14px;">Machine settings</div><div class="sub">${(state.gymSettings||[]).length ? esc((state.gymSettings||[]).map(e=>e.label||'Settings').join(', ')) : 'Seat, pin and rack positions'}</div></span><span class="chev">${ICONS.chevron}</span></summary>
         ${gymSettingsListHtml()}
       </details>
+      ${row('Weight history', (()=>{ const n = Object.values(state.strengthLoads||{}).filter(a=>(a||[]).some(e=>e.value>0)).length; return n ? `${n} exercise${n===1?'':'s'} logged` : 'Every weight you log, by exercise'; })(), btn('open-lift-history', 'Open'))}
       ${row('Exercise library', 'Every lift the plan can prescribe, with how-to and step photos', btn('open-library', 'Browse'))}
     </div>
 
@@ -4541,6 +4576,7 @@ function renderModal(){
   const m = state.modal;
   if(m.type==='day-detail') return renderDayDetail();
   if(m.type==='strength') return renderStrengthPage();
+  if(m.type==='lift-history') return renderLiftHistory();
   if(m.type==='log-run') return modalLogRun();
   if(m.type==='log-parts') return modalLogParts();
   if(m.type==='edit-day') return modalEditDay();
@@ -4587,7 +4623,7 @@ const TAB_HELP = {
     body: `
       <p>The Race/Plan card shows this week's calibrated paces and links to your race-day pacing sheet (race plans only). <strong>Change plan</strong> re-runs onboarding with your current answers prefilled — if you're mid-training, it resumes from your plan's real start date and freezes every week you've already lived through, rather than resetting you to week one.</p>
       <p><strong>Your starting inputs</strong> is read-only, for reference — exactly what you entered when this plan was built or last changed.</p>
-      <p>Further down: units and pace-display preferences, a Strava connection for one-tap run import, and backup/restore for moving to a new device (manual day edits and swaps don't travel with a backup — your plan settings and logged history do). <strong>Start over</strong> wipes everything and begins fresh — logged runs included.</p>
+      <p>Further down: units and pace-display preferences, a Strava connection for one-tap run import, and backup/restore for moving to a new device (manual day edits and swaps don't travel with a backup — your plan settings, logged runs, weights and machine settings do). <strong>Start over</strong> wipes everything and begins fresh — logged runs included.</p>
     `,
   },
 };
@@ -5783,6 +5819,7 @@ function exportBackupData(){
     strengthDone: state.strengthDone,
     achievementLog: state.achievementLog,
     gymSettings: state.gymSettings || [],
+    strengthLoads: state.strengthLoads || {},
   };
   const json = JSON.stringify(payload, null, 2);
   const blob = new Blob([json], {type:'application/json'});
@@ -5823,6 +5860,7 @@ function doImportBackup(data){
   state.strengthDone = data.strengthDone || [];
   state.achievementLog = data.achievementLog || [];
   if(Array.isArray(data.gymSettings)){ state.gymSettings = data.gymSettings; Store.setGymSettings(state.gymSettings); }
+  if(data.strengthLoads && typeof data.strengthLoads==='object' && !Array.isArray(data.strengthLoads)){ state.strengthLoads = data.strengthLoads; Store.setStrengthLoads(state.strengthLoads); }
   Store.setName(state.name);
   Store.setPaceFormat(state.paceFormat);
   Store.setSetup(state.setup);
@@ -5908,6 +5946,12 @@ function onClick(e){
     render();
     const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = y;
     return;
+  }
+  if(act==='open-lift-history'){
+    const sheet = document.querySelector('.sheet');
+    const back = state.modal ? {...state.modal, scrollY: sheet ? sheet.scrollTop : 0} : null;
+    state.modal = {type:'lift-history', name: el.dataset.name || null, back};
+    render(); const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = 0; return;
   }
   if(act==='open-strength'){
     const date = el.dataset.date, found = plannedWorkoutForDate(date); if(!found) return;

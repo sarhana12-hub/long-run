@@ -436,6 +436,8 @@ The read-through is now a standing pre-push step: `npm run readthrough` regenera
 
 188. **The exercise's settings box was mostly controls** (owner screenshot: one saved setting under "Add another" and a full-width "Use a saved setting..." dropdown: "takes up a huge amount of space and is distracting for something very unlikely to be used"). *Fix:* with a setting, the box shows just the setting and its Edit. Without one, a single small "+ Add machine settings" link. Reusing a saved setting for more exercises is done in Settings → Machine settings.
 
+189. **No way to look back at lifted weights, and backups left them out** (owner: "When you clear a plan, it deletes all your history of how much weight you lifted?" then "That would be helpful to keep for reference somehow"). Start over and a plan change already kept the weights; they only showed as the "Last time" line, and a backup did not carry them, so a new phone lost them. *Fix:* a Weight history page lists every exercise with weights, newest first, each with the latest and heaviest entry and every entry by date (weight, and reps when known). It opens from Settings → Strength → Weight history, or for one exercise from a History link beside its weight box; Back returns to the session where it was opened. Backups now include the weights and restore them. Checked in the browser: both routes, Back, a backup holding the weights, and Start over keeping them.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy
