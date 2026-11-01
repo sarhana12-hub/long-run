@@ -173,6 +173,14 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   const kq = g.strengthSwapOptions(sq, [sq], g.equipmentSet([...g.DEFAULT_EQUIPMENT,'longBand','box']));
   for(const n of ['Wall sit','Step-down','Spanish squat']){ const o = kq.find(x=>x.name===n); if(!o) bad.push(n+' not offered for a squat'); else if(/\) — (heavy|.*reps left in the tank)|Rest 2/.test(o.line)) bad.push(n+' carries the heavy lift\'s cue or rest: '+o.line); }
   if(['wallSit','stepDown','spanishSquat'].some(k=>[g.buildLowerStrengthWorkout('heavy',0,1,g.equipmentSet(),null)].flat().some(l=>/Wall sit|Step-down|Spanish squat/.test(l)))) bad.push('knee exercises planned by default');
+  // 192 optional extras swap among the extras: arm work for arm work, quad work for the leg extension
+  const cu = '2×12 Dumbbell curls (dumbbells) — moderate, 2 reps left in the tank. Rest 45s between sets.';
+  const co = g.strengthSwapOptions(cu, [cu], g.equipmentSet(), g.extraSwapFamily(cu));
+  if(!co.length || co.some(o=>/squat|row|press|Pull-ups/i.test(o.name))) bad.push('curl swaps are not arm and shoulder extras: '+co.map(o=>o.name).join(', '));
+  if(co.some(o=>!/^2×/.test(o.line))) bad.push('an extra swap changed the sets');
+  const le = '2×12 Leg extension (machine) — moderate, slow lowering — easy on the knees. Rest 45s between sets.';
+  const lo = g.strengthSwapOptions(le, [le], g.equipmentSet(), g.extraSwapFamily(le));
+  if(!lo.some(o=>o.name==='Wall sit') || lo.some(o=>/curl|raise/i.test(o.name))) bad.push('leg-extension swaps are not quad work: '+lo.map(o=>o.name).join(', '));
   console.log(`\n=== one-day exercise swaps (${checked} alternatives) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,10).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
 // 172 variety: the owner's layout (one lower day, an upper day the day after, a second

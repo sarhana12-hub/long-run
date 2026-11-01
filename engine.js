@@ -855,12 +855,23 @@ function restSecFromStr(r){
 }
 // onlySlots: the slots to draw from in place of the line's family (used to put a logged lift
 // back in its own slot when rebuilding a session).
+// Optional extras swap among themselves (defect 192): arm and shoulder work for an upper
+// session, quad work for a lower one.
+const EXTRA_FAMILIES = [['curls','triceps','lateralRaise','straightArmPulldown'], ['legExtension','wallSit','stepDown','spanishSquat']];
+const exerciseDef = k => STRENGTH_EXERCISES[k] || OPTIONAL_EXTRAS[k];
+const ALL_SLOTS = () => [...Object.keys(STRENGTH_EXERCISES), ...Object.keys(OPTIONAL_EXTRAS).filter(k=>!STRENGTH_EXERCISES[k])];
+function extraSwapFamily(line){
+  const m = String(line).match(SWAP_LINE_RE); if(!m) return null;
+  const name = swapBaseName(m[3]);
+  const slot = Object.keys(OPTIONAL_EXTRAS).find(k=>OPTIONAL_EXTRAS[k].variants.some(v=>v.name===name));
+  return slot ? EXTRA_FAMILIES.find(f=>f.includes(slot)) || null : null;
+}
 function strengthSwapOptions(line, sessionLines, avail, onlySlots){
   avail = avail || equipmentSet();
   const m = String(line).match(SWAP_LINE_RE); if(!m) return [];
   const name = swapBaseName(m[3]);
-  const slot = Object.keys(STRENGTH_EXERCISES).find(k=>STRENGTH_EXERCISES[k].variants.some(v=>v.name===name && v.equip===m[4]))
-    || Object.keys(STRENGTH_EXERCISES).find(k=>STRENGTH_EXERCISES[k].variants.some(v=>v.name===name));
+  const slot = ALL_SLOTS().find(k=>exerciseDef(k).variants.some(v=>v.name===name && v.equip===m[4]))
+    || ALL_SLOTS().find(k=>exerciseDef(k).variants.some(v=>v.name===name));
   const family = onlySlots || (slot && SWAP_FAMILIES.find(f=>f.includes(slot)));
   if(!family) return [];
   const inSession = new Set((sessionLines||[]).map(l=>{ const x = String(l).match(SWAP_LINE_RE); return x ? swapBaseName(x[3]) : null; }).filter(Boolean));
@@ -869,7 +880,7 @@ function strengthSwapOptions(line, sessionLines, avail, onlySlots){
   const coreFamily = family.includes('plank');
   const seen = new Set(); let out = [];
   for(const key of onlySlots ? family : [slot, ...family.filter(k=>k!==slot)]){
-    const def = STRENGTH_EXERCISES[key];
+    const def = exerciseDef(key);
     for(const v of def.variants){
       if(!v.needs.every(id=>avail.has(id)) || v.name===name || inSession.has(v.name) || seen.has(v.name)) continue;
       seen.add(v.name);
@@ -2561,7 +2572,7 @@ return {
   QUALITY_TYPES, WARMUP_ELIGIBLE_TYPES, STRIDES_ELIGIBLE_TYPES, STRIDES_REPS, STRIDES_EXTRA_KM, HILL_STRIDES_EXTRA_KM, QUALITY_WARMUP_KM, QUALITY_COOLDOWN_KM,
   TYPE_LABELS, isLegDemandingDay, isKeySessionDay, structuredEffort, buildWorkoutMeta,
   STRENGTH_EXERCISES, OPTIONAL_EXTRAS, strengthSwapOptions, SWAP_FAMILIES, EQUIPMENT, DEFAULT_EQUIPMENT, equipmentSet, resolveExercise, STRENGTH_TIME_MIN, lowerStrengthTierForPhase, buildLowerStrengthWorkout, buildUpperStrengthWorkout,
-  placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts, strengthNamesBefore, rebuildLoggedSession, strengthSlotRole, buildCustomStrength, strengthWarmup,
+  placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts, strengthNamesBefore, rebuildLoggedSession, strengthSlotRole, buildCustomStrength, strengthWarmup, extraSwapFamily,
   qualityDowsFor, deriveScheduleFromLongDow, evenlySpacedPositions, scheduleWarnings,
   raceClass, taperDaysFor, taperVolumeFactor, taperLongFactor, targetPeakWeeklyKm, peakLongTargetKm, longFracCap, longTimeCapMin,
   qualityMinutes, floorMinutesFor, sizeQuality, buildWeekDays, generatePlan,

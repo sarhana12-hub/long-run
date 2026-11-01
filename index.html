@@ -2741,14 +2741,24 @@ function loadSuggestion(last, todayReps, tier, unit){
 }
 // A day's exercise lines with that day's swaps in place. A swap holds only while the planned
 // line it replaced is still there (a rebuilt plan can move exercises; the swap then lapses).
-function swapFor(date, i, lines){
-  const sw = state.strengthSwaps && state.strengthSwaps[date] && state.strengthSwaps[date][i];
-  const p = sw && lines && lines[i] ? parseStrengthLine(lines[i]) : null;
+// key: the exercise's position, or 100 + its position for an optional extra (as ticks are kept)
+function swapFor(date, key, line){
+  const sw = state.strengthSwaps && state.strengthSwaps[date] && state.strengthSwaps[date][key];
+  const p = sw && line ? parseStrengthLine(line) : null;
   return sw && p && p.name===sw.from ? sw : null;
+}
+// The alternatives offered for one row: the main lifts by family, an extra among the extras.
+function swapOptionsForRow(day, key){
+  const optional = key>=100, idx = optional ? key-100 : key;
+  const main = day.strengthExercises || [], extra = day.strengthOptional || [];
+  const line = (optional ? extra : main)[idx];
+  const session = [...main.map((l,j)=>{ const x = swapFor(day.date, j, l); return x ? x.line : l; }), ...extra.map((l,j)=>{ const x = swapFor(day.date, 100+j, l); return x ? x.line : l; })];
+  const avail = equipmentSet(state.setup && state.setup.equipment);
+  return line ? strengthSwapOptions(line, session, avail, optional ? (extraSwapFamily(line) || undefined) : undefined) : [];
 }
 function strengthLinesFor(day){
   const lines = day.strengthExercises || [];
-  return lines.map((l,i)=>{ const sw = swapFor(day.date, i, lines); return sw ? sw.line : l; });
+  return lines.map((l,i)=>{ const sw = swapFor(day.date, i, l); return sw ? sw.line : l; });
 }
 function plannedRepsFor(name, date){
   const found = plannedWorkoutForDate(date); const d = found && found.day; if(!d) return null;
@@ -2796,20 +2806,21 @@ function renderLiftHistory(){
 }
 function strengthRowsHtml(planned, date, howTo, optional){
   const ticks = (state.strengthItems && state.strengthItems[date]) || [];
-  const lines = optional ? planned : planned.map((l,i)=>{ const sw = swapFor(date, i, planned); return sw ? sw.line : l; });
-  howTo = [...(howTo||[]), ...(optional ? [] : planned.map((l,i)=>swapFor(date, i, planned)).filter(sw=>sw && sw.how).map(sw=>({name: parseStrengthLine(sw.line).name, how: sw.how})))];
+  const off = optional ? 100 : 0;
+  const lines = planned.map((l,i)=>{ const sw = swapFor(date, off+i, l); return sw ? sw.line : l; });
+  howTo = [...(howTo||[]), ...planned.map((l,i)=>swapFor(date, off+i, l)).filter(sw=>sw && sw.how).map(sw=>({name: parseStrengthLine(sw.line).name, how: sw.how}))];
   return lines.map((line,i)=>{
     const p = parseStrengthLine(line);
     const how = p && (howTo||[]).find(h=>p.name.startsWith(h.name));
     const ti = optional ? 100+i : i; // extras tick like the main lines; their ticks sit past 100 so they never count toward the session
     const done = !!ticks[ti];
     if(!p) return `<div class="sx-row ${done?'done':''}"><input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${ti}" ${done?'checked':''}><div class="sx-name" style="font-weight:600;">${esc(line)}</div></div>`;
-    const key = `${date}:${i}`, sw = optional ? null : swapFor(date, i, planned);
+    const key = `${date}:${off+i}`, sw = swapFor(date, off+i, planned[i]);
     const gkey = `${date}:${optional ? 'o' : ''}${i}`;
-    const swapHtml = optional ? '' : strengthSwapHtml(planned, i, date, sw, key);
+    const swapHtml = strengthSwapHtml(planned, off+i, date, sw, key);
     return `<div class="sx-row ${done?'done':''}">
       <input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${ti}" ${done?'checked':''} aria-label="Done: ${esc(p.name)}">
-      <details ${(!optional && state.swapOpenKey===key) || state.gymOpenKey===gkey ? 'open' : ''}>
+      <details ${state.swapOpenKey===key || state.gymOpenKey===gkey ? 'open' : ''}>
         <summary><span><span class="sx-name">${esc(p.name)}</span>${sw ? `<span class="sx-swapped">swapped</span>` : ''}<div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
         <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${isLoadable(p.name, p.equip) ? strengthLoadHtml(p.name, date, p.amount) : ''}${gymSettingsHtml(p.name, gkey)}${swapHtml}</div>
         ${exerciseLibraryHtml(p.name)}
@@ -2822,14 +2833,15 @@ function strengthRowsHtml(planned, date, howTo, optional){
 function strengthSwapHtml(planned, i, date, sw, key){
   if(sw) return `<div class="sx-swap"><span class="hint" style="margin:0;">Swapped in for ${esc(sw.from)}, today only.</span><button class="btn btn-sm" data-act="swap-undo" data-date="${date}" data-i="${i}">Undo swap</button></div>`;
   if(state.swapMenuKey!==key) return `<div class="sx-swap"><button class="btn btn-sm" data-act="swap-open" data-key="${key}">Swap exercise</button></div>`;
-  const session = planned.map((l,j)=>{ const x = swapFor(date, j, planned); return x ? x.line : l; });
-  const opts = strengthSwapOptions(planned[i], session, equipmentSet(state.setup && state.setup.equipment));
+  const dayObj = (plannedWorkoutForDate(date)||{}).day;
+  const opts = dayObj ? swapOptionsForRow(dayObj, i) : [];
+  const rowLine = planned[i>=100 ? i-100 : i];
   if(!opts.length) return `<div class="sx-swap"><span class="hint" style="margin:0;">No alternatives with your equipment.</span><button class="btn btn-sm btn-ghost" data-act="swap-close">Close</button></div>`;
   // Both kinds on offer: the kind that keeps this slot's job is listed first as the better
   // replacement, the other after it with what changes (defect 176). Either can be picked.
   const both = opts.some(o=>o.singleLeg) && opts.some(o=>!o.singleLeg);
-  const role = strengthSlotRole(planned[i]);
-  const fromSingle = /\/leg$/.test((parseStrengthLine(planned[i])||{}).amount||'');
+  const role = strengthSlotRole(rowLine);
+  const fromSingle = /\/leg$/.test((parseStrengthLine(rowLine)||{}).amount||'');
   const optHtml = (o,k) => { const q = parseStrengthLine(o.line); return `<button class="sx-swap-opt" data-act="swap-pick" data-date="${date}" data-i="${i}" data-k="${k}">
       <span><span class="sx-name">${esc(o.name)}</span><span class="sx-cue">${esc(o.equip)}</span></span>
       <span class="sx-sets">${q ? `${q.sets} × ${esc(q.amount)}` : ''}</span></button>`; };
@@ -6007,11 +6019,11 @@ function onClick(e){
     else if(act==='swap-close'){ state.swapMenuKey = null; }
     else {
       const date = el.dataset.date, i = Number(el.dataset.i), day = findPlanDay(state.plan, date);
-      const planned = (day && day.strengthExercises) || [];
+      const planned = (day && (i>=100 ? day.strengthOptional : day.strengthExercises)) || [];
       const swaps = state.strengthSwaps || {}; const forDay = {...(swaps[date]||{})};
       if(act==='swap-pick'){
-        const o = strengthSwapOptions(planned[i], strengthLinesFor(day), equipmentSet(state.setup && state.setup.equipment))[Number(el.dataset.k)];
-        const from = parseStrengthLine(planned[i] || '');
+        const o = day ? swapOptionsForRow(day, i)[Number(el.dataset.k)] : null;
+        const from = parseStrengthLine(planned[i>=100 ? i-100 : i] || '');
         if(o && from) forDay[i] = {from: from.name, line: o.line, how: o.how};
       } else delete forDay[i];
       if(Object.keys(forDay).length) swaps[date] = forDay; else delete swaps[date];
