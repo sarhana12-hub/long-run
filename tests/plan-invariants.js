@@ -271,6 +271,24 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   if(!dayShortfall({...q, date:'2026-10-26'}, [L(mainKm*0.5, {parts:[{part:'main', km:mainKm*0.5, sec:mainKm*135}]})])) bad.push('a quality day with half the main set not marked short');
   console.log('\n=== short days marked, rounding and full main sets not ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 183 a recovery plan brings strength back in steps: week one upper body only, week two one
+// light leg session, later weeks leg work at "maintain" level; none when the runner chose none
+{
+  const bad = [];
+  for(const sp of [0,1,2,3]){
+    const st = {units:'mi', goalMode:'general', planKind:'recovery', weeks:4, currentWeeklyKm:30*MI, recentDistanceKm:42.195, recentTimeSec:4*3600, longestRecentRunKm:26.2*MI, longDow:0, weekStartDow:0, ...g.deriveScheduleFromLongDow(0, Math.max(1,sp)), runsPerWeek:5, strengthPerWeek:sp, equipment:g.DEFAULT_EQUIPMENT.slice()};
+    const pl = g.generateGeneralPlan(st, g.parseDate('2026-11-01'));
+    const ss = pl.weeks.map(w=>w.days.filter(d=>d.strength && d.strengthExercises && d.strengthExercises.length));
+    if(sp===0){ if(ss.some(x=>x.length)) bad.push('strength in a recovery plan for a runner who chose none'); continue; }
+    if(ss[0].length!==1 || ss[0][0].strengthFocus!=='upper') bad.push(`${sp}/wk: week one is not one upper session (${ss[0].map(d=>d.strengthFocus).join(',')})`);
+    const lo2 = ss[1].filter(d=>d.strengthFocus!=='upper');
+    if(lo2.length!==1 || lo2[0].strengthTier!=='light') bad.push(`${sp}/wk: week two is not one light leg session (${lo2.map(d=>d.strengthTier).join(',')})`);
+    if(ss[1].length > sp) bad.push(`${sp}/wk: week two has more sessions than chosen`);
+    const lo3 = [...ss[2], ...ss[3]].filter(d=>d.strengthFocus!=='upper');
+    if(!lo3.length || lo3.some(d=>d.strengthTier!=='maintain')) bad.push(`${sp}/wk: later weeks' leg work is not at maintain level (${lo3.map(d=>d.strengthTier).join(',')})`);
+  }
+  console.log('\n=== recovery plan brings strength back in steps ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
 {
   const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();

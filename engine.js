@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 37; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 38; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -964,11 +964,14 @@ function placeStrengthDays(days, strengthDows, strengthPerWeek, phase, weekIndex
   const cands = []; for(let i=0;i<n;i++){ const sc=lowerScore(i); if(sc!=null) cands.push({i, sc}); }
   let bestPair = null;
   if(want>=2){ cands.forEach(x=>cands.forEach(y=>{ if(x.i>=y.i || circularDayDist(days[x.i].dow, days[y.i].dow)<2) return; const t=x.sc+y.sc; if(!bestPair || t>bestPair.t) bestPair={x, y, t}; })); }
-  if(bestPair){ chosen.push({i:bestPair.x.i, focus:'lower'}); chosen.push({i:bestPair.y.i, focus:'lower'}); }
-  else { const first = bestLower(); if(first) chosen.push({i:first.i, focus:'lower'}); }
+  // opts.maxLower: a cap on leg sessions (a recovery plan: none in its first week, one in its
+  // second, defect 183)
+  const maxLower = opts.maxLower!=null ? opts.maxLower : 2;
+  if(bestPair && maxLower>=2){ chosen.push({i:bestPair.x.i, focus:'lower'}); chosen.push({i:bestPair.y.i, focus:'lower'}); }
+  else if(maxLower>=1){ const first = bestLower(); if(first) chosen.push({i:first.i, focus:'lower'}); }
   while(chosen.length < want){
     const lowerCount = chosen.filter(c=>c.focus==='lower').length;
-    const l = lowerCount<2 ? bestLower() : null;
+    const l = lowerCount<Math.min(2, maxLower) ? bestLower() : null;
     const u = bestUpper();
     if(!l && !u) break;
     if(l) chosen.push({i:l.i, focus:'lower'});
@@ -1047,7 +1050,10 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
   // Each focus counts its own sessions, so one lower session a week still walks every lift
   // in its pools (a shared count gave it only even numbers, and an even-length pool lost
   // half its lifts); and each session avoids what the sessions either side of it hold.
-  const tierOf = d => lowerStrengthTierForPhase(phase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace, opts.strengthCutoffDays);
+  // opts.strengthPhase: the phase the lifting follows when it differs from the running (a
+  // recovery plan's later weeks lift at peak-week "maintain" level, defect 183)
+  const liftPhase = opts.strengthPhase || phase;
+  const tierOf = d => lowerStrengthTierForPhase(liftPhase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace, opts.strengthCutoffDays);
   const focusOf = d => (d.strengthFocus==='upper' || tierOf(d)==null) ? 'upper' : 'lower';
   const sDays = days.filter(d=>d.strength);
   const nFocus = {upper: sDays.filter(d=>focusOf(d)==='upper').length, lower: sDays.filter(d=>focusOf(d)==='lower').length};
@@ -1063,7 +1069,7 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
     if(!asked && ((opts.fromDate && d.date < opts.fromDate) || (opts.keepDates && opts.keepDates.has(d.date)))){ namesOf(d).forEach(n=>builtNames.add(n)); return; }
     if(d.type==='rest') Object.assign(d, buildWorkoutMeta(d)); // rest-day text depends on whether strength landed there
     if(!d.strength){ d.strengthTier=undefined; d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthAfterRun=false; d.strengthShort=false; d.strengthShortable=false; d.strengthLong=false; d.strengthLongable=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
-    const tier = lowerStrengthTierForPhase(phase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace, opts.strengthCutoffDays);
+    const tier = lowerStrengthTierForPhase(liftPhase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace, opts.strengthCutoffDays);
     const variant = weekIndex*Math.max(1, nFocus[focusOf(d)]) + Math.max(0, rankOf(d));
     const avoid = new Set(builtNames);
     _used.length = 0;
@@ -2044,8 +2050,15 @@ function generateRecoveryPlan(setup, dayOneOverride){
     const built = buildWeekDays({weekStart, weeklyKm, longKm, longDow:c.longDow, phase:'recovery', isCutback:false, weekIndex:w, quality:[], runsPerWeek:runs, strides:0, raceKm:10, paces, medLong:false, unit:c.unit});
     finishWeekDays(built.days, 10);
     built.days.forEach(d=>{ if(d.type==='long'){ d.paceKey='easyPerKm'; d.descBase='Longer easy run at easy pace ({pace}) — relaxed, no pace pressure'; } });
-    placeStrengthDays(built.days, [], 0, 'recovery', w, {equipment: setup.equipment});
-    list.push({weekIndex:w, runsPerWeek: runs, phase:'recovery', isCutback:false, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
+    // Strength comes back in steps (defect 183): week one upper body only (one session, the
+    // legs are still repairing), week two one light leg session, then leg work at "maintain"
+    // level so the plan ends with the strength the runner came in with. None if the runner
+    // chose none.
+    const sp = setup.strengthPerWeek==null ? 1 : setup.strengthPerWeek;
+    const strengthPhase = w>=2 ? 'peak' : 'recovery';
+    const sOpts = {equipment: setup.equipment, maxLower: w===0 ? 0 : w===1 ? 1 : 2, strengthPhase, prevNames: strengthNamesBefore(list[list.length-1])};
+    placeStrengthDays(built.days, setup.strengthDows, w===0 ? Math.min(sp, 1) : sp, 'recovery', w, sOpts);
+    list.push({strengthPhase, strengthMaxLower: sOpts.maxLower, weekIndex:w, runsPerWeek: runs, phase:'recovery', isCutback:false, weekStart:fmtDate(weekStart), targetKm:round1(built.days.reduce((s,d)=>s+d.km,0)), plannedKm:weeklyKm, paces, days:built.days, baselineVdot:c.athlete.vdot});
   }
   return finishGeneralPlan(setup, list, c.athlete.vdot, c.athlete.vdot, {runsWeekOne: c.runsPerWeek});
 }
