@@ -1103,7 +1103,7 @@ function strengthWarmup(lines, focus, tier, afterRun, avail){
   const prep = focus==='upper' ? arms : focus==='full' ? [legs[0], legs[1], legs[2], arms[0], arms[1]] : legs;
   steps.push({k:'Movement prep', items: prep, t:'Keep it moving; save long stretches for after.'}); minutes += light ? 3 : 4;
   const plyo = parsed.find(p=>/Pogo hops|Box jumps|Squat jumps|Hurdle hops/.test(p.name));
-  if(plyo && !light){ steps.push({k:'Before the jumps', t: plyo.name==='Pogo hops' ? 'Two easy sets of 10 small pogo hops at half effort.' : `Two or three practice ${plyo.name.toLowerCase()} at half height and effort.`}); minutes += 1; }
+  if(plyo && !light){ steps.push({k:'Before the jumps', t: plyo.name==='Pogo hops' ? 'Two easy sets of 10 small pogo hops at half effort.' : `Two or three practice ${plyo.name.toLowerCase()} at half height and effort.`}); minutes += 2; }
   if(!light){
     const loaded = p => !/bodyweight/i.test(p.equip) && !/Pogo|jumps|hops|Plank|Dead bug|Bird dog|Side plank|carry/i.test(p.name);
     const first = parsed.find(loaded);
@@ -1112,10 +1112,10 @@ function strengthWarmup(lines, focus, tier, afterRun, avail){
       steps.push({k:`Ramp up: ${first.name}`, t: heavy
         ? 'Build to your working weight in three sets: 8 easy reps with the empty bar or a light weight, 5 at about half your working weight, 3 at about three-quarters. A short rest between, then about a minute before your first working set.'
         : 'One lighter set of 6–8 at about half your working weight, then start.'});
-      minutes += heavy ? 3 : 1;
+      minutes += heavy ? 6 : 2; // three sets with plate changes and a minute before the first working set
       if(focus!=='lower'){
         const second = parsed.slice(parsed.indexOf(first)+1).find(loaded);
-        if(second) { steps.push({k:`Ramp up: ${second.name}`, t:'One lighter set of 6–8 at about half your working weight.'}); minutes += 1; }
+        if(second) { steps.push({k:`Ramp up: ${second.name}`, t:'One lighter set of 6–8 at about half your working weight.'}); minutes += 2; }
       }
     }
   }

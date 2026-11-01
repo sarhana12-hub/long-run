@@ -2915,8 +2915,10 @@ function renderStrengthPage(){
   const has = day.strength && day.strengthExercises && day.strengthExercises.length;
   const isStrengthDone = state.strengthDone.includes(day.date);
   const strengthFocusNote = strengthFocusNoteFor(day);
+  const focus = day.strengthCustom ? day.strengthCustom.focus : day.strengthFocus==='upper' ? 'upper' : 'lower';
+  const wu = has ? strengthWarmup(day.strengthExercises, focus, day.strengthTier, day.km>0, equipmentSet(state.setup && state.setup.equipment)) : null;
   const body = has ? `<div id="strength-details">
-      <div class="sx-page-sub">${day.strengthTimeMin ? `About ${day.strengthTimeMin} min` : ''}${day.km>0 ? (day.strengthAfterRun ? ' · after the run, not before it' : ' · after the run') : ''}${isStrengthDone ? ' · done' : ''}</div>
+      <div class="sx-page-sub">${day.strengthTimeMin ? `About ${day.strengthTimeMin} min${wu ? ` after the ${wu.minutes} min warm-up` : ''}` : ''}${day.km>0 ? (day.strengthAfterRun ? ' · after the run, not before it' : ' · after the run') : ''}${isStrengthDone ? ' · done' : ''}</div>
 
         ${day.strengthShortable && day.date>=fmtDate(todayDate()) ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthShort?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-short="0">Full · ${STRENGTH_TIME_MIN_PAGE.full} min</button><button class="chip ${day.strengthShort?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-short="1">Shorter · ${STRENGTH_TIME_MIN_PAGE.short} min</button></div>` : ''}
         ${day.strengthLongable && day.date>=fmtDate(todayDate()) ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthLong?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-long="0">Standard · ${STRENGTH_TIME_MIN_PAGE.upper} min</button><button class="chip ${day.strengthLong?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-long="1">Full · ${STRENGTH_TIME_MIN_PAGE.upperFull} min</button></div>` : ''}
@@ -2931,8 +2933,6 @@ function renderStrengthPage(){
         ${day.strength ? `<button class="btn btn-block" data-act="toggle-strength-done" data-date="${day.date}" style="margin-bottom:0; ${isStrengthDone?'color:var(--done); border-color:var(--done);':''}">${isStrengthDone?`${ICONS.check} Strength completed`:'Mark strength completed'}</button>` : ''}
       
     </div>` : '';
-  const focus = day.strengthCustom ? day.strengthCustom.focus : day.strengthFocus==='upper' ? 'upper' : 'lower';
-  const wu = has ? strengthWarmup(day.strengthExercises, focus, day.strengthTier, day.km>0, equipmentSet(state.setup && state.setup.equipment)) : null;
   const warmHtml = wu ? `<details class="card sx-warm" ${state.warmOpen===false ? '' : 'open'} id="sx-warm">
       <summary><span><span class="lbl">Warm-up</span><span class="sub"> · about ${wu.minutes} min, before the first set</span></span><span class="chev">${ICONS.chevron}</span></summary>
       ${wu.steps.map(st=>`<div class="sx-warm-step"><div class="sx-warm-k">${esc(st.k)}</div>${st.items ? `<ul class="sx-warm-list">${st.items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>` : ''}<div class="sx-warm-t">${esc(st.t)}</div></div>`).join('')}
