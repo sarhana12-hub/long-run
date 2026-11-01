@@ -342,6 +342,47 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .gym-with{font-size:12.5px; color:var(--muted); margin-top:3px;}
 .gym-links{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
 .gym-links .chip{padding:5px 10px; font-size:12.5px;}
+.page-overlay{align-items:stretch; background:var(--bg);}
+.sheet.page-sheet{max-width:none; max-height:none; height:100dvh; border-radius:0; box-shadow:none; background:var(--bg); padding-top:calc(10px + env(safe-area-inset-top)); animation:pageIn .18s ease-out;}
+.page-sheet > *{max-width:640px; margin-left:auto; margin-right:auto;}
+@keyframes pageIn{from{opacity:0; transform:translateX(24px);} to{opacity:1; transform:none;}}
+@media (prefers-reduced-motion: reduce){ .page-sheet{animation:none;} }
+.page-top{display:flex; align-items:center; margin-bottom:6px;}
+.page-back{display:inline-flex; align-items:center; gap:4px; background:none; border:0; color:var(--ink); font:inherit; font-weight:600; font-size:15px; padding:8px 4px; cursor:pointer;}
+.page-back svg{width:18px; height:18px; transform:rotate(180deg);}
+.page-title{font-size:24px; line-height:1.2; margin:4px 0 2px;}
+.page-subtitle{color:var(--muted); font-size:14px; margin-bottom:6px;}
+.sx-page-sub{color:var(--ink-soft); font-size:13.5px; margin:0 0 12px;}
+#strength-details{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:14px; margin-top:8px;}
+.sx-warm{padding:0 14px; margin:8px 0 10px;}
+.sx-warm summary{list-style:none; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 0; cursor:pointer;}
+.sx-warm summary::-webkit-details-marker{display:none;}
+.sx-warm summary .lbl{font-weight:700; font-size:15px;}
+.sx-warm summary .sub{font-size:13px; color:var(--muted);}
+.sx-warm .chev{color:var(--muted); transition:transform .15s ease;}
+.sx-warm .chev svg{width:16px; height:16px;}
+.sx-warm[open] .chev{transform:rotate(90deg);}
+.sx-warm-step{padding:9px 0; border-top:1px solid var(--line-soft);}
+.sx-warm-step:last-child{padding-bottom:14px;}
+.sx-warm-k{font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:3px;}
+.sx-warm-list{margin:0 0 4px; padding-left:18px; font-size:14px; color:var(--ink-soft); line-height:1.45;}
+.sx-warm-t{font-size:14px; color:var(--ink-soft); line-height:1.45;}
+.sx-open{display:flex; align-items:center; gap:12px; width:100%; text-align:left; padding:14px; margin-bottom:14px; font:inherit; color:var(--ink); cursor:pointer;}
+.sx-open.done{border-color:var(--done); background:var(--done-bg);}
+.sx-open-ico{width:34px; height:34px; border-radius:10px; background:var(--surface-2); color:var(--ink-soft); display:flex; align-items:center; justify-content:center; flex:none;}
+.sx-open.done .sx-open-ico{background:var(--done); color:var(--done-ink);}
+.sx-open-ico svg{width:18px; height:18px;}
+.sx-open-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
+.sx-open-main .lbl{font-weight:700; font-size:15px;}
+.sx-open-main .sub{font-size:12.5px; color:var(--muted);}
+.sx-open-names{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.sx-open .chev{color:var(--muted); flex:none;}
+.sx-open .chev svg{width:16px; height:16px;}
+.sx-builder-row{display:flex; flex-direction:column; gap:8px; margin:0 0 14px;}
+.sx-builder{padding:12px 14px; margin-bottom:14px; background:var(--surface-2);}
+.sx-builder-sum{font-size:13px; color:var(--ink-soft); margin:2px 0 8px;}
+.sx-builder-list > div{display:flex; justify-content:space-between; gap:10px; font-size:13.5px; padding:5px 0; border-top:1px solid var(--line-soft);}
+.sx-builder-list .mono{font-weight:700; white-space:nowrap;}
 .sx-swap{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin:10px 0;}
 .sx-swap-menu{margin-top:10px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface-2);}
 .sx-swap-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;}
@@ -1261,7 +1302,7 @@ function dpSet(id, iso){
 function showToast(msg, undo, ms){ state.toast = msg; state.toastUndo = undo || null; render(); setTimeout(()=>{ state.toast=null; state.toastUndo=null; render(); }, ms||2200); }
 // Closes whatever sheet is open. A projection note that was held back while a milestone
 // screen was up shows the moment that screen closes.
-document.addEventListener('toggle', e=>{ if(e.target && e.target.id==='strength-details' && state.modal) state.modal.strengthOpen = e.target.open; }, true);
+document.addEventListener('toggle', e=>{ if(e.target && e.target.id==='strength-details' && state.modal) state.modal.strengthOpen = e.target.open; if(e.target && e.target.id==='sx-warm') state.warmOpen = e.target.open; }, true);
 // Re-renders an open sheet in place: same scroll position, no entrance animation.
 // Switching between "Enter times" and "Enter paces" redraws the form; the runner stays where
 // they were (defect 162: it scrolled back to the top and dropped the box being typed in).
@@ -1300,7 +1341,7 @@ function rerenderSheet(){ const sh = document.querySelector('.sheet'); const top
 // Replaces the open sheet's contents with a fresh render of the same sheet: no page rebuild,
 // no dimmer flash, no entrance animation, scroll position kept.
 function swapSheetContents(){ const sh = document.querySelector('.sheet'); if(!sh || !state.modal){ render(); return; } const top = sh.scrollTop; const tmp = document.createElement('div'); tmp.innerHTML = renderModal(); const fresh = tmp.querySelector('.sheet'); if(!fresh){ render(); return; } sh.innerHTML = fresh.innerHTML; sh.scrollTop = top; }
-function closeModal(){ if(state.modal && state.modal.type==='log-parts' && state.modal.back){ state.modal = state.modal.back; render(); return; } const held = state.modal && state.modal.type==='milestone' ? state.pendingToast : null; state.modal=null; state.moveFrom=null; state.pendingToast=null; if(held) showToast(held.msg, held.undo, held.ms); else render(); }
+function closeModal(){ if(state.modal && state.modal.type==='strength'){ state.builder = null; if(state.modal.back){ state.modal = state.modal.back; render(); return; } } if(state.modal && state.modal.type==='log-parts' && state.modal.back){ state.modal = state.modal.back; render(); return; } const held = state.modal && state.modal.type==='milestone' ? state.pendingToast : null; state.modal=null; state.moveFrom=null; state.pendingToast=null; if(held) showToast(held.msg, held.undo, held.ms); else render(); }
 // Flashes a message inline next to the "Your name" label (the lexi-badge span) instead of
 // a floating toast — a fixed-position popup kept landing either behind the Dynamic Island
 // or under the keyboard depending on how far up the screen it sat. Bypasses render()
@@ -2819,6 +2860,153 @@ function gymSettingsListHtml(){
     : `<div class="gym-note"><div style="min-width:0;"><div class="gym-lbl">${esc(e.label||'Settings')}</div><div class="gym-txt">${esc(e.text||'')}</div><div class="gym-with">${(e.exercises||[]).length ? 'With ' + (e.exercises||[]).map(esc).join(', ') : 'Not with an exercise yet: tap Edit to pick one'}</div></div><button class="btn btn-sm btn-ghost" data-act="gym-edit" data-id="${e.id}" data-where="settings">Edit</button></div>`).join('');
   return `<div style="padding:4px 0 14px;">${items || '<div class="hint" style="margin:0 0 8px;">Seat, pin and rack positions, so they are with you at the gym.</div>'}${ed && !ed.id ? gymFormHtml(ed) : (!ed ? `<button class="btn btn-sm" data-act="gym-new" data-where="settings" style="margin-top:8px;">Add a setting</button>` : '')}</div>`;
 }
+// Build a strength session for a day on request (defect 184): focus, length and intensity,
+// from the runner's equipment, through the same builders as the plan's sessions. It replaces
+// that day's planned session (kept, to put back) or adds one, and is the runner's own: rebuilds
+// and refreshes leave it alone. The plan's advice shows as a note, never a block.
+const BUILDER_FOCUS = [['lower','Lower body'],['upper','Upper & core'],['full','Full body']];
+const BUILDER_LENGTH = [[15,'15 min'],[25,'25 min'],[40,'40 min']];
+const BUILDER_INTENSITY = [['light','Light'],['maintain','Maintain'],['full','Full']];
+function builderPreview(day, weekIndex, b){
+  const next = plannedWorkoutForDate(fmtDate(addDays(parseDate(day.date), 1)));
+  const prev = plannedWorkoutForDate(fmtDate(addDays(parseDate(day.date), -1)));
+  const names = d => (d && d.day && d.day.strengthExercises || []).map(l=>{ const p = parseStrengthLine(l); return p ? p.name : null; }).filter(Boolean);
+  const avoid = new Set([...names(prev), ...names(next)]);
+  return buildCustomStrength(b, weekIndex*7 + day.dow, equipmentSet(state.setup && state.setup.equipment), avoid);
+}
+function builderNotes(day, b){
+  const legs = b.focus!=='upper' && b.intensity!=='light', out = [];
+  if(!legs) return out;
+  const next = plannedWorkoutForDate(fmtDate(addDays(parseDate(day.date), 1)));
+  if(next && next.day && isKeySessionDay(next.day)) out.push(`Heavy legs the day before your ${next.day.label.toLowerCase()} will blunt it: the plan keeps leg work off the day before key runs.`);
+  if(day.daysToRace!=null && day.daysToRace>=0 && day.daysToRace<=10) out.push(`Your race is ${day.daysToRace===0 ? 'today' : `in ${day.daysToRace} day${day.daysToRace===1?'':'s'}`}: heavy leg work this close can still be in your legs on race day.`);
+  if(day.km>0 && isLegDemandingDay(day)) out.push('Today already has a demanding run: lift after it, not before.');
+  return out;
+}
+// A strength session is its own full page, not a panel inside the day (defect 185: the owner:
+// "They are core to the program, not an addendum"). The day keeps a card that opens it.
+function strengthFocusNoteFor(day){
+  const found = plannedWorkoutForDate(day.date); if(!found || day.strengthFocus!=='upper') return null;
+  const next = plannedWorkoutForDate(fmtDate(addDays(parseDate(day.date), 1)));
+  const nd = next && next.day;
+  return day.type==='rest' ? `Upper body/core focus — no run today, so it's still a genuine day off for your legs.`
+    : isLegDemandingDay(day) ? `Upper body/core focus today — this day already carries a demanding run, so keep legs light.`
+    : nd ? `Upper body/core focus — keeps legs fresh for ${nd.label} (${DOW_LABELS[nd.dow]}).` : 'Upper body/core focus.';
+}
+function strengthTitle(day){ return day.strengthCustom && day.strengthCustom.focus==='full' ? 'Full body' : day.strengthFocus==='upper' ? 'Upper body & core' : 'Lower body'; }
+function strengthSummaryCardHtml(day){
+  const isPast = day.date < fmtDate(todayDate());
+  if(!(day.strength && day.strengthExercises && day.strengthExercises.length))
+    return isPast ? '' : `<button class="btn btn-block" data-act="open-strength" data-date="${day.date}" data-build="1" style="margin-bottom:14px;">${ICONS.dumbbell} Build a strength session</button>`;
+  const done = state.strengthDone.includes(day.date);
+  const names = day.strengthExercises.map(l=>{ const p = parseStrengthLine(l); return p ? p.name : null; }).filter(Boolean);
+  return `<button class="card sx-open ${done ? 'done' : ''}" data-act="open-strength" data-date="${day.date}">
+    <span class="sx-open-ico">${done ? ICONS.check : ICONS.dumbbell}</span>
+    <span class="sx-open-main"><span class="lbl">Strength · ${esc(strengthTitle(day))}</span>
+      <span class="sub">${day.strengthTimeMin ? `About ${day.strengthTimeMin} min · ` : ''}${names.length} exercises${done ? ' · done' : day.km>0 ? ' · after the run' : ''}</span>
+      <span class="sub sx-open-names">${esc(names.slice(0,4).join(', '))}${names.length>4 ? '…' : ''}</span></span>
+    <span class="chev">${ICONS.chevron}</span>
+  </button>`;
+}
+function renderStrengthPage(){
+  const m = state.modal, found = plannedWorkoutForDate(m.date);
+  if(!found) return '';
+  const {day, week} = found;
+  const has = day.strength && day.strengthExercises && day.strengthExercises.length;
+  const isStrengthDone = state.strengthDone.includes(day.date);
+  const strengthFocusNote = strengthFocusNoteFor(day);
+  const body = has ? `<div id="strength-details">
+      <div class="sx-page-sub">${day.strengthTimeMin ? `About ${day.strengthTimeMin} min` : ''}${day.km>0 ? (day.strengthAfterRun ? ' · after the run, not before it' : ' · after the run') : ''}${isStrengthDone ? ' · done' : ''}</div>
+
+        ${day.strengthShortable && day.date>=fmtDate(todayDate()) ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthShort?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-short="0">Full · ${STRENGTH_TIME_MIN_PAGE.full} min</button><button class="chip ${day.strengthShort?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-short="1">Shorter · ${STRENGTH_TIME_MIN_PAGE.short} min</button></div>` : ''}
+        ${day.strengthLongable && day.date>=fmtDate(todayDate()) ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthLong?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-long="0">Standard · ${STRENGTH_TIME_MIN_PAGE.upper} min</button><button class="chip ${day.strengthLong?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-long="1">Full · ${STRENGTH_TIME_MIN_PAGE.upperFull} min</button></div>` : ''}
+        ${strengthFocusNote ? `<div class="hint" style="margin:0 0 8px;">${esc(strengthFocusNote)}</div>` : ''}
+        ${day.strengthRestored ? `<div class="hint" style="margin:0 0 8px;">Rebuilt from the weights you logged this day: those exercises are as you did them; the rest is the app's best match for the session.</div>` : ''}
+        ${strengthRowsHtml(day.strengthExercises, day.date, day.strengthHowTo, false)}
+        <div class="hint" style="margin:8px 0 12px;">Tap an exercise for the effort, rest and how to do it. Tick each one as you go.</div>
+        ${day.strengthOptional && day.strengthOptional.length ? `
+        <div class="field-label" style="margin-bottom:6px;">Optional extras — only if you have time</div>
+        <div style="opacity:.85; margin-bottom:12px;">${strengthRowsHtml(day.strengthOptional, day.date, day.strengthHowTo, true)}</div>` : ''}
+        <div class="hint" style="margin:0 0 12px;">Built for the gym equipment ticked in Settings.</div>
+        ${day.strength ? `<button class="btn btn-block" data-act="toggle-strength-done" data-date="${day.date}" style="margin-bottom:0; ${isStrengthDone?'color:var(--done); border-color:var(--done);':''}">${isStrengthDone?`${ICONS.check} Strength completed`:'Mark strength completed'}</button>` : ''}
+      
+    </div>` : '';
+  const focus = day.strengthCustom ? day.strengthCustom.focus : day.strengthFocus==='upper' ? 'upper' : 'lower';
+  const wu = has ? strengthWarmup(day.strengthExercises, focus, day.strengthTier, day.km>0, equipmentSet(state.setup && state.setup.equipment)) : null;
+  const warmHtml = wu ? `<details class="card sx-warm" ${state.warmOpen===false ? '' : 'open'} id="sx-warm">
+      <summary><span><span class="lbl">Warm-up</span><span class="sub"> · about ${wu.minutes} min, before the first set</span></span><span class="chev">${ICONS.chevron}</span></summary>
+      ${wu.steps.map(st=>`<div class="sx-warm-step"><div class="sx-warm-k">${esc(st.k)}</div>${st.items ? `<ul class="sx-warm-list">${st.items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>` : ''}<div class="sx-warm-t">${esc(st.t)}</div></div>`).join('')}
+    </details>` : '';
+  return pageShell(`Strength · ${has ? esc(strengthTitle(day)) : 'build a session'}`, `${niceDateFull(parseDate(day.date))}`, `
+    ${warmHtml}
+    ${body}
+    ${strengthBuilderHtml(day, week.weekIndex)}
+  `);
+}
+// Full-screen page on the modal machinery (so ticks, swaps and weights work as before), with
+// a back button to wherever it was opened from.
+function pageShell(title, subtitle, innerHtml){
+  return `<div class="overlay page-overlay">
+    <div class="sheet page-sheet" data-stop="1">
+      <div class="page-top"><button class="page-back" data-act="close-modal" aria-label="Back">${ICONS.chevron}<span>Back</span></button></div>
+      <h2 class="page-title">${title}</h2>
+      ${subtitle ? `<div class="page-subtitle">${subtitle}</div>` : ''}
+      ${innerHtml}
+    </div>
+  </div>`;
+}
+function strengthBuilderHtml(day, weekIndex){
+  const b = state.builder && state.builder.date===day.date ? state.builder : null;
+  const isPast = day.date < fmtDate(todayDate());
+  if(!b){
+    if(isPast && !day.strengthCustom) return '';
+    return `<div class="sx-builder-row" style="margin-top:14px;">
+      ${isPast ? '' : `<button class="btn btn-block" data-act="builder-open" data-date="${day.date}">${day.strength ? 'Build a different strength session' : 'Build a strength session'}</button>`}
+      ${day.strengthCustom ? `<button class="btn btn-block btn-ghost" data-act="builder-restore" data-date="${day.date}">${day.strengthPlanned && day.strengthPlanned.strength ? "Use the plan’s session instead" : 'Remove this session'}</button>` : ''}
+    </div>`;
+  }
+  const chips = (k, opts) => `<div class="chip-select" style="margin:0 0 10px;">${opts.map(([v,l])=>`<button class="chip ${String(b[k])===String(v)?'active':''}" data-act="builder-set" data-k="${k}" data-v="${v}">${l}</button>`).join('')}</div>`;
+  const r = builderPreview(day, weekIndex, b);
+  const fixedLength = b.focus==='lower' && b.intensity!=='full';
+  const notes = builderNotes(day, b);
+  return `<div class="card sx-builder">
+    <div class="sx-swap-head"><span class="lbl" style="font-weight:700; font-size:14.5px;">Build a strength session</span><button class="btn btn-sm btn-ghost" data-act="builder-cancel">Cancel</button></div>
+    <div class="field-label">Focus</div>${chips('focus', BUILDER_FOCUS)}
+    <div class="field-label">Intensity</div>${chips('intensity', BUILDER_INTENSITY)}
+    ${fixedLength ? '' : `<div class="field-label">Length</div>${chips('length', BUILDER_LENGTH)}`}
+    <div class="sx-builder-sum"><b>About ${r.timeMin} min</b>${fixedLength ? ` · a ${b.intensity} leg session has a set length` : ''}</div>
+    <div class="sx-builder-list">${r.lines.map(l=>{ const p = parseStrengthLine(l); return p ? `<div><span>${esc(p.name)}</span><span class="mono">${p.sets} × ${esc(p.amount)}</span></div>` : ''; }).join('')}</div>
+    ${notes.map(n=>`<div class="hint" style="color:var(--z-tempo); margin:8px 0 0;">${esc(n)}</div>`).join('')}
+    <button class="btn btn-primary btn-block" data-act="builder-apply" data-date="${day.date}" style="margin-top:12px;">${day.strength && !day.strengthCustom ? "Use this instead of the plan’s session" : day.strength ? 'Use this session' : 'Add to this day'}</button>
+  </div>`;
+}
+function applyBuiltSession(date){
+  const found = plannedWorkoutForDate(date); if(!found || !state.builder) return;
+  const {day, week} = found; const b = state.builder;
+  const r = builderPreview(day, week.weekIndex, b);
+  const keep = ['strength','strengthFocus','strengthExercises','strengthTier','strengthTimeMin','strengthHowTo','strengthLoadNote','strengthOptional','strengthLong','strengthLongable','strengthShort','strengthShortable','strengthAfterRun','strengthExpress','strengthFocusPinned'];
+  if(!day.strengthCustom){ day.strengthPlanned = {}; keep.forEach(k=>{ day.strengthPlanned[k] = day[k]; }); }
+  Object.assign(day, {strength:true, strengthFocus: b.focus==='upper' ? 'upper' : 'lower', strengthFocusPinned:true, strengthExercises: r.lines, strengthTier: r.tier, strengthTimeMin: r.timeMin, strengthHowTo: r.howTo, strengthLoadNote: r.loadNote,
+    strengthOptional: undefined, strengthLong:false, strengthLongable:false, strengthShort:false, strengthShortable:false, strengthExpress:false, strengthAfterRun: b.focus!=='upper' && day.km>0 && isLegDemandingDay(day),
+    strengthCustom: {focus:b.focus, length:b.length, intensity:b.intensity}, userEdited:true});
+  if(day.type==='rest') Object.assign(day, buildWorkoutMeta(day, state.plan.raceDistanceKm));
+  clearStrengthMarks(date);
+  Store.setPlan(state.plan);
+}
+function restorePlannedSession(date){
+  const found = plannedWorkoutForDate(date); if(!found) return;
+  const {day} = found, was = day.strengthPlanned;
+  if(was) Object.assign(day, was); else Object.assign(day, {strength:false, strengthFocus:null, strengthExercises:undefined, strengthTimeMin:undefined, strengthTier:undefined, strengthHowTo:undefined, strengthOptional:undefined});
+  delete day.strengthCustom; delete day.strengthPlanned;
+  if(day.type==='rest') Object.assign(day, buildWorkoutMeta(day, state.plan.raceDistanceKm));
+  clearStrengthMarks(date);
+  Store.setPlan(state.plan);
+}
+// ticks and swaps follow exercise positions, so a new session starts with neither
+function clearStrengthMarks(date){
+  if(state.strengthItems && state.strengthItems[date]){ delete state.strengthItems[date]; Store.setStrengthItems(state.strengthItems); }
+  if(state.strengthSwaps && state.strengthSwaps[date]){ delete state.strengthSwaps[date]; Store.setStrengthSwaps(state.strengthSwaps); }
+}
 function renderTodayCard(plan){
   const ti = todayWeekIndex(plan);
   if(ti===-1 || ti!==state.currentWeekIndex) return '';
@@ -2840,6 +3028,9 @@ function renderTodayCard(plan){
       <button class="btn" data-act="open-day" data-i="${di}">Details</button>
       ${day.km>0 && day.type!=='race' ? `<button class="btn btn-primary" data-act="open-log-for-date" data-date="${day.date}">${ICONS.plus} Log a run</button>` : (day.strength ? `<button class="btn btn-primary" data-act="toggle-strength-done" data-date="${day.date}">${state.strengthDone.includes(day.date)?'Strength done ✓':'Mark strength done'}</button>` : '')}
     </div>
+    ${day.strength && day.strengthExercises && day.strengthExercises.length
+      ? `<button class="btn btn-block" data-act="open-strength" data-date="${day.date}" style="margin-top:8px;">${ICONS.dumbbell} Strength session · ${esc(strengthTitle(day))}${day.strengthTimeMin ? ` · ${day.strengthTimeMin} min` : ''}</button>`
+      : `<button class="btn btn-ghost btn-block" data-act="open-strength" data-build="1" data-date="${day.date}" style="margin-top:6px;">${ICONS.dumbbell} Build a strength session</button>`}
   </div>`;
 }
 function renderHelpCard(){
@@ -4346,6 +4537,7 @@ function renderSettingsTab(){
 function renderModal(){
   const m = state.modal;
   if(m.type==='day-detail') return renderDayDetail();
+  if(m.type==='strength') return renderStrengthPage();
   if(m.type==='log-run') return modalLogRun();
   if(m.type==='log-parts') return modalLogParts();
   if(m.type==='edit-day') return modalEditDay();
@@ -5408,23 +5600,7 @@ function renderDayDetail(){
       <label class="field-label">Effort</label>
       <div class="input" style="height:auto; color:var(--ink-soft);">${esc(purpose.effort)}</div>
     </div>` : ''}
-    ${day.strength && day.strengthExercises && day.strengthExercises.length ? `
-    <details class="card settings-details" id="strength-details" style="padding:0 14px; margin-bottom:14px;" ${(day.km>0 && !(state.modal && state.modal.strengthOpen)) ? '' : 'open'}>
-      <summary><span><div class="lbl" style="font-weight:700; font-size:14.5px;">Strength${day.strengthFocus==='upper' ? ' — upper body & core' : ''}</div><div class="sub" style="font-size:12.5px; color:var(--muted); margin-top:2px;">${day.strengthTimeMin ? `About ${day.strengthTimeMin} min` : ''}${day.km>0 ? (day.strengthAfterRun ? ' · after the run, not before it' : ' · after the run') : ''}${isStrengthDone ? ' · done' : ''}</div></span><span class="chev">${ICONS.chevron}</span></summary>
-      <div style="padding-bottom:14px;">
-        ${day.strengthShortable && day.date>=fmtDate(todayDate()) ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthShort?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-short="0">Full · ${STRENGTH_TIME_MIN_PAGE.full} min</button><button class="chip ${day.strengthShort?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-short="1">Shorter · ${STRENGTH_TIME_MIN_PAGE.short} min</button></div>` : ''}
-        ${day.strengthLongable && day.date>=fmtDate(todayDate()) ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthLong?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-long="0">Standard · ${STRENGTH_TIME_MIN_PAGE.upper} min</button><button class="chip ${day.strengthLong?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-long="1">Full · ${STRENGTH_TIME_MIN_PAGE.upperFull} min</button></div>` : ''}
-        ${strengthFocusNote ? `<div class="hint" style="margin:0 0 8px;">${esc(strengthFocusNote)}</div>` : ''}
-        ${day.strengthRestored ? `<div class="hint" style="margin:0 0 8px;">Rebuilt from the weights you logged this day: those exercises are as you did them; the rest is the app's best match for the session.</div>` : ''}
-        ${strengthRowsHtml(day.strengthExercises, day.date, day.strengthHowTo, false)}
-        <div class="hint" style="margin:8px 0 12px;">Tap an exercise for the effort, rest and how to do it. Tick each one as you go.</div>
-        ${day.strengthOptional && day.strengthOptional.length ? `
-        <div class="field-label" style="margin-bottom:6px;">Optional extras — only if you have time</div>
-        <div style="opacity:.85; margin-bottom:12px;">${strengthRowsHtml(day.strengthOptional, day.date, day.strengthHowTo, true)}</div>` : ''}
-        <div class="hint" style="margin:0 0 12px;">Built for the gym equipment ticked in Settings.</div>
-        ${day.strength ? `<button class="btn btn-block" data-act="toggle-strength-done" data-date="${day.date}" style="margin-bottom:0; ${isStrengthDone?'color:var(--done); border-color:var(--done);':''}">${isStrengthDone?`${ICONS.check} Strength completed`:'Mark strength completed'}</button>` : ''}
-      </div>
-    </details>` : ''}
+    ${strengthSummaryCardHtml(day)}
     <button class="btn btn-primary btn-block" data-act="open-log-for-day" style="padding:13px; margin-top:6px;">${ICONS.plus} Log ${matchedLogs.length?'another':'a'} run</button>
   `, editBtn);
 }
@@ -5728,6 +5904,30 @@ function onClick(e){
     const sheet = document.querySelector('.sheet'); const y = sheet ? sheet.scrollTop : 0;
     render();
     const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = y;
+    return;
+  }
+  if(act==='open-strength'){
+    const date = el.dataset.date, found = plannedWorkoutForDate(date); if(!found) return;
+    const back = state.modal && state.modal.type==='day-detail' ? state.modal : null;
+    state.modal = {type:'strength', date, back};
+    const d = found.day, c = d.strengthCustom;
+    state.builder = el.dataset.build ? (c ? {date, ...c} : {date, focus:'lower', length:40, intensity:'full'}) : null;
+    render(); const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = 0; return;
+  }
+  if(act && act.startsWith('builder-')){
+    const sheet = document.querySelector('.sheet'); const y = sheet ? sheet.scrollTop : 0;
+    if(act==='builder-open' || act==='builder-open-today'){
+      const date = el.dataset.date || fmtDate(todayDate()); const found = plannedWorkoutForDate(date);
+      const d = found && found.day, c = d && d.strengthCustom;
+      state.builder = c ? {date, ...c} : {date, focus: d && d.strength && d.strengthFocus==='upper' ? 'upper' : 'lower', length:40, intensity:'full'};
+      if(act==='builder-open-today' && found){ state.modal = {type:'strength', date, back:null}; }
+    }
+    else if(act==='builder-set' && state.builder){ const k = el.dataset.k; state.builder[k] = k==='length' ? Number(el.dataset.v) : el.dataset.v; }
+    else if(act==='builder-cancel'){ state.builder = null; }
+    else if(act==='builder-apply'){ applyBuiltSession(el.dataset.date); state.builder = null; showToast('Strength session added'); }
+    else if(act==='builder-restore'){ restorePlannedSession(el.dataset.date); state.builder = null; }
+    render();
+    const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = act==='builder-apply' ? 0 : y;
     return;
   }
   if(act==='gym-link' || act==='gym-form-link') return; // selects: handled on change, not click

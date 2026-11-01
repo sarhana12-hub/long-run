@@ -289,6 +289,30 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   }
   console.log('\n=== recovery plan brings strength back in steps ==='); if(bad.length){ failures++; bad.forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 184 a built session reads as a normal session for every choice and equipment; 186 its
+// warm-up fits it: no general part straight after a run, ramp-up sets only on loaded lifts
+{
+  const RE = /^(\d+)×(\S+) (.+?) \(([^)]*)\) — (.*?)\.?(?: Rest (.+?) between sets\.)?$/;
+  const bad = []; let n = 0;
+  for(const equipment of [g.DEFAULT_EQUIPMENT.slice(), [], ['dumbbells','bench']])
+  for(const focus of ['lower','upper','full']) for(const intensity of ['light','maintain','full']) for(const length of [15,25,40]){
+    const avail = g.equipmentSet(equipment);
+    const r = g.buildCustomStrength({focus, length, intensity}, 9, avail, new Set());
+    n++;
+    const tag = `${focus}/${intensity}/${length} [${equipment.length} items]`;
+    if(!r.lines.length) bad.push(tag+': empty');
+    r.lines.forEach(l=>{ if(!RE.test(l) || /undefined|NaN/.test(l)) bad.push(tag+': bad line '+l); });
+    const names = r.lines.map(l=>(l.match(RE)||[])[3]); if(new Set(names).size!==names.length) bad.push(tag+': repeats an exercise');
+    if(!(r.timeMin>0)) bad.push(tag+': no time');
+    if(focus==='full' && !(r.lines.some(l=>/squat|deadlift|thrust|press \(machine|lunge|step-up|bridge/i.test(l)) && r.lines.some(l=>/row|pull|pulldown/i.test(l)))) bad.push(tag+': full body without both a leg lift and a pull');
+    const wu = g.strengthWarmup(r.lines, focus, r.tier, false, avail), wr = g.strengthWarmup(r.lines, focus, r.tier, true, avail);
+    if(!wu.steps.length || !(wu.minutes>0)) bad.push(tag+': no warm-up');
+    if(wr.minutes >= wu.minutes) bad.push(tag+': warm-up after a run is not shorter');
+    if(intensity==='light' && wu.steps.some(s=>/^Ramp up/.test(s.k))) bad.push(tag+': ramp-up sets on a light session');
+    wu.steps.filter(s=>/^Ramp up: /.test(s.k)).forEach(s=>{ const nm = s.k.slice(9); const l = r.lines.find(x=>(x.match(RE)||[])[3]===nm); if(!l || /bodyweight/i.test((l.match(RE)||[])[4])) bad.push(tag+': ramp-up on a bodyweight or missing lift: '+nm); });
+  }
+  console.log(`\n=== built sessions and their warm-ups (${n}) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,10).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
 {
   const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();

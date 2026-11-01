@@ -1039,6 +1039,88 @@ function strengthSlotRole(line){
     || Object.keys(STRENGTH_EXERCISES).find(k=>STRENGTH_EXERCISES[k].variants.some(v=>v.name===name));
   return PRIMARY_LOWER_POOL.includes(slot) ? 'main' : UNILATERAL_POOL.includes(slot) ? 'single' : null;
 }
+// A session built on request (defect 184): focus 'lower' | 'upper' | 'full', length 15 | 25 |
+// 40 minutes, intensity 'light' | 'maintain' | 'full'. Built from the same pieces as the plan's
+// own sessions; returns {lines, tier, timeMin, howTo}.
+function buildCustomStrength(choice, variant, avail, avoid){
+  avail = avail || equipmentSet();
+  const {focus, length, intensity} = choice;
+  const lowerTier = intensity==='light' ? 'light' : intensity==='maintain' ? 'maintain' : length<=15 ? 'express' : length<=25 ? 'short' : 'heavy';
+  // light upper body: the same lifts, two sets each, easier effort
+  const lighten = l => l.replace(/^3×/, '2×').replace(/— (1–2 reps|2 reps|same effort)[^.]*/, '— easy, 3 reps left in the tank');
+  _used.length = 0;
+  let lines, tier, timeMin;
+  if(focus==='lower'){
+    lines = buildLowerStrengthWorkout(lowerTier, variant, 1, avail, avoid); // a mid-block week: no "easier week" wording
+    tier = lowerTier; timeMin = STRENGTH_TIME_MIN[lowerTier];
+  } else if(focus==='upper'){
+    const full = length>=40 && intensity!=='light';
+    lines = buildUpperStrengthWorkout(variant, avail, full, avoid);
+    if(intensity==='light') lines = lines.map(lighten);
+    if(length<=15) lines = lines.slice(0, 3);
+    tier = intensity==='light' ? 'light' : intensity==='maintain' ? 'maintain' : 'heavy';
+    timeMin = length<=15 ? 15 : full ? STRENGTH_TIME_MIN.upperFull : STRENGTH_TIME_MIN.upper;
+  } else {
+    // full body: the main leg lift and the single-leg one with a pull, a push and core
+    const lo = buildLowerStrengthWorkout(lowerTier==='express' ? 'short' : lowerTier, variant, 1, avail, avoid);
+    let up = buildUpperStrengthWorkout(variant, avail, false, avoid);
+    if(intensity==='light') up = up.map(lighten);
+    const nameOf = l => String(l).split(' (')[0];
+    const isPlyo = l => /Pogo hops|Box jumps|Squat jumps|Hurdle hops/.test(nameOf(l)), isCalf = l => /calf/i.test(nameOf(l));
+    // the shorter session pairs the single-leg lift with calf raises; on its own it rests normally
+    const unpair = l => l.replace(/; go straight to the calf raises, then rest/, '').replace(/ Rest 30s between sets\.$/, ' Rest 75s between sets.');
+    const loMain = lo.filter(l=>!isPlyo(l) && !isCalf(l)).map(unpair);
+    const primary = loMain[0], uni = loMain[1], core = up[2], carry = up[3], calf = lo.find(isCalf);
+    lines = length<=15 ? [primary, up[0], up[1]]
+      : length<=25 ? [primary, up[0], up[1], uni, core]
+      : [primary, up[0], up[1], uni, calf, core, carry];
+    lines = lines.filter(Boolean);
+    tier = lowerTier==='express' ? 'short' : lowerTier; timeMin = length;
+  }
+  const seen = new Set(), howTo = [];
+  _used.forEach(ex=>{ if(ex.how && !seen.has(ex.name) && lines.some(l=>l.includes(' '+ex.name))){ seen.add(ex.name); howTo.push({name:ex.name, how:ex.how}); } });
+  _used.length = 0;
+  const loadNote = focus==='upper' ? STRENGTH_LOAD_NOTE.upper : (STRENGTH_LOAD_NOTE[tier] || STRENGTH_LOAD_NOTE.heavy);
+  return {lines, tier, timeMin, howTo, loadNote};
+}
+// The warm-up for a strength session (defect 186), shaped by the session itself:
+//  - general: easy cardio to raise muscle temperature, skipped straight after a run (the run did it)
+//  - movement prep: dynamic, not long static holds (static holds over about a minute per muscle
+//    can cut force and power for a while; short dynamic work does not)
+//  - ramp-up sets on the first heavy lift, building to the working weight
+//  - a few easy hops before plyometrics
+// focus 'lower' | 'upper' | 'full'; tier as the session's; afterRun when it follows a run that day.
+function strengthWarmup(lines, focus, tier, afterRun, avail){
+  avail = avail || equipmentSet();
+  const parsed = (lines||[]).map(l=>{ const m = String(l).match(SWAP_LINE_RE); return m ? {name: swapBaseName(m[3]), equip: m[4], amount: m[2]} : null; }).filter(Boolean);
+  const light = tier==='light';
+  const steps = []; let minutes = 0;
+  if(afterRun){ steps.push({k:'General', t:"Your run was the general warm-up. If more than an hour has passed since, add 3–5 min of easy cardio first."}); }
+  else { steps.push({k:'General', t: light ? '3–5 min of easy cardio (brisk walk, bike or rower) until you feel warm.' : '5 min of easy cardio (bike, rower or a light jog), building gradually until you are warm and breathing a little harder.'}); minutes += light ? 4 : 5; }
+  const band = avail.has('miniBand') || avail.has('longBand');
+  const legs = ['Leg swings, front to back and side to side, 10 each leg', 'Walking lunges with an overhead reach, 5 each leg', 'Bodyweight squats, 10, slow', 'Glute bridges, 10'];
+  const arms = ['Arm circles, 10 each way', band ? 'Band pull-aparts, 15' : 'Shoulder blade squeezes, 15', 'Push-ups with hands on a bench, 8', 'Cat-cow, 6 slow'];
+  const prep = focus==='upper' ? arms : focus==='full' ? [legs[0], legs[1], legs[2], arms[0], arms[1]] : legs;
+  steps.push({k:'Movement prep', items: prep, t:'Keep it moving; save long stretches for after.'}); minutes += light ? 3 : 4;
+  const plyo = parsed.find(p=>/Pogo hops|Box jumps|Squat jumps|Hurdle hops/.test(p.name));
+  if(plyo && !light){ steps.push({k:'Before the jumps', t: plyo.name==='Pogo hops' ? 'Two easy sets of 10 small pogo hops at half effort.' : `Two or three practice ${plyo.name.toLowerCase()} at half height and effort.`}); minutes += 1; }
+  if(!light){
+    const loaded = p => !/bodyweight/i.test(p.equip) && !/Pogo|jumps|hops|Plank|Dead bug|Bird dog|Side plank|carry/i.test(p.name);
+    const first = parsed.find(loaded);
+    if(first){
+      const heavy = focus!=='upper' && /^\d+$/.test(first.amount) && Number(first.amount)<=6;
+      steps.push({k:`Ramp up: ${first.name}`, t: heavy
+        ? 'Build to your working weight in three sets: 8 easy reps with the empty bar or a light weight, 5 at about half your working weight, 3 at about three-quarters. A short rest between, then about a minute before your first working set.'
+        : 'One lighter set of 6–8 at about half your working weight, then start.'});
+      minutes += heavy ? 3 : 1;
+      if(focus!=='lower'){
+        const second = parsed.slice(parsed.indexOf(first)+1).find(loaded);
+        if(second) { steps.push({k:`Ramp up: ${second.name}`, t:'One lighter set of 6–8 at about half your working weight.'}); minutes += 1; }
+      }
+    }
+  }
+  return {minutes, steps};
+}
 // The exercises on the last day of a week, for the next week's first session to avoid.
 function strengthNamesBefore(prevWeek){
   const last = prevWeek && prevWeek.days && prevWeek.days[prevWeek.days.length-1];
@@ -1066,7 +1148,7 @@ function refreshStrengthWorkouts(days, phase, weekIndex, opts){
     // keepDates: a day already under way (today, once a session is started); rebuildDates: a
     // day the runner just changed, rebuilt even if it is in the past.
     const asked = opts.rebuildDates && opts.rebuildDates.has(d.date);
-    if(!asked && ((opts.fromDate && d.date < opts.fromDate) || (opts.keepDates && opts.keepDates.has(d.date)))){ namesOf(d).forEach(n=>builtNames.add(n)); return; }
+    if(!asked && (d.strengthCustom || (opts.fromDate && d.date < opts.fromDate) || (opts.keepDates && opts.keepDates.has(d.date)))){ namesOf(d).forEach(n=>builtNames.add(n)); return; }
     if(d.type==='rest') Object.assign(d, buildWorkoutMeta(d)); // rest-day text depends on whether strength landed there
     if(!d.strength){ d.strengthTier=undefined; d.strengthExercises=undefined; d.strengthTimeMin=undefined; d.strengthExpress=false; d.strengthAfterRun=false; d.strengthShort=false; d.strengthShortable=false; d.strengthLong=false; d.strengthLongable=false; d.strengthHowTo=undefined; d.strengthLoadNote=undefined; d.strengthOptional=undefined; return; }
     const tier = lowerStrengthTierForPhase(liftPhase, d.daysToRace!=null ? d.daysToRace : opts.minDaysToRace, opts.strengthCutoffDays);
@@ -2463,7 +2545,7 @@ return {
   QUALITY_TYPES, WARMUP_ELIGIBLE_TYPES, STRIDES_ELIGIBLE_TYPES, STRIDES_REPS, STRIDES_EXTRA_KM, HILL_STRIDES_EXTRA_KM, QUALITY_WARMUP_KM, QUALITY_COOLDOWN_KM,
   TYPE_LABELS, isLegDemandingDay, isKeySessionDay, structuredEffort, buildWorkoutMeta,
   STRENGTH_EXERCISES, OPTIONAL_EXTRAS, strengthSwapOptions, SWAP_FAMILIES, EQUIPMENT, DEFAULT_EQUIPMENT, equipmentSet, resolveExercise, STRENGTH_TIME_MIN, lowerStrengthTierForPhase, buildLowerStrengthWorkout, buildUpperStrengthWorkout,
-  placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts, strengthNamesBefore, rebuildLoggedSession, strengthSlotRole,
+  placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts, strengthNamesBefore, rebuildLoggedSession, strengthSlotRole, buildCustomStrength, strengthWarmup,
   qualityDowsFor, deriveScheduleFromLongDow, evenlySpacedPositions, scheduleWarnings,
   raceClass, taperDaysFor, taperVolumeFactor, taperLongFactor, targetPeakWeeklyKm, peakLongTargetKm, longFracCap, longTimeCapMin,
   qualityMinutes, floorMinutesFor, sizeQuality, buildWeekDays, generatePlan,
