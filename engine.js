@@ -38,7 +38,7 @@
 
 /* ============================= constants & utils ============================= */
 const KM_PER_MI = 1.609344;
-const ENGINE_VERSION = 38; // bump whenever a rule change should rebuild saved plans on next load
+const ENGINE_VERSION = 39; // bump whenever a rule change should rebuild saved plans on next load
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -453,6 +453,18 @@ const STRENGTH_EXERCISES = {
     {needs:['dumbbells'], name:'Goblet squat', equip:'one heavy dumbbell at the chest'},
     {needs:[], name:'Single-leg squat to a chair', equip:'bodyweight, a chair behind you', per:'leg', how:'Stand on one leg in front of a chair, lower slowly until you just touch the seat, then stand back up without using the other foot; hold a wall or rail for balance if needed.'},
   ]},
+  // Quad work that is kind to the kneecap (defect 191: the owner's weak quads and sore knees).
+  // Offered as swaps among the squat-type lifts; the plan never picks them on its own.
+  wallSit: {unit:'hold', how:'Back flat against a wall, feet a stride out; slide down until the knees are bent about 45-60 degrees and hold. Deeper over the weeks as it stops hurting.', variants:[
+    {needs:[], name:'Wall sit', equip:'bodyweight, back against a wall', swapAmount:40, swapCue:'knees bent 45–60°, deeper as it gets easier; discomfort up to about 3/10 is fine'},
+  ]},
+  stepDown: {unit:'reps', per:'leg', how:'Stand on a low step on one leg; slowly lower the other heel toward the floor over about 3 seconds, knee tracking over the middle of the foot and hips level, tap, and stand back up.', variants:[
+    {needs:['box'], name:'Step-down', equip:'low box, 4-8 inches', swapAmount:10, swapCue:'3 seconds down, knee over the middle of the foot, hips level'},
+    {needs:[], name:'Step-down', equip:'bottom stair or a low step', swapAmount:10, swapCue:'3 seconds down, knee over the middle of the foot, hips level'},
+  ]},
+  spanishSquat: {unit:'reps', how:'A heavy loop band anchored low to something solid and behind both knees; lean back into it and sit down with the shins staying vertical, then stand up.', variants:[
+    {needs:['longBand'], name:'Spanish squat', equip:'heavy band behind the knees', swapAmount:12, swapCue:'shins vertical, sit back into the band, slow and controlled'},
+  ]},
   legPress: {unit:'reps', how:'Feet shoulder-width on the plate, lower until the knees are near a right angle without the lower back peeling off the pad, then press back without locking the knees out.', variants:[
     {needs:['legPress'], name:'Leg press', equip:'machine'},
     // never the default (the two-leg press always comes first); offered as a swap (defect 176)
@@ -519,8 +531,10 @@ const STRENGTH_EXERCISES = {
     {needs:['stabilityBall'], name:'Stability-ball hamstring curl', equip:'stability ball', how:'Lie on your back, heels on the ball, lift the hips, then pull the ball toward you with your heels and roll it back out.'},
     {needs:[], name:'Single-leg glute bridge', equip:'bodyweight', how:'Lie on your back, one foot flat, the other leg straight; drive the hips up through the planted heel and lower slowly.'},
   ]},
-  bandWalk: {unit:'reps', per:'side', how:'Band just above the knees, feet hip-width, slight knee bend; step sideways keeping tension in the band and the toes pointing forward, then step the other way. Builds the hip muscles that keep the knee tracking straight when you run.', variants:[
-    {needs:['miniBand'], name:'Mini-band side steps', equip:'mini band above the knees'},
+  bandWalk: {unit:'reps', per:'side', how:'Mini band around the front of both feet, feet hip-width, slight knee and hip bend; step sideways keeping tension in the band and the toes pointing forward, then bring the other foot in without letting the band go slack. Easier: band just above the knees', variants:[
+    // around the forefoot: the most work for the side of the hip (defect 190); above the knees
+    // is the easier version, in the library entry
+    {needs:['miniBand'], name:'Mini-band side steps', equip:'mini band around the forefoot'},
     {needs:[], name:'Side-lying leg raises', equip:'bodyweight', how:'Lie on your side, legs straight and stacked; lift the top leg slowly to about 45 degrees with the toes pointing forward, pause, lower.'},
   ]},
   sidePlank: {unit:'hold', per:'side', how:'On one forearm with the elbow under the shoulder, lift the hips so the body makes a straight line, and hold without letting the hips sag.', variants:[{needs:[], name:'Side plank', equip:'bodyweight'}]},
@@ -689,7 +703,7 @@ function lowerStrengthTierForPhase(phase, daysToRace, cutoffDays){
 }
 // One line for the core/hip slot, phrased for what the exercise actually is.
 function coreLine(core, sets, restSec, cue){
-  if(core.name==='Mini-band side steps' || core.name==='Side-lying leg raises') return strengthSetLine(core, Math.max(2,sets), 15, 30, core.name==='Mini-band side steps' ? 'slow steps, toes forward, knees pushed out against the band' : 'slow and controlled, toes forward');
+  if(core.name==='Mini-band side steps' || core.name==='Side-lying leg raises') return strengthSetLine(core, Math.max(2,sets), 15, 30, core.name==='Mini-band side steps' ? 'slow steps, toes forward, hips level, knees over the toes' : 'slow and controlled, toes forward');
   if(core.name==='Suitcase carry') return strengthSetLine(core, Math.max(2,sets), 1, 30, 'one walk per hand, stay level');
   const amt = core.unit==='hold' ? 30 : 10;
   return strengthSetLine(core, sets, amt, restSec, cue || (core.unit==='hold' ? 'hold with good form' : 'slow and controlled'));
@@ -823,7 +837,7 @@ function buildLowerOptional(avail){
 // other; a swap keeps the sets, rest and effort, and only changes the amount where the new
 // exercise counts differently (per leg, a hold, a carry, or bodyweight needing more reps).
 const SWAP_FAMILIES = [
-  ['backSquat','legPress','gobletSquat','bulgarianSplitSquat','stepUps','walkingLunges'],
+  ['backSquat','legPress','gobletSquat','bulgarianSplitSquat','stepUps','walkingLunges','stepDown','spanishSquat','wallSit'],
   ['romanianDeadlift','hipThrust','singleLegRDL','kettlebellSwing','hamstringCurl'],
   ['calfRaiseStraight','calfRaiseBent'],
   ['pogoHops','boxJumps'],
@@ -866,7 +880,7 @@ function strengthSwapOptions(line, sessionLines, avail, onlySlots){
         // the amount and cue as the session builder phrases each one, on the original sets
         const band = ex.name==='Mini-band side steps' || ex.name==='Side-lying leg raises';
         const amt = band ? 15 : isCarry(ex) ? 1 : ex.unit==='hold' ? 30 : 10;
-        const cueC = ex.name==='Mini-band side steps' ? 'slow steps, toes forward, knees pushed out against the band' : ex.name==='Side-lying leg raises' ? 'slow and controlled, toes forward'
+        const cueC = ex.name==='Mini-band side steps' ? 'slow steps, toes forward, hips level, knees over the toes' : ex.name==='Side-lying leg raises' ? 'slow and controlled, toes forward'
           : ex.unit==='hold' ? 'hold with good form' : isCarry(ex) ? (ex.name==='Farmer carry' ? 'one walk per set, tall posture' : 'one walk per hand, stay level') : 'slow and controlled';
         newLine = strengthSetLine(ex, sets, amt, sets>1 ? (rest || 30) : 0, cueC);
       } else {
@@ -876,10 +890,12 @@ function strengthSwapOptions(line, sessionLines, avail, onlySlots){
         if(ex.unit!=='hold' && toBody && n<8) n = 8;
         // bodyweight to loaded: the loaded lift's own rep range (push-ups 12 → a press for 8)
         if(ex.unit!=='hold' && origBody && !ex.bodyweight && key!=='boxJumps' && key!=='pogoHops') n = n>=15 ? 10 : n>10 ? 8 : n;
-        const effort = toBody ? cue.replace(/^heavy( but crisp)?\s*—\s*/, 'slow, three seconds down — ').replace(/^moderate-heavy, /, 'slow and controlled, ') : cue;
+        if(v.swapAmount) n = v.swapAmount;
+        const effort = v.swapCue ? v.swapCue : toBody ? cue.replace(/^heavy( but crisp)?\s*—\s*/, 'slow, three seconds down — ').replace(/^moderate-heavy, /, 'slow and controlled, ') : cue;
         // heavy rest follows the builder: barbell lifts 2–3 min, other heavy lifts 2 min
         const heavyRest = (rest===120 || rest===150) ? (/barbell/i.test(ex.equip) ? 150 : 120) : rest;
-        newLine = strengthSetLine(ex, sets, n, toBody ? Math.min(rest, 60) : heavyRest, effort);
+        // the knee-friendly quad work keeps its own short rest, whatever it replaces
+        newLine = strengthSetLine(ex, sets, n, (toBody || v.swapCue) ? Math.min(rest || 60, 60) : heavyRest, effort);
       }
       _used.length = usedSoFar;
       out.push({line:newLine, name:ex.name, equip:ex.equip, how:ex.how||null, singleLeg: ex.per==='leg', bodyweight: !!ex.bodyweight, machine: /machine/i.test(ex.equip), slot:key});
@@ -891,8 +907,8 @@ function strengthSwapOptions(line, sessionLines, avail, onlySlots){
   const firstPass = [], counts = {};
   out.forEach(o=>{ counts[o.slot] = (counts[o.slot]||0)+1; if(counts[o.slot] <= (o.slot===slot ? 3 : 2)) firstPass.push(o); });
   out = [...firstPass, ...out.filter(o=>!firstPass.includes(o))];
-  // up to eight two-leg (or upper) and six single-leg options, in order, so neither kind is cut off
-  const two = out.filter(o=>!o.singleLeg).slice(0, 8), one = out.filter(o=>o.singleLeg).slice(0, 6);
+  // up to eight of each kind, in order, so neither kind is cut off
+  const two = out.filter(o=>!o.singleLeg).slice(0, 8), one = out.filter(o=>o.singleLeg).slice(0, 8);
   return out.filter(o=>two.includes(o) || one.includes(o));
 }
 const STRENGTH_TIME_MIN = {heavy:40, short:25, maintain:28, express:20, light:15, upper:22, upperFull:35};
@@ -1105,7 +1121,7 @@ function strengthWarmup(lines, focus, tier, afterRun, avail){
   const plyo = parsed.find(p=>/Pogo hops|Box jumps|Squat jumps|Hurdle hops/.test(p.name));
   if(plyo && !light){ steps.push({k:'Before the jumps', t: plyo.name==='Pogo hops' ? 'Two easy sets of 10 small pogo hops at half effort.' : `Two or three practice ${plyo.name.toLowerCase()} at half height and effort.`}); minutes += 2; }
   if(!light){
-    const loaded = p => !/bodyweight/i.test(p.equip) && !/Pogo|jumps|hops|Plank|Dead bug|Bird dog|Side plank|carry/i.test(p.name);
+    const loaded = p => !/bodyweight|band/i.test(p.equip) && !/Pogo|jumps|hops|Plank|Dead bug|Bird dog|Side plank|carry|Wall sit|Step-down/i.test(p.name);
     const first = parsed.find(loaded);
     if(first){
       const heavy = focus!=='upper' && /^\d+$/.test(first.amount) && Number(first.amount)<=6;
