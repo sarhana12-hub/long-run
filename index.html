@@ -334,7 +334,8 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .gym-note{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:6px 0;}
 .gym-lbl{font-weight:700; font-size:13.5px; color:var(--ink);}
 .gym-txt{font-size:13.5px; color:var(--ink-soft); white-space:pre-wrap; overflow-wrap:anywhere;}
-.gym-actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:4px;}
+.gym-box-empty{padding-top:6px;}
+.gym-add{padding-left:0; padding-right:0; color:var(--muted); font-weight:600;}
 .gym-link{width:auto; max-width:100%; padding:6px 10px; font-size:13px;}
 .gym-form{display:flex; flex-direction:column; gap:8px; margin:6px 0;}
 .gym-form textarea{resize:vertical; font:inherit;}
@@ -2845,13 +2846,15 @@ function gymFormHtml(ed){
 }
 function gymSettingsHtml(name, where){
   const all = state.gymSettings || [];
-  const mine = all.filter(e=>(e.exercises||[]).includes(name)), others = all.filter(e=>!(e.exercises||[]).includes(name));
+  const mine = all.filter(e=>(e.exercises||[]).includes(name));
   const ed = state.gymEdit && state.gymEdit.where===where ? state.gymEdit : null;
   let h = mine.map(e=> ed && ed.id===e.id ? gymFormHtml(ed)
     : `<div class="gym-note"><div style="min-width:0;"><div class="gym-lbl">${esc(e.label||'Settings')}</div><div class="gym-txt">${esc(e.text||'')}</div></div><button class="btn btn-sm btn-ghost" data-act="gym-edit" data-id="${e.id}" data-where="${where}" data-name="${esc(name)}">Edit</button></div>`).join('');
+  // Only the setting and its Edit: adding more, or reusing a saved one, is rare and lives in
+  // Settings (defect 188: the extra controls took most of the box)
   if(ed && !ed.id) h += gymFormHtml(ed);
-  else if(!ed) h += `<div class="gym-actions"><button class="btn btn-sm" data-act="gym-new" data-where="${where}" data-name="${esc(name)}">${mine.length ? 'Add another' : 'Add machine settings'}</button>${others.length ? `<select class="input gym-link" data-act="gym-link" data-where="${where}" data-name="${esc(name)}" aria-label="Use a saved setting"><option value="">Use a saved setting…</option>${others.map(o=>`<option value="${o.id}">${esc(o.label||'Settings')}</option>`).join('')}</select>` : ''}</div>`;
-  return `<div class="gym-box"><div class="scan-k">My settings</div>${h}</div>`;
+  else if(!ed && !mine.length) h += `<button class="btn btn-sm btn-ghost gym-add" data-act="gym-new" data-where="${where}" data-name="${esc(name)}">+ Add machine settings</button>`;
+  return mine.length || ed ? `<div class="gym-box"><div class="scan-k">My settings</div>${h}</div>` : `<div class="gym-box gym-box-empty">${h}</div>`;
 }
 function gymSettingsListHtml(){
   const all = state.gymSettings || [];

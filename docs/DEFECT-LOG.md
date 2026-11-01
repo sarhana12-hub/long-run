@@ -434,6 +434,8 @@ The read-through is now a standing pre-push step: `npm run readthrough` regenera
 
 187. **The warm-up time was too short** (owner screenshot: "about 7 min" for leg swings, lunges, squats, bridges and a three-set squat ramp-up: "Doesn't that warm up sound like a lot more than 7 minutes"). The ramp-up was counted as 3 minutes, but three building sets with plate changes, short rests and a minute before the first working set take 5-7. *Fix:* the heavy ramp-up counts 6 min, a single lighter set 2, practice jumps 2. The owner's case is now 10 min after a run and 15 without. The session line says "About 40 min after the 10 min warm-up", so the two are not mistaken for one total.
 
+188. **The exercise's settings box was mostly controls** (owner screenshot: one saved setting under "Add another" and a full-width "Use a saved setting..." dropdown: "takes up a huge amount of space and is distracting for something very unlikely to be used"). *Fix:* with a setting, the box shows just the setting and its Edit. Without one, a single small "+ Add machine settings" link. Reusing a saved setting for more exercises is done in Settings → Machine settings.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy
