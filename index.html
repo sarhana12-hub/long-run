@@ -2410,7 +2410,7 @@ function strengthOptsFor(week, rebuildDates){
   const mode = (state.setup && state.setup.taperMode) || 'full';
   const prev = state.plan && state.plan.weeks ? state.plan.weeks.find(w=>w.weekIndex===week.weekIndex-1) : null;
   // fromDate: sessions before today are history and are never rebuilt (defect 174)
-  return {fromDate: fmtDate(todayDate()), keepDates: startedStrengthDates(), rebuildDates: new Set(rebuildDates||[]), prevNames: strengthNamesBefore(prev), equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none', shortDates: new Set(state.strengthShort||[]), longDates: new Set(state.strengthLong||[])};
+  return {strengthPhase: week.strengthPhase || null, fromDate: fmtDate(todayDate()), keepDates: startedStrengthDates(), rebuildDates: new Set(rebuildDates||[]), prevNames: strengthNamesBefore(prev), equipment: state.setup && state.setup.equipment, weekInBlock: week.weekIndex%4, strengthCutoffDays: mode==='none'?1:mode==='light'?5:10, trainThrough: mode==='none', shortDates: new Set(state.strengthShort||[]), longDates: new Set(state.strengthLong||[])};
 }
 function refreshStrengthFromThisWeek(){
   const plan = state.plan; if(!plan) return;

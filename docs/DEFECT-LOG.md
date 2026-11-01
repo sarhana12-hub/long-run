@@ -426,6 +426,8 @@ The read-through is now a standing pre-push step: `npm run readthrough` regenera
 
 182. **Barbell bench press could not be picked for a machine setting** (owner: "Is there no barbell bench press exercise?"). It is in the library, but the bench press slot uses dumbbells whenever the runner has them, so the barbell version only comes up through a swap. The Machine settings picker listed only exercises already in the plan. *Fix:* the picker lists the plan's exercises plus every version the runner's equipment allows (76 with the default equipment), so the bench rack can be linked to Barbell bench press ahead of a swap. Checked in the browser.
 
+183. **A recovery plan had no strength at all** (owner: "Are there no strength sessions in a recovery plan?"). The recovery plan placed zero strength sessions every week, whatever the runner's setting, for up to six weeks; strength gains start fading after about two to three weeks without lifting. *Fix:* strength comes back in steps. Week one has one upper-body session (the legs are still repairing). Week two has one light leg session, plus upper body, up to the runner's number. From week three, leg work is at peak-week "maintain" level: fewer sets, keep the load. A runner with no strength days still gets none. The lifting phase is kept on the week, so later refreshes and edits keep the same level. The Monte Carlo "lower too short" rule now exempts recovery weeks, as it does taper and peak. A test covers 0-3 strength days a week. Engine version 38.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy

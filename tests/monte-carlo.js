@@ -181,7 +181,7 @@ function sanityCheck(plan, setup){
           if(g.isKeySessionDay(next)) push('lower-before-hard', `${wk} ${d.label} -> ${next.label}`);
           if(g.isLegDemandingDay(d) && !d.strengthAfterRun) push('lower-on-hard-not-after-run', wk);
           if(d.strengthExpress) push('express-retired', wk);
-          if(d.strengthTimeMin < 28 && !/taper|peak/.test(w.phase) && !(d.daysToRace!=null && d.daysToRace<=21)) push('lower-too-short', `${wk} ${d.strengthTimeMin} min`);
+          if(d.strengthTimeMin < 28 && !/taper|peak|recovery/.test(w.phase) && !(d.daysToRace!=null && d.daysToRace<=21)) push('lower-too-short', `${wk} ${d.strengthTimeMin} min`);
         }
         if(d.strengthFocus==='upper' && d.type==='long') push('upper-on-long', wk);
         if(!d.strengthExercises || d.strengthExercises.length<3) push('strength-empty', wk);
