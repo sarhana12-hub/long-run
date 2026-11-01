@@ -167,6 +167,12 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   const ro = g.strengthSwapOptions(rowL, [rowL]);
   if(ro.some(o=>!/^3×8(\/arm)? /.test(o.line))) bad.push('a row swap changed the reps: '+ro.find(o=>!/^3×8(\/arm)? /.test(o.line)).line);
   if(!ro.some(o=>o.name==='Straight-arm pulldown')) bad.push('straight-arm pulldown not offered for a row');
+  // 190 side steps with the band at the forefoot; 191 knee-friendly quad work offered with its own cue and rest
+  const bandLine = g.buildLowerStrengthWorkout('heavy', 3, 1, g.equipmentSet(), null).concat(g.buildLowerStrengthWorkout('heavy', 0, 1, g.equipmentSet(), null)).find(l=>/Mini-band side steps/.test(l));
+  if(bandLine && !/around the forefoot/.test(bandLine)) bad.push('side steps not with the band at the forefoot: '+bandLine);
+  const kq = g.strengthSwapOptions(sq, [sq], g.equipmentSet([...g.DEFAULT_EQUIPMENT,'longBand','box']));
+  for(const n of ['Wall sit','Step-down','Spanish squat']){ const o = kq.find(x=>x.name===n); if(!o) bad.push(n+' not offered for a squat'); else if(/\) — (heavy|.*reps left in the tank)|Rest 2/.test(o.line)) bad.push(n+' carries the heavy lift\'s cue or rest: '+o.line); }
+  if(['wallSit','stepDown','spanishSquat'].some(k=>[g.buildLowerStrengthWorkout('heavy',0,1,g.equipmentSet(),null)].flat().some(l=>/Wall sit|Step-down|Spanish squat/.test(l)))) bad.push('knee exercises planned by default');
   console.log(`\n=== one-day exercise swaps (${checked} alternatives) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,10).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
 // 172 variety: the owner's layout (one lower day, an upper day the day after, a second
