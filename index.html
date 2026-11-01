@@ -334,7 +334,8 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .gym-note{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:6px 0;}
 .gym-lbl{font-weight:700; font-size:13.5px; color:var(--ink);}
 .gym-txt{font-size:13.5px; color:var(--ink-soft); white-space:pre-wrap; overflow-wrap:anywhere;}
-.gym-actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:4px;}
+.gym-box-empty{padding-top:6px;}
+.gym-add{padding-left:0; padding-right:0; color:var(--muted); font-weight:600;}
 .gym-link{width:auto; max-width:100%; padding:6px 10px; font-size:13px;}
 .gym-form{display:flex; flex-direction:column; gap:8px; margin:6px 0;}
 .gym-form textarea{resize:vertical; font:inherit;}
@@ -2845,13 +2846,15 @@ function gymFormHtml(ed){
 }
 function gymSettingsHtml(name, where){
   const all = state.gymSettings || [];
-  const mine = all.filter(e=>(e.exercises||[]).includes(name)), others = all.filter(e=>!(e.exercises||[]).includes(name));
+  const mine = all.filter(e=>(e.exercises||[]).includes(name));
   const ed = state.gymEdit && state.gymEdit.where===where ? state.gymEdit : null;
   let h = mine.map(e=> ed && ed.id===e.id ? gymFormHtml(ed)
     : `<div class="gym-note"><div style="min-width:0;"><div class="gym-lbl">${esc(e.label||'Settings')}</div><div class="gym-txt">${esc(e.text||'')}</div></div><button class="btn btn-sm btn-ghost" data-act="gym-edit" data-id="${e.id}" data-where="${where}" data-name="${esc(name)}">Edit</button></div>`).join('');
+  // Only the setting and its Edit: adding more, or reusing a saved one, is rare and lives in
+  // Settings (defect 188: the extra controls took most of the box)
   if(ed && !ed.id) h += gymFormHtml(ed);
-  else if(!ed) h += `<div class="gym-actions"><button class="btn btn-sm" data-act="gym-new" data-where="${where}" data-name="${esc(name)}">${mine.length ? 'Add another' : 'Add machine settings'}</button>${others.length ? `<select class="input gym-link" data-act="gym-link" data-where="${where}" data-name="${esc(name)}" aria-label="Use a saved setting"><option value="">Use a saved setting…</option>${others.map(o=>`<option value="${o.id}">${esc(o.label||'Settings')}</option>`).join('')}</select>` : ''}</div>`;
-  return `<div class="gym-box"><div class="scan-k">My settings</div>${h}</div>`;
+  else if(!ed && !mine.length) h += `<button class="btn btn-sm btn-ghost gym-add" data-act="gym-new" data-where="${where}" data-name="${esc(name)}">+ Add machine settings</button>`;
+  return mine.length || ed ? `<div class="gym-box"><div class="scan-k">My settings</div>${h}</div>` : `<div class="gym-box gym-box-empty">${h}</div>`;
 }
 function gymSettingsListHtml(){
   const all = state.gymSettings || [];
@@ -2915,8 +2918,10 @@ function renderStrengthPage(){
   const has = day.strength && day.strengthExercises && day.strengthExercises.length;
   const isStrengthDone = state.strengthDone.includes(day.date);
   const strengthFocusNote = strengthFocusNoteFor(day);
+  const focus = day.strengthCustom ? day.strengthCustom.focus : day.strengthFocus==='upper' ? 'upper' : 'lower';
+  const wu = has ? strengthWarmup(day.strengthExercises, focus, day.strengthTier, day.km>0, equipmentSet(state.setup && state.setup.equipment)) : null;
   const body = has ? `<div id="strength-details">
-      <div class="sx-page-sub">${day.strengthTimeMin ? `About ${day.strengthTimeMin} min` : ''}${day.km>0 ? (day.strengthAfterRun ? ' · after the run, not before it' : ' · after the run') : ''}${isStrengthDone ? ' · done' : ''}</div>
+      <div class="sx-page-sub">${day.strengthTimeMin ? `About ${day.strengthTimeMin} min${wu ? ` after the ${wu.minutes} min warm-up` : ''}` : ''}${day.km>0 ? (day.strengthAfterRun ? ' · after the run, not before it' : ' · after the run') : ''}${isStrengthDone ? ' · done' : ''}</div>
 
         ${day.strengthShortable && day.date>=fmtDate(todayDate()) ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthShort?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-short="0">Full · ${STRENGTH_TIME_MIN_PAGE.full} min</button><button class="chip ${day.strengthShort?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-short="1">Shorter · ${STRENGTH_TIME_MIN_PAGE.short} min</button></div>` : ''}
         ${day.strengthLongable && day.date>=fmtDate(todayDate()) ? `<div class="chip-select" style="margin:0 0 12px;"><button class="chip ${day.strengthLong?'':'active'}" data-act="set-strength-length" data-date="${day.date}" data-long="0">Standard · ${STRENGTH_TIME_MIN_PAGE.upper} min</button><button class="chip ${day.strengthLong?'active':''}" data-act="set-strength-length" data-date="${day.date}" data-long="1">Full · ${STRENGTH_TIME_MIN_PAGE.upperFull} min</button></div>` : ''}
@@ -2931,8 +2936,6 @@ function renderStrengthPage(){
         ${day.strength ? `<button class="btn btn-block" data-act="toggle-strength-done" data-date="${day.date}" style="margin-bottom:0; ${isStrengthDone?'color:var(--done); border-color:var(--done);':''}">${isStrengthDone?`${ICONS.check} Strength completed`:'Mark strength completed'}</button>` : ''}
       
     </div>` : '';
-  const focus = day.strengthCustom ? day.strengthCustom.focus : day.strengthFocus==='upper' ? 'upper' : 'lower';
-  const wu = has ? strengthWarmup(day.strengthExercises, focus, day.strengthTier, day.km>0, equipmentSet(state.setup && state.setup.equipment)) : null;
   const warmHtml = wu ? `<details class="card sx-warm" ${state.warmOpen===false ? '' : 'open'} id="sx-warm">
       <summary><span><span class="lbl">Warm-up</span><span class="sub"> · about ${wu.minutes} min, before the first set</span></span><span class="chev">${ICONS.chevron}</span></summary>
       ${wu.steps.map(st=>`<div class="sx-warm-step"><div class="sx-warm-k">${esc(st.k)}</div>${st.items ? `<ul class="sx-warm-list">${st.items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>` : ''}<div class="sx-warm-t">${esc(st.t)}</div></div>`).join('')}
