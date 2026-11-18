@@ -392,6 +392,10 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .sx-open-names{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .sx-open .chev{color:var(--muted); flex:none;}
 .sx-open .chev svg{width:16px; height:16px;}
+.sx-pick-open{padding-left:0; padding-right:0; color:var(--muted); font-weight:600;}
+.sx-pick{margin-top:10px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface-2);}
+.sx-pick-cats{flex-wrap:wrap; gap:6px; margin:0 0 6px;}
+.sx-pick-cats .chip{padding:5px 10px; font-size:12.5px;}
 .sx-builder-row{display:flex; flex-direction:column; gap:8px; margin:0 0 14px;}
 .sx-builder{padding:12px 14px; margin-bottom:14px; background:var(--surface-2);}
 .sx-builder-sum{font-size:13px; color:var(--ink-soft); margin:2px 0 8px;}
@@ -1078,6 +1082,9 @@ const Store = {
   // One-day exercise swaps: {date: {index: {from, line, how}}} (defect 171).
   getStrengthSwaps(){ return this._get('lr_strength_swaps', {}); },
   // The runner's machine and rack settings: [{id, label, text, exercises:[names]}] (defect 181).
+  // Exercises the runner added to a day's session: {date: [{line, how}]} (defect 196).
+  getStrengthAdds(){ return this._get('lr_strength_adds', {}); },
+  setStrengthAdds(v){ this._set('lr_strength_adds', v); },
   getGymSettings(){ const v = this._get('lr_gym_settings', []); return Array.isArray(v) ? v : []; },
   setGymSettings(v){ this._set('lr_gym_settings', v); },
   setStrengthSwaps(v){ this._set('lr_strength_swaps', v); },
@@ -1405,6 +1412,7 @@ function boot(){
   state.strengthLoads = Store.getStrengthLoads();
   state.strengthSwaps = Store.getStrengthSwaps();
   state.gymSettings = Store.getGymSettings();
+  state.strengthAdds = Store.getStrengthAdds();
   state.push = Store.getPush();
   if(state.push.enabled && Date.now() - (state.push.syncedAt||0) > 20*3600*1000) setTimeout(()=>syncPush(), 3000);
   state.strengthItems = Store.getStrengthItems();
@@ -2806,22 +2814,24 @@ function renderLiftHistory(){
 }
 function strengthRowsHtml(planned, date, howTo, optional){
   const ticks = (state.strengthItems && state.strengthItems[date]) || [];
-  const off = optional ? 100 : 0;
-  const lines = planned.map((l,i)=>{ const sw = swapFor(date, off+i, l); return sw ? sw.line : l; });
+  const added = optional==='added'; // exercises the runner added: no swap, a Remove instead
+  const off = added ? 200 : optional ? 100 : 0;
+  const lines = added ? planned : planned.map((l,i)=>{ const sw = swapFor(date, off+i, l); return sw ? sw.line : l; });
   howTo = [...(howTo||[]), ...planned.map((l,i)=>swapFor(date, off+i, l)).filter(sw=>sw && sw.how).map(sw=>({name: parseStrengthLine(sw.line).name, how: sw.how}))];
   return lines.map((line,i)=>{
     const p = parseStrengthLine(line);
     const how = p && (howTo||[]).find(h=>p.name.startsWith(h.name));
-    const ti = optional ? 100+i : i; // extras tick like the main lines; their ticks sit past 100 so they never count toward the session
+    const ti = off+i; // extras tick past 100 and added exercises past 200, so neither counts toward the session
     const done = !!ticks[ti];
     if(!p) return `<div class="sx-row ${done?'done':''}"><input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${ti}" ${done?'checked':''}><div class="sx-name" style="font-weight:600;">${esc(line)}</div></div>`;
-    const key = `${date}:${off+i}`, sw = swapFor(date, off+i, planned[i]);
-    const gkey = `${date}:${optional ? 'o' : ''}${i}`;
-    const swapHtml = strengthSwapHtml(planned, off+i, date, sw, key);
+    const key = `${date}:${off+i}`, sw = added ? null : swapFor(date, off+i, planned[i]);
+    const gkey = `${date}:${added ? 'a' : optional ? 'o' : ''}${i}`;
+    const swapHtml = added ? `<div class="sx-swap"><span class="hint" style="margin:0;">Added for this day.</span><button class="btn btn-sm" data-act="add-remove" data-date="${date}" data-i="${i}">Remove</button></div>`
+      : strengthSwapHtml(planned, off+i, date, sw, key);
     return `<div class="sx-row ${done?'done':''}">
       <input type="checkbox" data-act="toggle-strength-item" data-date="${date}" data-i="${ti}" ${done?'checked':''} aria-label="Done: ${esc(p.name)}">
       <details ${state.swapOpenKey===key || state.gymOpenKey===gkey ? 'open' : ''}>
-        <summary><span><span class="sx-name">${esc(p.name)}</span>${sw ? `<span class="sx-swapped">swapped</span>` : ''}<div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
+        <summary><span><span class="sx-name">${esc(p.name)}</span>${sw ? `<span class="sx-swapped">swapped</span>` : added ? `<span class="sx-swapped">added</span>` : ''}<div class="sx-cue">${esc(p.equip)}</div></span><span class="sx-sets">${p.sets} × ${esc(p.amount)}</span></summary>
         <div class="sx-more">${esc(p.cue.charAt(0).toUpperCase()+p.cue.slice(1))}.${p.rest?` Rest ${esc(p.rest)} between sets.`:''}${how && !exerciseInfo(p.name) ?`<br><b>How:</b> ${esc(how.how)}`:''}${isLoadable(p.name, p.equip) ? strengthLoadHtml(p.name, date, p.amount) : ''}${gymSettingsHtml(p.name, gkey)}${swapHtml}</div>
         ${exerciseLibraryHtml(p.name)}
       </details>
@@ -2836,7 +2846,7 @@ function strengthSwapHtml(planned, i, date, sw, key){
   const dayObj = (plannedWorkoutForDate(date)||{}).day;
   const opts = dayObj ? swapOptionsForRow(dayObj, i) : [];
   const rowLine = planned[i>=100 ? i-100 : i];
-  if(!opts.length) return `<div class="sx-swap"><span class="hint" style="margin:0;">No alternatives with your equipment.</span><button class="btn btn-sm btn-ghost" data-act="swap-close">Close</button></div>`;
+  if(!opts.length) return `<div class="sx-swap-menu"><div class="sx-swap-head"><span class="scan-k">Swap for today</span><button class="btn btn-sm btn-ghost" data-act="swap-close">Cancel</button></div><div class="hint" style="margin:0 0 6px;">Nothing else does the same job with your equipment.</div>${exercisePickerHtml(date, 'swap', i)}</div>`;
   // Both kinds on offer: the kind that keeps this slot's job is listed first as the better
   // replacement, the other after it with what changes (defect 176). Either can be picked.
   const both = opts.some(o=>o.singleLeg) && opts.some(o=>!o.singleLeg);
@@ -2863,6 +2873,7 @@ function strengthSwapHtml(planned, i, date, sw, key){
   return `<div class="sx-swap-menu">
     <div class="sx-swap-head"><span class="scan-k">Swap for today</span><button class="btn btn-sm btn-ghost" data-act="swap-close">Cancel</button></div>
     ${body}
+    ${exercisePickerHtml(date, 'swap', i)}
   </div>`;
 }
 // Machine and rack settings (defect 181: the owner kept seat, pin and rack heights in a phone
@@ -2974,6 +2985,8 @@ function renderStrengthPage(){
         ${strengthFocusNote ? `<div class="hint" style="margin:0 0 8px;">${esc(strengthFocusNote)}</div>` : ''}
         ${day.strengthRestored ? `<div class="hint" style="margin:0 0 8px;">Rebuilt from the weights you logged this day: those exercises are as you did them; the rest is the app's best match for the session.</div>` : ''}
         ${strengthRowsHtml(day.strengthExercises, day.date, day.strengthHowTo, false)}
+        ${(()=>{ const adds = (state.strengthAdds||{})[day.date]||[]; return adds.length ? strengthRowsHtml(adds.map(a=>a.line), day.date, adds.filter(a=>a.how).map(a=>({name: (parseStrengthLine(a.line)||{}).name, how:a.how})), 'added') : ''; })()}
+        ${day.date>=fmtDate(todayDate()) ? `<div style="margin:8px 0 0;">${exercisePickerHtml(day.date, 'add', null)}</div>` : ''}
         <div class="hint" style="margin:8px 0 12px;">Tap an exercise for the effort, rest and how to do it. Tick each one as you go.</div>
         ${day.strengthOptional && day.strengthOptional.length ? `
         <div class="field-label" style="margin-bottom:6px;">Optional extras — only if you have time</div>
@@ -3055,6 +3068,26 @@ function restorePlannedSession(date){
 function clearStrengthMarks(date){
   if(state.strengthItems && state.strengthItems[date]){ delete state.strengthItems[date]; Store.setStrengthItems(state.strengthItems); }
   if(state.strengthSwaps && state.strengthSwaps[date]){ delete state.strengthSwaps[date]; Store.setStrengthSwaps(state.strengthSwaps); }
+}
+// Pick any exercise by what it works (defect 196): to swap one in for something else
+// entirely, or to add one to the day. mode 'swap' (with the row key) or 'add'.
+function sessionNamesFor(date){
+  const found = plannedWorkoutForDate(date); const d = found && found.day; if(!d) return new Set();
+  const main = (d.strengthExercises||[]).map((l,j)=>{ const x = swapFor(date, j, l); return x ? x.line : l; });
+  const extra = (d.strengthOptional||[]).map((l,j)=>{ const x = swapFor(date, 100+j, l); return x ? x.line : l; });
+  const adds = ((state.strengthAdds||{})[date]||[]).map(a=>a.line);
+  return new Set([...main, ...extra, ...adds].map(l=>{ const p = parseStrengthLine(l); return p ? p.name.replace(/ (each side|each hand|each way)$/, '') : null; }).filter(Boolean));
+}
+function exercisePickerHtml(date, mode, key){
+  const pk = `${date}:${mode}:${key==null ? '' : key}`;
+  if(state.pickerKey!==pk) return `<button class="btn btn-sm btn-ghost sx-pick-open" data-act="pick-open" data-pk="${pk}">${mode==='add' ? '+ Add an exercise' : 'Swap for something else…'}</button>`;
+  const menu = exerciseMenu(equipmentSet(state.setup && state.setup.equipment), sessionNamesFor(date));
+  const cat = menu.find(c=>c.id===state.pickerCat) || menu[0];
+  return `<div class="sx-pick">
+    <div class="sx-swap-head"><span class="scan-k">${mode==='add' ? 'Add an exercise' : 'Swap for something else'}</span><button class="btn btn-sm btn-ghost" data-act="pick-close">Cancel</button></div>
+    <div class="chip-select sx-pick-cats">${menu.map(c=>`<button class="chip ${c===cat?'active':''}" data-act="pick-cat" data-cat="${c.id}">${esc(c.label)}</button>`).join('')}</div>
+    ${cat ? cat.items.map(it=>`<button class="sx-swap-opt" data-act="${mode==='add' ? 'pick-add' : 'pick-swap'}" data-date="${date}" data-i="${key==null?'':key}" data-slot="${it.slot}"><span><span class="sx-name">${esc(it.name)}</span><span class="sx-cue">${esc(it.equip)}</span></span></button>`).join('') : ''}
+  </div>`;
 }
 function renderTodayCard(plan){
   const ti = todayWeekIndex(plan);
@@ -5987,6 +6020,37 @@ function onClick(e){
     else if(act==='builder-restore'){ restorePlannedSession(el.dataset.date); state.builder = null; }
     render();
     const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = act==='builder-apply' ? 0 : y;
+    return;
+  }
+  if(act==='pick-open' || act==='pick-close' || act==='pick-cat' || act==='pick-swap' || act==='pick-add' || act==='add-remove'){
+    const sheet = document.querySelector('.sheet'); const y = sheet ? sheet.scrollTop : 0;
+    const avail = equipmentSet(state.setup && state.setup.equipment);
+    if(act==='pick-open'){ state.pickerKey = el.dataset.pk; state.pickerCat = null; }
+    else if(act==='pick-close'){ state.pickerKey = null; }
+    else if(act==='pick-cat'){ state.pickerCat = el.dataset.cat; }
+    else if(act==='pick-swap'){
+      const date = el.dataset.date, i = Number(el.dataset.i), day = findPlanDay(state.plan, date);
+      const planned = (day && (i>=100 ? day.strengthOptional : day.strengthExercises)) || [];
+      const from = parseStrengthLine(planned[i>=100 ? i-100 : i] || '');
+      const r = from && lineForExercise(el.dataset.slot, Number(from.sets)||3, avail);
+      if(r){ const swaps = state.strengthSwaps || {}; swaps[date] = {...(swaps[date]||{}), [i]: {from: from.name, line: r.line, how: r.how}}; state.strengthSwaps = swaps; Store.setStrengthSwaps(swaps); }
+      state.pickerKey = null; state.swapMenuKey = null; state.swapOpenKey = `${date}:${i}`;
+    }
+    else if(act==='pick-add'){
+      const date = el.dataset.date, r = lineForExercise(el.dataset.slot, 3, avail);
+      if(r){ const adds = state.strengthAdds || {}; adds[date] = [...(adds[date]||[]), {line:r.line, how:r.how}]; state.strengthAdds = adds; Store.setStrengthAdds(adds); showToast(`${r.name} added`); }
+      state.pickerKey = null;
+    }
+    else if(act==='add-remove'){
+      const date = el.dataset.date, i = Number(el.dataset.i), adds = state.strengthAdds || {};
+      adds[date] = (adds[date]||[]).filter((_,k)=>k!==i); if(!adds[date].length) delete adds[date];
+      state.strengthAdds = adds; Store.setStrengthAdds(adds);
+      // ticks for added rows follow their positions: shift the ones after it
+      const it = state.strengthItems && state.strengthItems[date];
+      if(it){ for(let k=200+i; k<260; k++) it[k] = it[k+1]; Store.setStrengthItems(state.strengthItems); }
+    }
+    render();
+    const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = y;
     return;
   }
   if(act==='gym-link' || act==='gym-form-link') return; // selects: handled on change, not click

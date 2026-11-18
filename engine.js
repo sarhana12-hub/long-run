@@ -1175,6 +1175,40 @@ function strengthWarmup(lines, focus, tier, afterRun, avail){
   }
   return {minutes, steps};
 }
+// Any exercise, by what it works (defect 196): for swapping in something else entirely, or
+// adding an exercise to a session. Each lists the best version the runner's equipment allows.
+const EXERCISE_CATEGORIES = [
+  {id:'glutes', label:'Glutes & hips', slots:['hipThrust','gluteBridge','cableKickback','kettlebellSwing','clamshell','sidePlankAbduction','hipHike','standingAbduction','bandWalk']},
+  {id:'quads', label:'Quads & single-leg', slots:['backSquat','legPress','gobletSquat','bulgarianSplitSquat','stepUps','walkingLunges','stepDown','spanishSquat','wallSit','legExtension']},
+  {id:'hams', label:'Hamstrings', slots:['romanianDeadlift','singleLegRDL','hamstringCurl']},
+  {id:'calves', label:'Calves', slots:['calfRaiseStraight','calfRaiseBent']},
+  {id:'jumps', label:'Jumps', slots:['pogoHops','boxJumps']},
+  {id:'core', label:'Core', slots:['plank','deadBug','birdDog','hangingKneeRaise','sidePlank','suitcaseCarry','farmerCarry']},
+  {id:'upper', label:'Upper body', slots:['pullUps','invertedRow','singleArmRow','straightArmPulldown','benchPress','pushUps','shoulderPress','curls','triceps','lateralRaise']},
+];
+function exerciseMenu(avail, excludeNames){
+  avail = avail || equipmentSet(); const ex = excludeNames || new Set();
+  return EXERCISE_CATEGORIES.map(c=>({id:c.id, label:c.label, items: c.slots.map(k=>{ const def = exerciseDef(k); const r = def && resolveExercise(def, avail); return r && !ex.has(r.name) ? {slot:k, name:r.name, equip:r.equip} : null; }).filter(Boolean)})).filter(c=>c.items.length);
+}
+// A line for any exercise with amounts and effort that suit it, on the given number of sets.
+function lineForExercise(slot, sets, avail){
+  avail = avail || equipmentSet();
+  const def = exerciseDef(slot); const r = def && resolveExercise(def, avail); if(!r) return null;
+  const v = def.variants.find(x=>x.name===r.name && x.equip===r.equip) || {};
+  const ex = {...r, bodyweight: r.bodyweight || /bodyweight/i.test(r.equip)};
+  let amt, cue, rest;
+  if(slot==='pogoHops'){ amt = 20; cue = 'quick off the ground'; rest = 60; }
+  else if(slot==='boxJumps'){ amt = 5; cue = 'maximal intent, full recovery'; rest = 60; }
+  else if(v.swapAmount){ amt = v.swapAmount; cue = v.swapCue; rest = 45; }
+  else if(ex.unit==='hold'){ amt = 30; cue = 'hold with good form'; rest = 30; }
+  else if(isCarry(ex)){ amt = 1; cue = ex.name==='Farmer carry' ? 'one walk per set, tall posture' : 'one walk per hand, stay level'; rest = 30; }
+  else if(/calf/i.test(ex.name)){ amt = /press|Seated/.test(ex.name) ? 15 : 10; cue = 'slow, 3 seconds down'; rest = 45; }
+  else if(ex.bodyweight){ amt = 10; cue = 'slow and controlled'; rest = 45; }
+  else if(ex.per){ amt = 10; cue = 'controlled, 2 reps left in the tank'; rest = 60; }
+  else { amt = 8; cue = '2 reps left in the tank'; rest = 90; }
+  const usedSoFar = _used.length; const line = strengthSetLine(ex, sets, amt, sets>1 ? rest : 0, cue); _used.length = usedSoFar;
+  return {line, name: ex.name, how: ex.how || null};
+}
 // The exercises on the last day of a week, for the next week's first session to avoid.
 function strengthNamesBefore(prevWeek){
   const last = prevWeek && prevWeek.days && prevWeek.days[prevWeek.days.length-1];
@@ -2599,7 +2633,7 @@ return {
   QUALITY_TYPES, WARMUP_ELIGIBLE_TYPES, STRIDES_ELIGIBLE_TYPES, STRIDES_REPS, STRIDES_EXTRA_KM, HILL_STRIDES_EXTRA_KM, QUALITY_WARMUP_KM, QUALITY_COOLDOWN_KM,
   TYPE_LABELS, isLegDemandingDay, isKeySessionDay, structuredEffort, buildWorkoutMeta,
   STRENGTH_EXERCISES, OPTIONAL_EXTRAS, strengthSwapOptions, SWAP_FAMILIES, EQUIPMENT, DEFAULT_EQUIPMENT, equipmentSet, resolveExercise, STRENGTH_TIME_MIN, lowerStrengthTierForPhase, buildLowerStrengthWorkout, buildUpperStrengthWorkout,
-  placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts, strengthNamesBefore, rebuildLoggedSession, strengthSlotRole, buildCustomStrength, strengthWarmup, extraSwapFamily,
+  placeStrengthDays, recomputeStrengthFocus, refreshStrengthWorkouts, strengthNamesBefore, rebuildLoggedSession, strengthSlotRole, buildCustomStrength, strengthWarmup, extraSwapFamily, exerciseMenu, lineForExercise, EXERCISE_CATEGORIES,
   qualityDowsFor, deriveScheduleFromLongDow, evenlySpacedPositions, scheduleWarnings,
   raceClass, taperDaysFor, taperVolumeFactor, taperLongFactor, targetPeakWeeklyKm, peakLongTargetKm, longFracCap, longTimeCapMin,
   qualityMinutes, floorMinutesFor, sizeQuality, buildWeekDays, generatePlan,
