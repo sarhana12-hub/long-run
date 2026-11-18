@@ -336,6 +336,26 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   }
   console.log(`\n=== built sessions and their warm-ups (${n}) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,10).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
+// 196 any exercise can be swapped in or added: every picker entry gives a readable line with
+// the sets asked for, and the picker leaves out what the session already has
+{
+  const RE = /^(\d+)×(\S+) (.+?) \(([^)]*)\) — (.*?)\.?(?: Rest (.+?) between sets\.)?$/;
+  const bad = []; let n = 0;
+  for(const equipment of [g.DEFAULT_EQUIPMENT.slice(), [], ['dumbbells','bench','miniBand']]){
+    const avail = g.equipmentSet(equipment);
+    g.exerciseMenu(avail, new Set()).forEach(c=>c.items.forEach(it=>{
+      for(const sets of [2,3]){ n++;
+        const r = g.lineForExercise(it.slot, sets, avail);
+        if(!r || !RE.test(r.line) || /undefined|NaN/.test(r.line)) bad.push(`${c.label} ${it.name}: bad line ${r && r.line}`);
+        else if(Number(r.line.match(RE)[1])!==sets) bad.push(`${it.name}: sets not kept`);
+        else if(/bodyweight/i.test(it.equip) && /reps left in the tank/.test(r.line) && !/controlled/.test(r.line)) bad.push(`${it.name}: bodyweight told to go near failure`);
+      }
+    }));
+  }
+  const excl = g.exerciseMenu(g.equipmentSet(), new Set(['Clamshells','Back squat']));
+  if(excl.some(c=>c.items.some(i=>i.name==='Clamshells' || i.name==='Back squat'))) bad.push('picker offers an exercise the session already has');
+  console.log(`\n=== any exercise swapped in or added (${n} lines) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,8).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
+}
 // 161 treadmill days show a rough mile equivalent beside every metre distance (miles only)
 {
   const { loadPageRenderers } = require('./render-helpers.js'); const ui = loadPageRenderers();
