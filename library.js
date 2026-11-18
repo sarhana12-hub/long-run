@@ -253,6 +253,15 @@ const EXERCISE_LIBRARY = {
     link: null,
     art: {view:'front', start:{x:120, y:120, stance:10, arms:{angle:20}}, finish:{x:120, y:120, stance:30, arms:{angle:20}}, scene:['floor']},
   },
+  'Cable kickback': {
+    summary: 'Push one leg straight back against a cable. Works the glute on its own, hardest where the hip is fully open, as at push-off.',
+    setup: ['Ankle strap on the low cable (or a mini band around both ankles). Face the machine a step away, hands on it, a slight forward lean, standing knee soft.'],
+    move: ['Keeping the working knee nearly straight, push the leg back until the hip is fully open.', 'Squeeze the glute for a second, then return slowly until the foot is just behind the other.'],
+    cues: ['The movement stops when the hip is open; going further only arches the lower back.', 'Hips square to the machine; do not twist open.', 'Light enough to pause at the back of every rep.'],
+    mistake: 'Swinging the leg and arching the lower back, which moves the work from the glute to the back.',
+    link: null,
+    art: {start:{...STAND, x:120, torso:15, arms:[{upper:60, fore:60}]}, finish:{x:120, y:120, torso:15, legs:[{thigh:-30, shin:-30}], arms:[{upper:60, fore:60}]}, scene:['floor', {post:[190,150]}]},
+  },
   'Romanian deadlift': {
     summary: 'A hip hinge with a flat back. The main hamstring and glute lift.',
     setup: ['Stand tall holding the bar or dumbbells against the thighs, feet hip-width.', 'Soft knees, shoulders back.'],
@@ -839,6 +848,7 @@ const EXERCISE_LIBRARY = {
 // Names that appear in sessions under a different label.
 const EXERCISE_ALIASES = {
   'Lateral raises': 'Lateral raise',
+  'Banded kickback': 'Cable kickback',
 };
 function exerciseInfo(name){
   if(!name) return null;

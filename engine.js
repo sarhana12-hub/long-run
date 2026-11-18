@@ -553,6 +553,11 @@ const STRENGTH_EXERCISES = {
     {needs:['cable'], name:'Standing hip abduction', equip:'cable ankle strap, low attachment', swapAmount:12, swapCue:'stand tall, toes forward, slow back in'},
     {needs:['miniBand'], name:'Standing hip abduction', equip:'mini band around the ankles', swapAmount:12, swapCue:'stand tall, toes forward, slow back in'},
   ]},
+  // Glute max on its own, in the last part of hip extension where push-off happens (defect 195)
+  cableKickback: {unit:'reps', per:'leg', how:'Strap on the ankle, low cable, facing the machine and holding it; with a slight hinge and the knee soft, push the leg straight back until the hip is fully open, squeeze the glute, return slowly. No arching of the lower back.', variants:[
+    {needs:['cable'], name:'Cable kickback', equip:'cable ankle strap, low attachment', swapAmount:12, swapCue:'squeeze at the back, no arching the lower back, slow return'},
+    {needs:['miniBand'], name:'Banded kickback', equip:'mini band around the ankles', swapAmount:15, swapCue:'squeeze at the back, no arching the lower back, slow return'},
+  ]},
   sidePlank: {unit:'hold', per:'side', how:'On one forearm with the elbow under the shoulder, lift the hips so the body makes a straight line, and hold without letting the hips sag.', variants:[{needs:[], name:'Side plank', equip:'bodyweight'}]},
   suitcaseCarry: {unit:'reps', per:'side', how:'Carry the weight in one hand like a heavy suitcase and walk tall without leaning toward or away from it; the trunk muscles do the work of staying level.', variants:[
     {needs:['kettlebell'], name:'Suitcase carry', equip:'one heavy kettlebell'},
@@ -860,7 +865,7 @@ const SWAP_FAMILIES = [
   ['benchPress','pushUps','shoulderPress'],
   ['pullUps','invertedRow','singleArmRow','straightArmPulldown'],
   // hip: the side of the hip and its rotators, for a level pelvis and a straight knee (defect 193)
-  ['sidePlank','bandWalk','clamshell','sidePlankAbduction','hipHike','standingAbduction'],
+  ['sidePlank','bandWalk','clamshell','sidePlankAbduction','hipHike','standingAbduction','cableKickback'],
   // trunk
   ['plank','deadBug','birdDog','hangingKneeRaise','suitcaseCarry','farmerCarry'],
 ];
@@ -876,7 +881,7 @@ function restSecFromStr(r){
 // back in its own slot when rebuilding a session).
 // Optional extras swap among themselves (defect 192): arm and shoulder work for an upper
 // session, quad work for a lower one.
-const EXTRA_FAMILIES = [['curls','triceps','lateralRaise','straightArmPulldown'], ['legExtension','wallSit','stepDown','spanishSquat','clamshell','sidePlankAbduction','hipHike','standingAbduction']];
+const EXTRA_FAMILIES = [['curls','triceps','lateralRaise','straightArmPulldown'], ['legExtension','wallSit','stepDown','spanishSquat','clamshell','sidePlankAbduction','hipHike','standingAbduction','cableKickback']];
 const exerciseDef = k => STRENGTH_EXERCISES[k] || OPTIONAL_EXTRAS[k];
 const ALL_SLOTS = () => [...Object.keys(STRENGTH_EXERCISES), ...Object.keys(OPTIONAL_EXTRAS).filter(k=>!STRENGTH_EXERCISES[k])];
 function extraSwapFamily(line){
