@@ -491,6 +491,7 @@ a.link-btn{color:var(--ink-soft); font-size:13.5px; text-decoration:underline; t
 .tab-btn.active svg{color:var(--accent-strong);}
 
 /* ---------- modal / sheet ---------- */
+.overlay.no-anim, .sheet.no-anim{animation:none !important;}
 .overlay{position:fixed; inset:0; background:rgba(10,14,11,.45); z-index:40; display:flex; align-items:flex-end; justify-content:center; animation:overlayIn .18s ease-out; -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);}
 .sheet{background:var(--surface); width:100%; max-width:520px; border-radius:20px 20px 0 0; padding:18px calc(18px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left)); max-height:88dvh; overflow-y:auto; box-shadow:var(--shadow); position:relative; animation:sheetUp .2s cubic-bezier(.2,.8,.2,1); overscroll-behavior:contain; -webkit-overflow-scrolling:touch;}
 @keyframes overlayIn{from{opacity:0;}}
@@ -3008,8 +3009,9 @@ function renderStrengthPage(){
 // Full-screen page on the modal machinery (so ticks, swaps and weights work as before), with
 // a back button to wherever it was opened from.
 function pageShell(title, subtitle, innerHtml){
-  return `<div class="overlay page-overlay">
-    <div class="sheet page-sheet" data-stop="1">
+  const first = firstShow();
+  return `<div class="overlay page-overlay${first ? '' : ' no-anim'}">
+    <div class="sheet page-sheet${first ? '' : ' no-anim'}" data-stop="1">
       <div class="page-top"><button class="page-back" data-act="close-modal" aria-label="Back">${ICONS.chevron}<span>Back</span></button></div>
       <h2 class="page-title">${title}</h2>
       ${subtitle ? `<div class="page-subtitle">${subtitle}</div>` : ''}
@@ -5060,9 +5062,13 @@ function renderPacingSheet(strategy, courseKey){
   `);
 }
 
+// A sheet or page animates in once, when it opens; redrawing it after a tap (a swap, a tick,
+// a setting) does not replay the animation (defect 197: the page flashed on Swap exercise).
+function firstShow(){ const m = state.modal; if(!m) return true; const first = !m._shown && !m.quiet; m._shown = true; return first; }
 function modalShell(title, innerHtml, headerButtonHtml){
-  return `<div class="overlay" data-act="close-modal-overlay">
-    <div class="sheet" data-stop="1"${state.modal && state.modal.quiet ? ' style="animation:none"' : ''}>
+  const first = firstShow();
+  return `<div class="overlay${first ? '' : ' no-anim'}" data-act="close-modal-overlay">
+    <div class="sheet${first ? '' : ' no-anim'}" data-stop="1">
       <div class="sheet-handle"></div>
       ${headerButtonHtml || ''}
       <button class="sheet-close" data-act="close-modal" aria-label="Close">${ICONS.close}</button>
