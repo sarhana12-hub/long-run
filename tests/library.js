@@ -23,6 +23,8 @@ names.forEach(n=>{
   if(e.art2){ let s2=''; try{ s2 = lib.exerciseSvg(e.art2, n); }catch(err){ check(n+' second angle renders', false, String(err.message)); } check(n+' second angle has a figure', /<circle/.test(s2) && !/NaN/.test(s2)); }
 });
 console.log(`${names.size} exercise names, ${withLink} with a reference link`);
+// defect 194: a session line's "each side" / "each hand" / "each way" still finds the guide
+['Side plank each side','Dead bug each side','Mini-band side steps each way','Suitcase carry each hand','Clamshells each side','Bird dog each side'].forEach(n=>check('guide found for "'+n+'"', !!lib.exerciseInfo(n)));
 // The line under each exercise name answers one question: what do I need, and how am I set
 // up? Equipment first, then position only where the name leaves it unclear, in one phone
 // line. Progression, easier/harder versions and assistance live in the library entry the row
