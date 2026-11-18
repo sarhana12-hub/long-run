@@ -3091,6 +3091,21 @@ function exercisePickerHtml(date, mode, key){
     ${cat ? cat.items.map(it=>`<button class="sx-swap-opt" data-act="${mode==='add' ? 'pick-add' : 'pick-swap'}" data-date="${date}" data-i="${key==null?'':key}" data-slot="${it.slot}"><span><span class="sx-name">${esc(it.name)}</span><span class="sx-cue">${esc(it.equip)}</span></span></button>`).join('') : ''}
   </div>`;
 }
+// A session is done when the planned exercises and any the runner added (ticks from 200) are
+// all ticked; optional extras (from 100) never count (defect 198: an added exercise still open
+// did not hold the session back).
+function completeStrengthIfDone(date){
+  const arr = (state.strengthItems && state.strengthItems[date]) || [];
+  const day = findPlanDay(state.plan, date);
+  const total = day && day.strengthExercises ? day.strengthExercises.length : 0;
+  const added = ((state.strengthAdds||{})[date]||[]).length;
+  const allDone = total>0 && arr.slice(0, total).filter(Boolean).length>=total && Array.from({length: added}, (_,k)=>!!arr[200+k]).every(Boolean);
+  if(allDone && !state.strengthDone.includes(date)){
+    state.strengthDone = [...state.strengthDone, date]; Store.setStrengthDone(state.strengthDone);
+    evaluateAndTriggerAchievements(null);
+    showToast('Strength session complete');
+  }
+}
 function renderTodayCard(plan){
   const ti = todayWeekIndex(plan);
   if(ti===-1 || ti!==state.currentWeekIndex) return '';
@@ -6054,6 +6069,7 @@ function onClick(e){
       // ticks for added rows follow their positions: shift the ones after it
       const it = state.strengthItems && state.strengthItems[date];
       if(it){ for(let k=200+i; k<260; k++) it[k] = it[k+1]; Store.setStrengthItems(state.strengthItems); }
+      completeStrengthIfDone(date); // removing the last open added exercise can finish the session
     }
     render();
     const s2 = document.querySelector('.sheet'); if(s2) s2.scrollTop = y;
@@ -6108,14 +6124,7 @@ function onClick(e){
     const date = el.dataset.date, i = Number(el.dataset.i);
     const items = state.strengthItems || {}; const arr = (items[date]||[]).slice(); arr[i] = !arr[i]; items[date] = arr;
     state.strengthItems = items; Store.setStrengthItems(items);
-    const day = findPlanDay(state.plan, date);
-    const total = day && day.strengthExercises ? day.strengthExercises.length : 0;
-    const allDone = total>0 && arr.slice(0, total).filter(Boolean).length>=total; // extras (index 100+) never count
-    if(allDone && !state.strengthDone.includes(date)){
-      state.strengthDone = [...state.strengthDone, date]; Store.setStrengthDone(state.strengthDone);
-      evaluateAndTriggerAchievements(null);
-      showToast('Strength session complete');
-    }
+    completeStrengthIfDone(date);
     // Ticking a box updates the row in place: a full re-render replays the sheet's slide-up
     // animation, which read as a flash and a translucent sheet.
     const row = el.closest('.sx-row'); if(row) row.classList.toggle('done', !!arr[i]);

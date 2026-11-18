@@ -452,6 +452,8 @@ The read-through is now a standing pre-push step: `npm run readthrough` regenera
 
 197. **The strength page flashed when Swap exercise was tapped** (owner screenshot of the swap menu: "When I click swap exercise the menu flashes"). Every tap that changes the session redraws the page, and the page's opening animation (a fade and slide in) played again on each redraw. The day panel's dimmed background did the same. *Fix:* a page or panel animates once, when it opens; redraws of the same screen (a swap, a tick, a setting, the picker) do not replay it. Checked in the browser: the animation runs on opening, and is "none" after Swap exercise and after a tick, on the page and on the day panel.
 
+198. **"Strength session complete" came before added exercises were done** (owner: the session completed once the planned exercises were ticked, "even if you've added other workouts you've not yet finished"). Completion counted only the planned exercises. *Fix:* a session completes when the planned exercises and every exercise the runner added are ticked; optional extras still never count. Removing the last unticked added exercise completes the session if everything else is ticked. Checked in the browser: planned all ticked with an added one open, not complete; the added one ticked, complete; or the added one removed, complete.
+
 ## Rules now checked on every random plan
 
 Text: no placeholders or "undefined", every quality session shows its own pace and the easy
