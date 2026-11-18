@@ -180,7 +180,12 @@ check('10k, 20 mpw, 5 runs: build weeks keep their session', {race:'10k', mpw:20
   if(co.some(o=>!/^2×/.test(o.line))) bad.push('an extra swap changed the sets');
   const le = '2×12 Leg extension (machine) — moderate, slow lowering — easy on the knees. Rest 45s between sets.';
   const lo = g.strengthSwapOptions(le, [le], g.equipmentSet(), g.extraSwapFamily(le));
-  if(!lo.some(o=>o.name==='Wall sit') || lo.some(o=>/curl|raise/i.test(o.name))) bad.push('leg-extension swaps are not quad work: '+lo.map(o=>o.name).join(', '));
+  if(!lo.some(o=>o.name==='Wall sit') || lo.some(o=>/curl|Lateral raise|triceps|Dips|pulldown/i.test(o.name))) bad.push('leg-extension swaps are not quad and hip work: '+lo.map(o=>o.name).join(', '));
+  // 193 hip work for runner's knee: the side plank and side steps swap among the hip exercises, all of them offered
+  const spl = '3×30s Side plank each side (bodyweight) — hold with good form. Rest 30s between sets.';
+  const ho = g.strengthSwapOptions(spl, [spl]).map(o=>o.name);
+  for(const n of ['Clamshells','Side plank with leg raise','Hip hike','Standing hip abduction','Mini-band side steps']) if(!ho.includes(n)) bad.push(n+' not offered for a side plank: '+ho.join(', '));
+  if(ho.some(n=>/Plank$|Dead bug|Bird dog|carry/.test(n))) bad.push('side plank swaps include trunk work: '+ho.join(', '));
   console.log(`\n=== one-day exercise swaps (${checked} alternatives) ===`); if(bad.length){ failures++; [...new Set(bad)].slice(0,10).forEach(b=>console.log('  FAIL: '+b)); } else console.log('  ok');
 }
 // 172 variety: the owner's layout (one lower day, an upper day the day after, a second

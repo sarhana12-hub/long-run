@@ -217,6 +217,42 @@ const EXERCISE_LIBRARY = {
     link: null,
     art: {start:{...STAND, x:110, arms:[{upper:90, fore:90}]}, finish:{...SQUAT_BOTTOM, x:110, torso:15, arms:[{upper:90, fore:90}]}, scene:['floor', {post:[190,150]}]},
   },
+  'Clamshells': {
+    summary: 'Open the top knee while lying on your side. Works the muscles that turn the thigh out and hold the knee from caving in.',
+    setup: ['Lie on your side, hips bent about 45 degrees and knees bent, heels together, head on your arm.', 'Band just above the knees for more resistance.'],
+    move: ['Keeping the feet together, lift the top knee as far as you can without the pelvis rolling back.', 'Pause, then lower slowly.'],
+    cues: ['Pelvis stays still; stack the top hip over the bottom one.', 'Feel it in the side and back of the hip, not the front of the thigh.'],
+    mistake: 'Rolling the pelvis back to lift the knee higher.',
+    link: null,
+    art: {start:{x:120, y:170, torso:-90, legs:[{thigh:-45, shin:-135}], arms:[{upper:-90, fore:-90}]}, finish:{x:120, y:170, torso:-90, legs:[{thigh:-60, shin:-135}], arms:[{upper:-90, fore:-90}]}, scene:['floor']},
+  },
+  'Side plank with leg raise': {
+    summary: 'A side plank with the top leg lifted. Works the side of the hip hard while the trunk holds you level.',
+    setup: ['Side plank on the forearm, elbow under the shoulder, body in a straight line from head to feet.'],
+    move: ['Lift the top leg about 30 cm, knee straight and toes pointing forward.', 'Lower slowly. Keep the hips up the whole set.'],
+    cues: ['Toes forward, not up; the lift comes from the side of the hip.', 'Bottom knee down to make it easier.'],
+    mistake: 'Letting the hips sag or rotating the top leg to lift it higher.',
+    link: null,
+    art: {start:{x:110, y:150, torso:-75, legs:[{thigh:-75, shin:-75}], arms:[{upper:-160, fore:-75}]}, finish:{x:110, y:150, torso:-75, legs:[{thigh:-60, shin:-60}], arms:[{upper:-160, fore:-75}]}, scene:['floor']},
+  },
+  'Hip hike': {
+    summary: 'Drop and lift the free hip while standing on one leg. Trains exactly the control that stops the hip dropping on each running stride.',
+    setup: ['Stand on one leg on the edge of a low step, the other leg hanging off the side.', 'Hold a rail or wall lightly for balance.'],
+    move: ['With both knees straight, let the free hip drop a few centimetres.', 'Lift it back up past level by squeezing the side of the standing hip. Lower slowly.'],
+    cues: ['The movement is at the hip, not the knee or the trunk.', 'Small range; slow and controlled.'],
+    mistake: 'Leaning the trunk sideways or bending the standing knee to make the movement.',
+    link: null,
+    art: {start:{...STAND, x:120, arms:[{upper:15, fore:15}]}, finish:{...STAND, x:120, arms:[{upper:15, fore:15}]}, scene:['floor', {bench:[110,160,50]}]},
+  },
+  'Standing hip abduction': {
+    summary: 'Lift the leg out to the side against a cable or band. A loadable way to strengthen the side of the hip.',
+    setup: ['Ankle strap on the low cable, or a mini band around both ankles. Stand tall side-on, holding the machine or a wall.'],
+    move: ['Lift the outside leg out to the side about 30 cm, toes pointing forward.', 'Return slowly without letting the weight stack touch down between reps.'],
+    cues: ['Stand tall; do not lean away to lift higher.', 'Feel it in the side of the hip of the moving leg, and the standing hip working to hold you steady.'],
+    mistake: 'Leaning the trunk or turning the toes up, which shifts the work to the front of the hip.',
+    link: null,
+    art: {view:'front', start:{x:120, y:120, stance:10, arms:{angle:20}}, finish:{x:120, y:120, stance:30, arms:{angle:20}}, scene:['floor']},
+  },
   'Romanian deadlift': {
     summary: 'A hip hinge with a flat back. The main hamstring and glute lift.',
     setup: ['Stand tall holding the bar or dumbbells against the thighs, feet hip-width.', 'Soft knees, shoulders back.'],
@@ -806,6 +842,9 @@ const EXERCISE_ALIASES = {
 };
 function exerciseInfo(name){
   if(!name) return null;
+  // a session line names some exercises with how they are done ("Side plank each side",
+  // "Suitcase carry each hand"); the guide is under the plain name (defect 194)
+  name = String(name).replace(/ (each side|each hand|each way)$/, '');
   const key = EXERCISE_LIBRARY[name] ? name : EXERCISE_ALIASES[name];
   return key ? {name:key, ...EXERCISE_LIBRARY[key]} : null;
 }

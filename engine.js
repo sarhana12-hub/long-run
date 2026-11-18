@@ -537,6 +537,22 @@ const STRENGTH_EXERCISES = {
     {needs:['miniBand'], name:'Mini-band side steps', equip:'mini band around the forefoot'},
     {needs:[], name:'Side-lying leg raises', equip:'bodyweight', how:'Lie on your side, legs straight and stacked; lift the top leg slowly to about 45 degrees with the toes pointing forward, pause, lower.'},
   ]},
+  // Hip strength for runner's knee (defect 193): the side of the hip and its rotators hold the
+  // pelvis level and the knee from caving in on each stride. Swaps among the core and hip work.
+  clamshell: {unit:'reps', per:'side', how:'Lie on your side, hips and knees bent, heels together; keeping the feet touching and the pelvis still, open the top knee like a clamshell, pause, lower slowly.', variants:[
+    {needs:['miniBand'], name:'Clamshells', equip:'mini band above the knees', swapAmount:15, swapCue:'slow, pause at the top, pelvis still'},
+    {needs:[], name:'Clamshells', equip:'bodyweight, lying on your side', swapAmount:15, swapCue:'slow, pause at the top, pelvis still'},
+  ]},
+  sidePlankAbduction: {unit:'reps', per:'side', how:'In a side plank on the forearm, lift the top leg about 30 cm with the knee straight and toes forward, lower slowly, keeping the hips up the whole set.', variants:[
+    {needs:[], name:'Side plank with leg raise', equip:'bodyweight, on the forearm', swapAmount:8, swapCue:'hips up, toes forward, slow lift and lower'},
+  ]},
+  hipHike: {unit:'reps', per:'leg', how:'Stand on one leg on the edge of a step, the other leg hanging; let the free hip drop a few centimetres, then lift it level by squeezing the side of the standing hip. Knees straight; the work is at the hip.', variants:[
+    {needs:[], name:'Hip hike', equip:'bottom stair or a low step', swapAmount:12, swapCue:'slow, standing knee straight, lift with the side of the hip'},
+  ]},
+  standingAbduction: {unit:'reps', per:'leg', how:'Stand tall side-on to the anchor, strap or band on the outer ankle; lift the leg out to the side about 30 cm with the toes forward, without leaning, and return slowly.', variants:[
+    {needs:['cable'], name:'Standing hip abduction', equip:'cable ankle strap, low attachment', swapAmount:12, swapCue:'stand tall, toes forward, slow back in'},
+    {needs:['miniBand'], name:'Standing hip abduction', equip:'mini band around the ankles', swapAmount:12, swapCue:'stand tall, toes forward, slow back in'},
+  ]},
   sidePlank: {unit:'hold', per:'side', how:'On one forearm with the elbow under the shoulder, lift the hips so the body makes a straight line, and hold without letting the hips sag.', variants:[{needs:[], name:'Side plank', equip:'bodyweight'}]},
   suitcaseCarry: {unit:'reps', per:'side', how:'Carry the weight in one hand like a heavy suitcase and walk tall without leaning toward or away from it; the trunk muscles do the work of staying level.', variants:[
     {needs:['kettlebell'], name:'Suitcase carry', equip:'one heavy kettlebell'},
@@ -843,7 +859,10 @@ const SWAP_FAMILIES = [
   ['pogoHops','boxJumps'],
   ['benchPress','pushUps','shoulderPress'],
   ['pullUps','invertedRow','singleArmRow','straightArmPulldown'],
-  ['plank','deadBug','birdDog','hangingKneeRaise','sidePlank','bandWalk','suitcaseCarry','farmerCarry'],
+  // hip: the side of the hip and its rotators, for a level pelvis and a straight knee (defect 193)
+  ['sidePlank','bandWalk','clamshell','sidePlankAbduction','hipHike','standingAbduction'],
+  // trunk
+  ['plank','deadBug','birdDog','hangingKneeRaise','suitcaseCarry','farmerCarry'],
 ];
 const SWAP_LINE_RE = /^(\d+)×(\S+) (.+?) \(([^)]*)\) — (.*?)\.?(?: Rest (.+?) between sets\.)?$/;
 function swapBaseName(name){ return String(name).replace(/ (each side|each hand|each way)$/, ''); }
@@ -857,7 +876,7 @@ function restSecFromStr(r){
 // back in its own slot when rebuilding a session).
 // Optional extras swap among themselves (defect 192): arm and shoulder work for an upper
 // session, quad work for a lower one.
-const EXTRA_FAMILIES = [['curls','triceps','lateralRaise','straightArmPulldown'], ['legExtension','wallSit','stepDown','spanishSquat']];
+const EXTRA_FAMILIES = [['curls','triceps','lateralRaise','straightArmPulldown'], ['legExtension','wallSit','stepDown','spanishSquat','clamshell','sidePlankAbduction','hipHike','standingAbduction']];
 const exerciseDef = k => STRENGTH_EXERCISES[k] || OPTIONAL_EXTRAS[k];
 const ALL_SLOTS = () => [...Object.keys(STRENGTH_EXERCISES), ...Object.keys(OPTIONAL_EXTRAS).filter(k=>!STRENGTH_EXERCISES[k])];
 function extraSwapFamily(line){
@@ -877,7 +896,7 @@ function strengthSwapOptions(line, sessionLines, avail, onlySlots){
   const inSession = new Set((sessionLines||[]).map(l=>{ const x = String(l).match(SWAP_LINE_RE); return x ? swapBaseName(x[3]) : null; }).filter(Boolean));
   const sets = Number(m[1]), amt = m[2], cue = m[5], rest = restSecFromStr(m[6]);
   const origHold = /^\d+s/.test(amt), origCarry = /^\d+(?:–\d+)?m$/.test(amt), origReps = origCarry ? 10 : (parseInt(amt, 10) || 0), origBody = /bodyweight/i.test(m[4]);
-  const coreFamily = family.includes('plank');
+  const coreFamily = family.includes('plank') || family.includes('bandWalk'); // trunk or hip work
   const seen = new Set(); let out = [];
   for(const key of onlySlots ? family : [slot, ...family.filter(k=>k!==slot)]){
     const def = exerciseDef(key);
@@ -890,9 +909,9 @@ function strengthSwapOptions(line, sessionLines, avail, onlySlots){
         // core and carries: each has its own amount and cue, as the session builder phrases them
         // the amount and cue as the session builder phrases each one, on the original sets
         const band = ex.name==='Mini-band side steps' || ex.name==='Side-lying leg raises';
-        const amt = band ? 15 : isCarry(ex) ? 1 : ex.unit==='hold' ? 30 : 10;
+        const amt = v.swapAmount || (band ? 15 : isCarry(ex) ? 1 : ex.unit==='hold' ? 30 : 10);
         const cueC = ex.name==='Mini-band side steps' ? 'slow steps, toes forward, hips level, knees over the toes' : ex.name==='Side-lying leg raises' ? 'slow and controlled, toes forward'
-          : ex.unit==='hold' ? 'hold with good form' : isCarry(ex) ? (ex.name==='Farmer carry' ? 'one walk per set, tall posture' : 'one walk per hand, stay level') : 'slow and controlled';
+          : v.swapCue ? v.swapCue : ex.unit==='hold' ? 'hold with good form' : isCarry(ex) ? (ex.name==='Farmer carry' ? 'one walk per set, tall posture' : 'one walk per hand, stay level') : 'slow and controlled';
         newLine = strengthSetLine(ex, sets, amt, sets>1 ? (rest || 30) : 0, cueC);
       } else {
         let n = ex.unit==='hold' ? (origHold ? origReps : 30) : (origHold ? 10 : origReps);
@@ -909,7 +928,9 @@ function strengthSwapOptions(line, sessionLines, avail, onlySlots){
         newLine = strengthSetLine(ex, sets, n, (toBody || v.swapCue) ? Math.min(rest || 60, 60) : heavyRest, effort);
       }
       _used.length = usedSoFar;
-      out.push({line:newLine, name:ex.name, equip:ex.equip, how:ex.how||null, singleLeg: ex.per==='leg', bodyweight: !!ex.bodyweight, machine: /machine/i.test(ex.equip), slot:key});
+      // single- versus two-leg only means something among the leg lifts (squat and hinge families)
+      const legLift = SWAP_FAMILIES[0].includes(key) || SWAP_FAMILIES[1].includes(key);
+      out.push({line:newLine, name:ex.name, equip:ex.equip, how:ex.how||null, singleLeg: legLift && ex.per==='leg', bodyweight: !!ex.bodyweight, machine: /machine/i.test(ex.equip), slot:key});
     }
   }
   if(onlySlots) return out;
@@ -919,7 +940,8 @@ function strengthSwapOptions(line, sessionLines, avail, onlySlots){
   out.forEach(o=>{ counts[o.slot] = (counts[o.slot]||0)+1; if(counts[o.slot] <= (o.slot===slot ? 3 : 2)) firstPass.push(o); });
   out = [...firstPass, ...out.filter(o=>!firstPass.includes(o))];
   // up to eight of each kind, in order, so neither kind is cut off
-  const two = out.filter(o=>!o.singleLeg).slice(0, 8), one = out.filter(o=>o.singleLeg).slice(0, 8);
+  const cap = 8;
+  const two = out.filter(o=>!o.singleLeg).slice(0, cap), one = out.filter(o=>o.singleLeg).slice(0, 8);
   return out.filter(o=>two.includes(o) || one.includes(o));
 }
 const STRENGTH_TIME_MIN = {heavy:40, short:25, maintain:28, express:20, light:15, upper:22, upperFull:35};
